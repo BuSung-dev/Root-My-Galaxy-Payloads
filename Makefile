@@ -1,7 +1,9 @@
 API ?= 35
-OUTDIR ?= build
+TARGET ?= pa3q-S938NKSUACZF1
+OUTDIR ?= build/$(TARGET)
 
-TARGET_HEADER := src/targets/pa3q-S938NKSUACZF1/target.h
+TARGET_HEADER := src/targets/$(TARGET)/target.h
+TARGET_INCLUDE := targets/$(TARGET)/target.h
 TARGET_CC := $(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android$(API)-clang
 
 ifeq ($(wildcard $(TARGET_CC)),)
@@ -35,7 +37,7 @@ APP_PRELOAD_SRCS := \
 COMMON_CFLAGS := \
   -O2 -g0 -Wall -Wextra \
   -Wno-unused-parameter -Wno-sign-compare \
-  -Isrc
+  -Isrc -DTARGET_HEADER='"$(TARGET_INCLUDE)"'
 
 .DEFAULT_GOAL := all
 
@@ -63,14 +65,15 @@ $(APP_RELEASE): $(APP_PRELOAD_SRCS) $(TARGET_HEADER) src/offset.h src/common.h s
 	$(TARGET_CC) -DAPP_PAYLOAD=1 -fPIC -Oz -g0 \
 	  -fno-unwind-tables -fno-asynchronous-unwind-tables \
 	  -ffunction-sections -fdata-sections \
-	  -Wall -Wextra -Wno-unused-parameter -Wno-sign-compare -Isrc \
+	  -Wall -Wextra -Wno-unused-parameter -Wno-sign-compare \
+	  -Isrc -DTARGET_HEADER='"$(TARGET_INCLUDE)"' \
 	  $(APP_PRELOAD_SRCS) -shared -pthread \
 	  -Wl,--gc-sections -Wl,--icf=all -s -o $@
 	@test $$(stat -c %s $@) -le $(APP_RELEASE_SIZE)
 	truncate -s $(APP_RELEASE_SIZE) $@
 
 info:
-	@echo "TARGET=Samsung Galaxy S25 Ultra SM-S938N S938NKSUACZF1"
+	@echo "TARGET=$(TARGET)"
 	@echo "TARGET_CC=$(TARGET_CC)"
 	@echo "PRELOAD=$(PRELOAD)"
 	@echo "APP_PRELOAD=$(APP_PRELOAD)"

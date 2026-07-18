@@ -1,7 +1,9 @@
 #include "common.h"
 
 #define SLIDE_TRACEFS_ROOT "/sys/kernel/tracing"
+#ifndef SLIDE_TRACEFS_EVENT_ID
 #define SLIDE_TRACEFS_EVENT_ID 109
+#endif
 
 static int slide_tracefs_write(const char *path, const char *value) {
   int fd = open(path, O_WRONLY | O_CLOEXEC);
