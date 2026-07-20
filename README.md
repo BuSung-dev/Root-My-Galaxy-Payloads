@@ -16,6 +16,7 @@ It intentionally does not contain Android application source code.
 | Profile | Device | Firmware | Kernel/KMI | Status |
 | --- | --- | --- | --- | --- |
 | `pa3q-S938NKSUACZF1` | Galaxy S25 Ultra `SM-S938N` | `BP4A.251205.006.S938NKSUACZF1` | `android15-6.6` | Device-tested |
+| `pa3q-S9380ZHUBCZF1` | Galaxy S25 Ultra `SM-S9380` | `BP4A.251205.006.S9380ZHUBCZF1` | `android15-6.6` | Payload build verified; KernelSU pending |
 | `essi-S721NKSSCDZF3` | Galaxy S24 FE `SM-S721N` | `BP4A.251205.006.S721NKSSCDZF3` | `6.1.157-android14-11` / `android14-6.1` | Static analysis and build verified; device-untested |
 | `e1s-S921BXXSFDZF2` | Galaxy S24 `SM-S921B` | `BP4A.251205.006.S921BXXSFDZF2` | `6.1.157-android14-11` / `android14-6.1` | Static analysis and build verified; device-untested |
 | `a15-A155NKSS6BYH1` | Galaxy A15 5G `SM-A155N` | `AP3A.240905.015.A2.A155NKSS6BYH1` | `5.10.226-android12-9-31117096` / `android12-5.10` | Static analysis and build verified; device-untested |
