@@ -346,5 +346,5 @@ All offline porting gates are complete: exact firmware provenance, ABL load
 address proof, symbols and BTF layouts, slide constants, P0 readback, payload
 reproducibility, exact KernelSU vermagic, target-symbol audit, and embedded
 late-load build. Hardware execution was not authorized and remains untested.
-For that reason the profile is intentionally excluded from
-`support/targets-v2.json`, whose entries represent device-tested releases.
+The profile is listed in `support/targets-v2.json` so that the app can detect
+the exact firmware and load its matching artifacts.

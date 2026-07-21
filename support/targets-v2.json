@@ -48,6 +48,30 @@
         "kmi": "android15-6.6",
         "managerPackage": "me.weishu.kernelsu"
       }
+    },
+    {
+      "profileId": "e3q-S928USQS6DZF2",
+      "manufacturer": "samsung",
+      "model": "SM-S928U",
+      "device": "e3q",
+      "kernelRelease": "6.1.145-android14-11-33419968-abS928USQS6DZF2",
+      "kernelVersion": "Linux version 6.1.145-android14-11-33419968-abS928USQS6DZF2 (build-user@build-host) (Android (10087095, +pgo, +bolt, +lto, -mlgo, based on r487747c) clang version 17.0.2 (https://android.googlesource.com/toolchain/llvm-project d9f89f4d16663d5012e5c09495f3b30ece3d2362), LLD 17.0.2) #1 SMP PREEMPT Tue Jun  9 08:23:14 UTC 2026",
+      "kernelBuildVersion": "#1 SMP PREEMPT Tue Jun  9 08:23:14 UTC 2026",
+      "buildDisplay": "UP1A.231005.007.S928USQS6DZF2",
+      "buildFingerprint": "samsung/e3qsqw/e3q:14/UP1A.231005.007/S928USQS6DZF2:user/release-keys",
+      "sdk": 34,
+      "abi": "arm64-v8a",
+      "pageSize": 4096,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/e3q-S928USQS6DZF2/cve-2026-43499-app.so",
+        "size": 104128
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-e3q-S928USQS6DZF2-kdp",
+        "size": 4726416,
+        "kmi": "android14-6.1",
+        "managerPackage": "me.weishu.kernelsu"
+      }
     }
   ]
 }
