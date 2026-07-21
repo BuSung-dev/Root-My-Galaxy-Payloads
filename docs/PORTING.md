@@ -5,6 +5,10 @@ firmware `S721NKSSCDZF3`. Do not reuse its values for another build. The
 separate Galaxy S24 `S921BXXSFDZF2` record, including every changed offset and
 firmware hash, is in
 [`SM-S921B-S921BXXSFDZF2.md`](SM-S921B-S921BXXSFDZF2.md).
+That model uses Exynos 2400 and is not a reference for the Snapdragon E3Q
+kernel. The independent SM-S928U/SM-S928U1 Qualcomm DZF2 procedure and
+completed offline-gate status are recorded in
+[`SM-S928U1-S928U1UES6DZF2.md`](SM-S928U1-S928U1UES6DZF2.md).
 The no-BTF Android 5.10 procedure and legacy `rt_mutex_waiter` layout are
 recorded separately in
 [`SM-A155N-A155NKSS6BYH1.md`](SM-A155N-A155NKSS6BYH1.md).

@@ -148,6 +148,12 @@
 #ifndef LEGACY_RT_MUTEX_WAITER
 #define LEGACY_RT_MUTEX_WAITER 0
 #endif
+#ifndef COMPACT_RT_MUTEX_WAITER
+#define COMPACT_RT_MUTEX_WAITER 0
+#endif
+#if LEGACY_RT_MUTEX_WAITER && COMPACT_RT_MUTEX_WAITER
+#error "select only one rt_mutex_waiter layout"
+#endif
 #ifndef FAKE_WAITER_LAYOUT_SIZE
 #define FAKE_WAITER_LAYOUT_SIZE (FAKE_WAITER_WW_CTX_OFF + sizeof(uint64_t))
 #endif

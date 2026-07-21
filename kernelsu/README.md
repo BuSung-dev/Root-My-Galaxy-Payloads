@@ -10,6 +10,8 @@ between KMIs.
 | --- | --- | --- | --- |
 | `android15-6.6_kernelsu-s25u-kdp.ko` | `SM-S938N`, `S938NKSUACZF1` | `android15-6.6` | Standalone reference module from the previously deployed S25U build |
 | `ksud-s25u-kdp` | `SM-S938N`, `S938NKSUACZF1` | `android15-6.6` | Late-load binary embedding the 6.6 module |
+| `android14-6.1_kernelsu-e3q-S928USQS6DZF2-kdp.ko` | `SM-S928U/SM-S928U1`, `S928USQS6DZF2` | `android14-6.1` | Exact E3Q module with target `vermagic`, audited for manual relocation |
+| `ksud-e3q-S928USQS6DZF2-kdp` | Same exact E3Q build | `android14-6.1` | Late-load binary embedding the E3Q module |
 | `android14-6.1_kernelsu-samsung-kdp.ko` | `SM-S721N` `S721NKSSCDZF3`; `SM-S921B` `S921BXXSFDZF2` | `android14-6.1` | Standalone Samsung KDP/RKP/DEFEX module with target `vermagic` |
 | `ksud-samsung-android14-6.1-kdp` | Same verified 6.1 targets | `android14-6.1` | Late-load binary embedding the 6.1 module |
 | `android12-5.10_kernelsu-samsung-kdp.ko` | `SM-A155N` `A155NKSS6BYH1` | `android12-5.10` | Standalone Samsung KDP/RKP/DEFEX module built against the exact A15 kernel |
@@ -19,8 +21,9 @@ The standalone `.ko` files are retained for auditing. Root My Galaxy downloads
 the corresponding `ksud-*` file because `ksud late-load` loads its embedded
 `<kmi>_kernelsu.ko` asset.
 
-The 6.1 files are build-verified but have not been run on either listed 6.1
-device. The 5.10 files are also build-verified and device-untested.
+The 6.1 files are build-verified but device-untested. The E3Q pair is tied to
+the full S928U DZF2 release string and must not be replaced with the generic
+6.1 pair. The 5.10 files are also build-verified and device-untested.
 
 ## Why the stock module crashes on Samsung
 
@@ -74,10 +77,11 @@ assumptions:
 - `kdp_usecount_dec_and_test(struct cred *)` is resolved at runtime, avoiding a
   dependency on a DDK-specific exported-symbol CRC.
 
-Both function prototypes were verified against the S24 FE kernel BTF before
-building. The same prototypes and every module-required symbol were then
-checked against the recovered S921B DZF2 BTF and `vmlinux.elf` before sharing
-the 6.1 artifact between the two profiles.
+Both function prototypes were verified against each target's own BTF before
+building. SM-S921B is an Exynos 2400 target and is not compatibility evidence
+for Snapdragon E3Q. The E3Q module was therefore rebuilt with the exact
+S928U DZF2 release and audited independently against its recovered
+`vmlinux.elf`.
 
 ## 5.10 generalization
 
@@ -152,6 +156,29 @@ kernel/check_symbol kernel/kernelsu.ko /path/to/S721NKSSCDZF3/vmlinux.elf
 kernel/check_symbol kernel/kernelsu.ko /path/to/S921BXXSFDZF2/vmlinux.elf
 llvm-strip -d kernel/kernelsu.ko
 ```
+
+For E3Q DZF2, replace the generated DDK release with the full exact target
+release before building:
+
+```text
+6.1.145-android14-11-33419968-abS928USQS6DZF2
+```
+
+After `check_symbol`, audit the manual-relocation contract against the exact
+E3Q ELF and the target-derived symbol-version list:
+
+```sh
+python3 kernelsu/tools/audit_module_against_target.py \
+  kernel/kernelsu.ko \
+  /path/to/S928USQS6DZF2/vmlinux.elf \
+  /path/to/S928USQS6DZF2/Module.symvers \
+  --manual-relocation
+```
+
+This must report zero symbols missing from the target symbol table, zero
+module version entries, and zero CRC mismatches. The E3Q audit has 209
+undefined imports, all present in the target ELF; 50 are intentionally
+resolved through kallsyms rather than conventional exports.
 
 Copy the stripped module to:
 

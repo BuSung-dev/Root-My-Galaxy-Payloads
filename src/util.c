@@ -57,15 +57,21 @@ static void put_fake_waiter(unsigned char *payload, size_t waiter_off,
   put64(payload, waiter_off + 0x00, tree_parent);
   put64(payload, waiter_off + 0x08, tree_right);
   put64(payload, waiter_off + 0x10, tree_left);
-#if LEGACY_RT_MUTEX_WAITER
+#if LEGACY_RT_MUTEX_WAITER || COMPACT_RT_MUTEX_WAITER
   put64(payload, waiter_off + FAKE_WAITER_PI_TREE_ENTRY_OFF + 0x00,
         pi_parent);
   put64(payload, waiter_off + FAKE_WAITER_PI_TREE_ENTRY_OFF + 0x08, pi_right);
   put64(payload, waiter_off + FAKE_WAITER_PI_TREE_ENTRY_OFF + 0x10, pi_left);
   put64(payload, waiter_off + FAKE_WAITER_TASK_OFF, task);
   put64(payload, waiter_off + FAKE_WAITER_LOCK_OFF, lock);
+#if COMPACT_RT_MUTEX_WAITER
+  put32(payload, waiter_off + FAKE_WAITER_WAKE_STATE_OFF, 0);
+#endif
   put32(payload, waiter_off + FAKE_WAITER_PRIO_OFF, priority);
   put64(payload, waiter_off + FAKE_WAITER_DEADLINE_OFF, 0);
+#if COMPACT_RT_MUTEX_WAITER
+  put64(payload, waiter_off + FAKE_WAITER_WW_CTX_OFF, 0);
+#endif
 #else
   put32(payload, waiter_off + FAKE_WAITER_TREE_PRIO_OFF, priority);
   put64(payload, waiter_off + FAKE_WAITER_TREE_DEADLINE_OFF, 0);
