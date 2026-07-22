@@ -16,9 +16,9 @@ Status: **COMPLETE**
 | AP/PDA package | `S928U1UES6DZF2` |
 | Internal AP/kernel build | `S928USQS6DZF2` |
 | Device codename | `e3q` |
-| Product name | `e3qsqw` |
-| Android build ID | `UP1A.231005.007` |
-| Build fingerprint | `samsung/e3qsqw/e3q:14/UP1A.231005.007/S928USQS6DZF2:user/release-keys` |
+| Product name | `e3quew` |
+| Android build ID | `BP4A.251205.006` |
+| Build fingerprint | `samsung/e3quew/e3q:16/BP4A.251205.006/S928U1UES6DZF2:user/release-keys` |
 | Kernel release | `6.1.145-android14-11-33419968-abS928USQS6DZF2` |
 
 The outer firmware filenames use `SM-S928U1` and `S928U1UES6DZF2`, while the
@@ -234,8 +234,47 @@ Disassembly of the target `worker_thread` shows the idle-worker call to
 #define SLIDE_TRACEFS_WORKER_CALLER_OFF 0x000db1a0ULL
 ```
 
-The target `__arm64_sys_pselect6` argument and fd-set arrangement matches the
-zero-shift Android 6.1 path, so `SLIDE_PSELECT_WORD_SHIFT` is `0`.
+The target requires a three-qword pselect shift. From the syscall-entry stack
+pointer `E`, the stale waiter is at `E - 0x1e8`, while the pselect `stack_fds`
+array begins at `E - 0x200`. Hardware panic readback confirmed that shift
+three places the intended fake-lock address in the actual `waiter->lock` slot;
+shifts zero and one reached null or incorrect lock paths. Therefore:
+
+```c
+#define SLIDE_PSELECT_WORD_SHIFT 3
+```
+
+The skb fragment bias also required a runtime correction. BTF gives
+`sizeof(struct skb_shared_info) == 344`, which makes `SKB_MAX_HEAD(0)` equal
+to `0xe80`, but `unix_stream_sendmsg` subsequently page-aligns the fragment
+data length. For a 64 KiB send, the first order-3 fragment begins at source
+offset `0x1000`, not `0xe80`:
+
+```c
+#define SKB_DATA_DELTA (-0x1000LL)
+```
+
+## Hardware debugging status (2026-07-21)
+
+Authorized device testing has reached the PI-chain path with the expected
+fake-lock address and has also produced confirmed pselect write windows. The
+complete 240-pipe oracle nevertheless remained unchanged, separating working
+scheduler timing from the unresolved allocator-placement problem.
+
+Reclaim sprays of 28, 30, and 32 sends and adjacent drain counts from 28 to 32
+were tested. The 32-send and 28-drain boundaries produced stale/null fake-lock
+panics; stable configurations produced reclaim misses rather than an oracle
+hit. The retained conservative baseline is 28 sends with two synchronous
+post-target drain triggers. Experimental multi-trigger and boundary settings
+were reverted.
+
+Review of the release path found that closing `/proc/PID/mem` before reaping
+the child could leave the final `mm_struct` reference to deferred task-exit
+cleanup. The retained order kills and waits while the descriptor pins the mm,
+then closes the last reference on the exploit CPU. This makes the final release
+synchronous, but has not yet demonstrated target-page reuse. The next useful
+diagnostic is to trace whether the leaked order-3 slab reaches the buddy
+allocator and which skb fragment receives that physical block.
 
 The raw Image contains exactly one qword equal to the target address of
 `sysctl_bootid`, at Image offset `0x023762f0`. Inspection of the enclosing
@@ -345,6 +384,7 @@ Snapdragon E3Q build.
 All offline porting gates are complete: exact firmware provenance, ABL load
 address proof, symbols and BTF layouts, slide constants, P0 readback, payload
 reproducibility, exact KernelSU vermagic, target-symbol audit, and embedded
-late-load build. Hardware execution was not authorized and remains untested.
-The profile is listed in `support/targets-v2.json` so that the app can detect
-the exact firmware and load its matching artifacts.
+late-load build. Hardware diagnostics have validated the corrected pselect
+placement and skb fragment boundary, but target-page reuse and a complete
+oracle hit remain unverified. The profile stays experimental while debugging
+continues.
