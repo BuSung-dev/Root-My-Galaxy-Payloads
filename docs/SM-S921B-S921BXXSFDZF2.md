@@ -62,14 +62,17 @@ fingerprint table despite the matching release string.
 
 `vmlinux-to-elf` recovered 115630 symbols at image base
 `0xffffffc008000000`. Raw BTF was extracted from kernel file interval
-`[0x188c248, 0x1e439a9)`.
+`[0x188c248, 0x1e439a9)`. Its little-endian header starts with
+`9f eb 01 00 18 00 00 00`; extraction and complete header validation follow
+the procedure in [`PORTING.md`](PORTING.md). Exact member offsets below came
+from `bpftool ... format raw`, not the C declaration view.
 
 Required offsets from the recovered S921B ELF are:
 
 | Macro/use | Symbol or derivation | Offset |
 | --- | --- | ---: |
 | `CALL_USERMODEHELPER_EXEC_WORK_OFF` | `call_usermodehelper_exec_work` | `0x000d4468` |
-| trace worker callsite | `worker_thread` schedule return | `0x000dbd9c` |
+| `SLIDE_TRACEFS_WORKER_CALLER_OFF` | instruction after the blocking `worker_thread -> schedule` call | `0x000dbd9c` |
 | `NOOP_LLSEEK_OFF` | `noop_llseek` | `0x003a1414` |
 | `COPY_SPLICE_READ_OFF` | `generic_file_splice_read` | `0x003ef02c` |
 | `CONFIGFS_READ_ITER_OFF` | `configfs_read_iter` | `0x00470d44` |
@@ -82,24 +85,34 @@ Required offsets from the recovered S921B ELF are:
 | `ASHMEM_SHOW_FDINFO_OFF` | `ashmem_show_fdinfo` | `0x00d39a60` |
 | `ANON_PIPE_BUF_OPS_OFF` | `anon_pipe_buf_ops` | `0x0121dd10` |
 | `ASHMEM_FOPS_OFF` | `ashmem_fops` | `0x013d9ec8` |
-| `SLIDE_NFULNL_LOGGER_OFF` | first qword of `nfulnl_logger` | `0x016dd6a0` |
+| `SLIDE_NFULNL_LOGGER_NAME_OFF` | `"nfnetlink_log"` string referenced by `nfulnl_logger.name` | `0x016dd6a0` |
 | `KMALLOC_CACHES_OFF` | `kmalloc_caches` | `0x017a8098` |
 | `SYSTEM_UNBOUND_WQ_OFF` | `system_unbound_wq` | `0x022eae58` |
-| logger array | `loggers` | `0x022f2950` |
-| `SLIDE_LOGGERS_0_1_OFF` | `nfulnl_logger` object | `0x022f2a08` |
+| logger array | distinct `loggers[NFPROTO_NUMPROTO][NF_LOG_TYPE_MAX]` object | `0x022f2950` |
+| `SLIDE_NFULNL_LOGGER_OBJECT_OFF` | `nfulnl_logger` object | `0x022f2a08` |
 | `INIT_TASK_OFF` | `init_task` | `0x022ff800` |
-| boot-id pointer | unique qword to boot-id data | `0x0243ef78` |
+| `SLIDE_RANDOM_TABLE_BOOT_ID_DATA_PTR_OFF` | `.data` pointer slot in the `random_table[]` entry named `boot_id` | `0x0243ef78` |
 | `ASHMEM_MISC_FOPS_OFF` | `ashmem_miscs + offsetof(miscdevice, fops)` | `0x02484bb0` |
 | `ROOT_TASK_GROUP_OFF` | `root_task_group` | `0x02515cc0` |
 | `SELINUX_ENFORCING_OFF` | `selinux_state.enforcing` | `0x025ea478` |
-| `SLIDE_SYSCTL_BOOTID_OFF` | `sysctl_bootid` | `0x026d1b60` |
+| `SLIDE_SYSCTL_BOOTID_OFF` | actual `sysctl_bootid` UUID storage | `0x026d1b60` |
 
 The target BTF confirms the same exploit-relevant layouts as the existing 6.1
 profile: `struct file_operations` is `0x110`, `struct page` is `0x40`, and the
 task, waiter, configfs, workqueue, pipe, subprocess, and miscdevice fields used
 by the payload have identical offsets. The `__arm64_sys_pselect6` stack shape
-also matches, so `SLIDE_PSELECT_WORD_SHIFT` remains zero. Runtime trace event
-ID `106` was derived from `__start_ftrace_events` plus the target event index.
+also places waiter qword zero at the first qword of the logical read/write/
+exception fd-set sequence, so `SLIDE_PSELECT_WORD_SHIFT` is zero. This macro is
+a count of leading 64-bit words, not a byte offset. Runtime trace event ID `106`
+was derived as `__TRACE_LAST_TYPE (20) +` the zero-based
+`sched_blocked_reason` registration index `(86)`.
+
+`SLIDE_NFULNL_LOGGER_NAME_OFF` and
+`SLIDE_NFULNL_LOGGER_OBJECT_OFF` deliberately name different addresses: the
+former is the string pointer read from qword zero of the latter. Likewise,
+`SLIDE_RANDOM_TABLE_BOOT_ID_DATA_PTR_OFF` is the writable sysctl table pointer
+slot temporarily redirected by the oracle, whereas `SLIDE_SYSCTL_BOOTID_OFF`
+is the UUID storage restored into that slot.
 
 ## Physical load proof
 

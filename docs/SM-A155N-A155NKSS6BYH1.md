@@ -73,7 +73,7 @@ Required target offsets:
 | Use | Target symbol/derivation | Offset |
 | --- | --- | ---: |
 | UMH callback | `call_usermodehelper_exec_work` | `0x00107fb0` |
-| trace worker return | instruction after `worker_thread -> schedule` | `0x001123c4` |
+| `SLIDE_TRACEFS_WORKER_CALLER_OFF` | instruction after the blocking `worker_thread -> schedule` call | `0x001123c4` |
 | `NOOP_LLSEEK_OFF` | `noop_llseek` | `0x004c2234` |
 | `COPY_SPLICE_READ_OFF` | `generic_file_splice_read` | `0x005369cc` |
 | configfs read | `configfs_read_file` | `0x005f86fc` |
@@ -84,18 +84,20 @@ Required target offsets:
 | ashmem open | `ashmem_open` | `0x010dc434` |
 | ashmem release | `ashmem_release` | `0x010dc4cc` |
 | ashmem fdinfo | `ashmem_show_fdinfo` | `0x010dc5e8` |
+| `SLIDE_NFULNL_LOGGER_NAME_OFF` | `"nfnetlink_log"` string referenced by `nfulnl_logger.name` | `0x01e4a980` |
 | pipe ops | `anon_pipe_buf_ops` | `0x01f491a8` |
 | ashmem fops | `ashmem_fops` | `0x020a4688` |
 | kmalloc table | `kmalloc_caches` | `0x020e6580` |
 | trace event start | `__start_ftrace_events` | `0x0255fd18` |
 | blocked event | `__event_sched_blocked_reason` | `0x0255ff30` |
 | system workqueue | `system_unbound_wq` | `0x02599e08` |
-| logger object | `nfulnl_logger` | `0x025a1340` |
+| `SLIDE_NFULNL_LOGGER_OBJECT_OFF` | `nfulnl_logger` object | `0x025a1340` |
 | init task | `init_task` | `0x025ac000` |
+| `SLIDE_RANDOM_TABLE_BOOT_ID_DATA_PTR_OFF` | `.data` pointer slot in the `random_table[]` entry named `boot_id` | `0x026ba828` |
 | ashmem misc fops | `ashmem_misc + 0x10` | `0x026fa328` |
 | root task group | `root_task_group` | `0x027a8040` |
 | SELinux enforcing | `selinux_state.enforcing` | `0x028d9770` |
-| boot-id target | `sysctl_bootid` | `0x0297d8c5` |
+| `SLIDE_SYSCTL_BOOTID_OFF` | actual `sysctl_bootid` UUID storage | `0x0297d8c5` |
 
 The logger object and boot-id reference were verified directly in the Image:
 
@@ -103,12 +105,20 @@ The logger object and boot-id reference were verified directly in the Image:
 nfulnl_logger + 0x00 = 0xffffffc009e4a980
 nfulnl_logger + 0x08 = 1
 nfulnl_logger + 0x10 = 0xffffffc0092fe4b8
-unique sysctl_bootid qword reference = Image + 0x026ba828
+random_table boot_id .data pointer slot = Image + 0x026ba828
 ```
 
+The first qword of `nfulnl_logger` points to the name string, so the object and
+name offsets are intentionally different. The `random_table[]` slot is the
+pointer temporarily redirected by the oracle; `sysctl_bootid` is the UUID
+storage restored into that slot.
+
 `ashmem_misc + offsetof(miscdevice, fops)` contains the exact `ashmem_fops`
-address. The trace enum ends at dynamic base 17. `sched_blocked_reason` is
-section entry 67, so the target event ID is `17 + 67 = 84`.
+address. `__TRACE_LAST_TYPE` is 17 on this branch.
+`sched_blocked_reason` has zero-based linker registration index 67, so the
+target event ID is `17 + 67 = 84`. `SLIDE_PSELECT_WORD_SHIFT` is zero because
+waiter qword zero overlaps the first qword in the logical read/write/exception
+fd-set sequence; the macro counts qwords, not bytes.
 
 ## Physical map
 
