@@ -41,7 +41,7 @@
       "exploit": {
         "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/pa3q-S9380ZHUBCZF1/cve-2026-43499-app.so",
         "size": 104128
-      },      
+      },
       "kernelsu": {
         "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-s25u-kdp",
         "size": 6407096,
@@ -69,6 +69,30 @@
       "kernelsu": {
         "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-e3q-S928USQS6DZF2-kdp",
         "size": 4726416,
+        "kmi": "android14-6.1",
+        "managerPackage": "me.weishu.kernelsu"
+      }
+    },
+    {
+      "profileId": "e3q-S928BXXS6DZE1",
+      "manufacturer": "samsung",
+      "model": "SM-S928B",
+      "device": "e3q",
+      "kernelRelease": "6.1.145-android14-11-33419968-abS928BXXS6DZE1",
+      "kernelVersion": "Linux version 6.1.145-android14-11-33419968-abS928BXXS6DZE1 (build-user@build-host) (Android (10087095, +pgo, +bolt, +lto, -mlgo, based on r487747c) clang version 17.0.2 (https://android.googlesource.com/toolchain/llvm-project d9f89f4d16663d5012e5c09495f3b30ece3d2362), LLD 17.0.2) #1 SMP PREEMPT Mon May 18 05:24:11 UTC 2026",
+      "kernelBuildVersion": "#1 SMP PREEMPT Mon May 18 05:24:11 UTC 2026",
+      "buildDisplay": "BP4A.251205.006.S928BXXS6DZE1",
+      "buildFingerprint": "samsung/e3qxxx/e3q:16/BP4A.251205.006/S928BXXS6DZE1:user/release-keys",
+      "sdk": 36,
+      "abi": "arm64-v8a",
+      "pageSize": 4096,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/e3q-S928BXXS6DZE1/cve-2026-43499-app.so",
+        "size": 104128
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-e3q-S928BXXS6DZE1-kdp",
+        "size": 4783000,
         "kmi": "android14-6.1",
         "managerPackage": "me.weishu.kernelsu"
       }
