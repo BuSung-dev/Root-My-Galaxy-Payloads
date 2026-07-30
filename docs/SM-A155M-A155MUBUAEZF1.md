@@ -85,7 +85,7 @@ Required target offsets:
 | ashmem compat ioctl (Rust) | Rust-generated `compat_ioctl` vtable stub | `0x00de1a88` |
 | ashmem mmap | `ashmem_mmap` | `0x00de1b04` |
 | ashmem open (Rust) | `ashmem_open` | `0x00de1b28` |
-| ashmem release | `ashmem_release` | `0x00de1c54` |
+| ashmem release | `ashmem_release` | `0x00de1c58` |
 | ashmem fdinfo (Rust) | `ashmem_show_fdinfo` | `0x00de1a60` |
 | pipe ops | `anon_pipe_buf_ops` | `0x0127f088` |
 | ashmem fops | Rust vtable `ashmem_fops` | `0x0140b6b8` |
