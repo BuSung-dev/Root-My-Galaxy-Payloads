@@ -2,6 +2,18 @@
   "schemaVersion": 3,
   "payloads": [
     {
+      "payloadId": "r9q-G990B2XXSJIZF1",
+      "displayName": "Galaxy S21 FE 5G | Kernel 5.4.289",
+      "models": [
+        "SM-G990B2"
+      ],
+      "kernelVersions": ["5.4.289"],
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/arda-y-28/Root-My-Galaxy-Payloads/main/artifacts/r9q-G990B2XXSJIZF1/cve-2026-43499-app.so",
+        "size": 104128
+      }
+    },
+    {
       "payloadId": "galaxy-s25-series-2026-06-07",
       "displayName": "Galaxy S25 series | Kernel 6.6.98",
       "models": [
