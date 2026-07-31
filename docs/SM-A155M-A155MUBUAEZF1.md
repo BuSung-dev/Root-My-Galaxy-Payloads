@@ -76,7 +76,7 @@ Required target offsets:
 | Use | Target symbol/derivation | Offset |
 | --- | --- | ---: |
 | UMH callback | `call_usermodehelper_exec_work` | `0x000f8fdc` |
-| trace worker return | instruction after `worker_thread -> schedule` | `0x000f8fdc` |
+| trace worker return | instruction after `worker_thread -> schedule` | `0x00103948` |
 | `NOOP_LLSEEK_OFF` | `noop_llseek` | `0x00441664` |
 | `COPY_SPLICE_READ_OFF` | `splice_direct_to_actor` | `0x004945b8` |
 | configfs read | `configfs_read_file` | `0x00518b24` |
@@ -191,7 +191,7 @@ The release outputs are:
 
 | File | Size | SHA-256 |
 | --- | ---: | --- |
-| `cve-2026-43499` (LD_PRELOAD) | 96,488 | `644432F2FEAE5BF0E73AD221D44617111502E81C4F8B77CF048A5691FF204F2A` |
+| `cve-2026-43499` (LD_PRELOAD) | 96,488 | `91B6A1A6308B77395FA00766A068F4421DC43140372E6EDB08114FAA0BD321F3` |
 | `cve-2026-43499-app.so` (app payload) | 125,680 | `627832D1CA57F7BAAF60966FE3B6BEE8CBECF291E76294943D1C72721EB9EE9C` |
 | `cve-2026-43499-root` (root helper) | 22,752 | `A8A95921266C94472FA278DF72E5507DD9BE6471D067C2D158BD1C8D4ECB64` |
 
