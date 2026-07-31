@@ -72,6 +72,54 @@
         "kmi": "android14-6.1",
         "managerPackage": "me.weishu.kernelsu"
       }
+    },
+    {
+      "profileId": "a15-A155NKSS6BYH1",
+      "manufacturer": "samsung",
+      "model": "SM-A155N",
+      "device": "a15",
+      "kernelRelease": "5.10.226-android12-9-31117096",
+      "kernelVersion": "Linux version 5.10.226-android12-9-31117096 (build-user@build-host) (Android (7284624, based on r416183b) clang version 12.0.5 (https://android.googlesource.com/toolchain/llvm-project c935d99d7cf2016289302412d708641d52d2f7ee), LLD 12.0.5 (/buildbot/src/android/llvm-toolchain/out/llvm-project/lld c935d99d7cf2016289302412d708641d52d2f7ee)) #1 SMP PREEMPT Thu Jul 31 00:05:14 UTC 2025",
+      "kernelBuildVersion": "#1 SMP PREEMPT Thu Jul 31 00:05:14 UTC 2025",
+      "buildDisplay": "AP3A.240905.015.A2.A155NKSS6BYH1",
+      "buildFingerprint": "samsung/a15ks/a15:15/AP3A.240905.015.A2/A155NKSS6BYH1:user/test-keys",
+      "sdk": 35,
+      "abi": "arm64-v8a",
+      "pageSize": 4096,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/a15-A155NKSS6BYH1/cve-2026-43499-app.so",
+        "size": 104128
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-samsung-android12-5.10-kdp",
+        "size": 6649032,
+        "kmi": "android12-5.10",
+        "managerPackage": "me.weishu.kernelsu"
+      }
+    },
+    {
+      "profileId": "a155m-A155MUBUAEZF1",
+      "manufacturer": "samsung",
+      "model": "SM-A155M",
+      "device": "a15ks",
+      "kernelRelease": "6.12.38-android16-5-abA155MUBUAEZF1-4k",
+      "kernelVersion": "Linux version 6.12.38-android16-5-abA155MUBUAEZF1-4k (kleaf@build-host) (Android (12833971, +pgo, +bolt, +lto, +mlgo, based on r536225) clang version 19.0.1 (https://android.googlesource.com/toolchain/llvm-project b3a530ec6536146650e42be83f1089e9a3588460), LLD 19.0.1) #1 SMP PREEMPT Wed Jun 10 20:59:50 UTC 2026",
+      "kernelBuildVersion": "#1 SMP PREEMPT Wed Jun 10 20:59:50 UTC 2026",
+      "buildDisplay": "BP4A.251205.006.A155MUBUAEZF1",
+      "buildFingerprint": "samsung/a15ks/a15:16/BP4A.251205.006/A155MUBUAEZF1:user/release-keys",
+      "sdk": 36,
+      "abi": "arm64-v8a",
+      "pageSize": 4096,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/a155m-A155MUBUAEZF1/cve-2026-43499-app.so",
+        "size": 125680
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-s25u-kdp",
+        "size": 6407096,
+        "kmi": "android15-6.6",
+        "managerPackage": "me.weishu.kernelsu"
+      }
     }
   ]
 }
