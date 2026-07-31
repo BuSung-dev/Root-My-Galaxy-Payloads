@@ -11,6 +11,10 @@
       "exploit": {
         "url": "https://raw.githubusercontent.com/arda-y-28/Root-My-Galaxy-Payloads/main/cve-2026-43499-app.so",
         "size": 104128
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-A566EXXSCCZG6-kdp",
+        "size": 4765336
       }
     },
     {
