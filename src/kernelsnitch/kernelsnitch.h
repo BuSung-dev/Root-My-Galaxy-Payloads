@@ -26,6 +26,9 @@
 #ifndef APPENDED_FUTEXES
 #define APPENDED_FUTEXES 4096
 #endif
+#ifndef KERNELSNITCH_WAITER_STACK_SIZE
+#define KERNELSNITCH_WAITER_STACK_SIZE (128 * 1024)
+#endif
 #define MULITPLE 4
 #ifndef KERNELSNITCH_IDENTITY_START
 #define KERNELSNITCH_IDENTITY_START 0xffffff8000000000ULL
@@ -124,30 +127,89 @@ static void *__do_increase(void *arg)
  * @arg id: identifier of the futex user-space address to be used for the increase
  * @arg amount: increase
  */
-static void __increase(struct kernelsnitch_shared_state *ks, size_t id, size_t amount)
+static int __increase(struct kernelsnitch_shared_state *ks, size_t id, size_t amount)
 {
     ks->increase_tids = calloc(amount, sizeof(*ks->increase_tids));
-    ASSERT_pr((ks->increase_tids != NULL), "failed to allocate futex waiter ids\n");
-    ks->increase_count = amount;
+    if (!ks->increase_tids) {
+        pr_warning("failed to allocate %zu futex waiter ids\n", amount);
+        return -1;
+    }
+    ks->increase_count = 0;
     ks->increase_id = id;
+
+    pthread_attr_t attr;
+    int attr_initialized = 0;
+    int rc = pthread_attr_init(&attr);
+    if (rc == 0) {
+        attr_initialized = 1;
+        rc = pthread_attr_setstacksize(&attr, KERNELSNITCH_WAITER_STACK_SIZE);
+    }
+    if (rc != 0) {
+        pr_warning("failed to configure futex waiter stack size=%zu rc=%d (%s)\n",
+                   (size_t)KERNELSNITCH_WAITER_STACK_SIZE, rc, strerror(rc));
+        if (attr_initialized)
+            pthread_attr_destroy(&attr);
+        free(ks->increase_tids);
+        ks->increase_tids = NULL;
+        return -1;
+    }
+
     for (size_t i = 0; i < amount; ++i) {
         struct inc_arg *inc_arg = calloc(1, sizeof(struct inc_arg));
+        if (!inc_arg) {
+            pr_warning("futex waiter allocation stopped at %zu/%zu\n", i,
+                       amount);
+            break;
+        }
         inc_arg->id = id;
         inc_arg->ks = ks;
-        SYSCHK(pthread_create(&ks->increase_tids[i], 0, __do_increase,
-                              (void *)inc_arg));
+        rc = pthread_create(&ks->increase_tids[i], &attr, __do_increase,
+                            (void *)inc_arg);
+        if (rc != 0) {
+            free(inc_arg);
+            pr_warning("pthread_create futex waiter stopped at %zu/%zu "
+                       "rc=%d (%s)\n", i, amount, rc, strerror(rc));
+            break;
+        }
+        ks->increase_count++;
     }
+    pthread_attr_destroy(&attr);
+
+    if (ks->increase_count != amount) {
+        /*
+         * Collision discovery runs in a short-lived clone child.  Do not try
+         * to wake a partially-created set here: a waiter that has not entered
+         * futex_wait yet could miss the wake and make pthread_join hang.  The
+         * caller records failure and the clone child exits immediately,
+         * terminating every partial waiter atomically.
+         */
+        free(ks->increase_tids);
+        ks->increase_tids = NULL;
+        ks->increase_count = 0;
+        return -1;
+    }
+
+    pr_info("futex waiters ready count=%zu stack=%zu\n", ks->increase_count,
+            (size_t)KERNELSNITCH_WAITER_STACK_SIZE);
     WAIT();
+    return 0;
 }
 
 static void __decrease(struct kernelsnitch_shared_state *ks)
 {
     if (!ks->increase_tids)
         return;
-    SYSCHK(__futex((unsigned int *)&ks->inc_futex[ks->increase_id],
-                   FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0));
-    for (size_t i = 0; i < ks->increase_count; ++i)
-        SYSCHK(pthread_join(ks->increase_tids[i], NULL));
+    int wake_result = __futex((unsigned int *)&ks->inc_futex[ks->increase_id],
+                              FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0);
+    if (wake_result < 0)
+        pr_warning("failed to wake futex waiters errno=%d (%s)\n", errno,
+                   strerror(errno));
+    for (size_t i = 0; i < ks->increase_count; ++i) {
+        int rc = pthread_join(ks->increase_tids[i], NULL);
+        if (rc != 0)
+            pr_warning("pthread_join futex waiter %zu rc=%d (%s)\n", i, rc,
+                       strerror(rc));
+    }
     free(ks->increase_tids);
     ks->increase_tids = NULL;
     ks->increase_count = 0;
@@ -410,7 +472,11 @@ void kernelsnitch_find_collisions(struct kernelsnitch_shared_state *ks)
 
     // piled-up hash bucket ID 128
     // here, I append 4096 futexes to this hash bucket creating a distinction between most other empty or lightly populated ones
-    __increase(ks, ID, ks->appended_futexes);
+    if (__increase(ks, ID, ks->appended_futexes) != 0) {
+        pr_warning("could not create required futex waiters\n");
+        ks->state = KERNELSNITCH_COLLISIONS_NOT_FOUND;
+        return;
+    }
     if (ks->verbose) pr_info("start finding collisisons\n");
 
     // find futex user space address which collide with the piled-up hash bucket ID 128
