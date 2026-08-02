@@ -206,17 +206,19 @@ The fixed-size release artifact is:
 ```text
 artifacts/e2s-S926BXXUEDZDR/cve-2026-43499-app.so
 size: 104128
-SHA-256: B1FE6DCC2E4D5CBFC13679F2086835C0A2AB2BE5624F122B23B0C30954670552
+SHA-256: 55D95620F8E28ED153CC4A8B8B71904A66C7B158F0B79FDD47AB97593B42D61C
 ```
 
 The E2S target enables its validated fast KernelSnitch profile by default.
 It keeps five collisions, three confirmations and every P0 fingerprint,
 restore, alias, CFI, physical read/write and root-result gate. Only repeated
-statistical sampling is reduced to 2,048 appended futexes, 32 measurements and
-four averaged samples for both P0 and fops searches. Up to 16 search batches
-may locate candidates, while no more than eight independently rebuilt P0 or
-FOPS pages can reach a physical gate. Empty searches do not consume a physical
-gate, and every accepted page remains single-shot.
+statistical sampling is reduced to 1,024 appended futexes, 32 measurements and
+four averaged samples for both P0 and fops searches. Each futex waiter uses an
+explicit 128 KiB stack, and positive pthread error codes are checked instead
+of being mistaken for success. Up to 16 search batches may locate candidates,
+while no more than eight independently rebuilt P0 or FOPS pages can reach a
+physical gate. Empty searches do not consume a physical gate, and every
+accepted page remains single-shot.
 
 ## KernelSU compatibility
 
@@ -310,3 +312,18 @@ the loader transition to `u:r:ksu:s0`. The production module deliberately uses
 `allow_shell=false`; a new UID-2000 ADB shell remains unprivileged until its UID
 is authorized in Manager. Manager reported `Working <LKM> [Jailbreak mode]`,
 version `32525-2`, and a reversible application-profile update was verified.
+
+The app-domain resource follow-up was then validated on 2026-08-03 with the
+exact fixed-size payload above and debug APK `0.2.5-e2s-r1` (SHA-256
+`fbec5788b494c7cb0bccf7aa716bb197221a63bb353dd0c106f9cdf014e7f79d`).
+The payload started as UID 10345 in
+`u:r:untrusted_app:s0:c89,c257,c512,c768`. Every KernelSnitch pass reported
+`futex waiters ready count=1024 stack=131072`; collision discovery and both
+P0/FOPS searches completed without exhausting the application process.
+
+The production summary reported `done=1 root=1 kaslr=1 read_ok=1 write_ok=1
+rw64=1/1 uid=10345->0`. The app then acquired bootstrap root, staged the exact
+android14-6.1 `ksud`, verified the KernelSU control channel and recorded the
+installation as `Succeeded`. The complete application workflow took 79.426
+seconds. A subsequent reboot was confirmed by Android bootstat as the commanded
+reason `reboot,shell`, not a kernel panic or watchdog reset.
