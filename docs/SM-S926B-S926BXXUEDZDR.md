@@ -327,3 +327,12 @@ android14-6.1 `ksud`, verified the KernelSU control channel and recorded the
 installation as `Succeeded`. The complete application workflow took 79.426
 seconds. A subsequent reboot was confirmed by Android bootstat as the commanded
 reason `reboot,shell`, not a kernel panic or watchdog reset.
+
+A second independent app-domain run on the next clean boot also completed as
+`Succeeded`. It selected runtime slide `0x1e0000`, reported the same complete
+`done=1 root=1` and `uid=10345->0` summary, then verified the KernelSU control
+channel in 103.105 seconds. The unedited 1080x2340 ADB screenshot below records
+the live post-install state; its SHA-256 is
+`c55c4b2dd51c30620d706b4f02f7157ae60f0c2edc088e1dcd188e793848bbc6`.
+
+![Root My Galaxy showing KernelSU active](evidence/e2s-app-domain-kernelsu-active.png)
