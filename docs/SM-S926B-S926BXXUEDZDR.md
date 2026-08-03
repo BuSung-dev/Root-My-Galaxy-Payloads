@@ -282,13 +282,14 @@ the exact no-patch-text module, reported KernelSU version code `32525`, passed
 the Manager control probe and produced an independent client shell with
 `uid=0(root)` and `u:r:ksu:s0`.
 
-The final contribution candidate was rebuilt on upstream commit `49fc33f` with
-eight P0 gates, eight FOPS gates, and 16 search batches for each stage. Two NDK
-r29 builds were byte-identical, and the exact-profile verifier passed 137/137
-checks. The resulting fixed-size artifact has SHA-256
+The artifact merged by the initial E2S contribution was rebuilt on upstream
+commit `49fc33f` with eight P0 gates, eight FOPS gates, and 16 search batches
+for each stage. Two NDK r29 builds were byte-identical, and the exact-profile
+verifier passed 137/137 checks. That pre-resource-follow-up fixed-size artifact
+has SHA-256
 `b1fe6dcc2e4d5cbfc13679f2086835c0a2ab2be5624f122b23b0c30954670552`.
 
-That exact artifact passed three independent clean-boot runs:
+That exact pre-follow-up artifact passed three independent clean-boot runs:
 
 | Run | Boot ID | P0 result | FOPS result | Runtime slide | Exploit time |
 | ---: | --- | --- | --- | ---: | ---: |
