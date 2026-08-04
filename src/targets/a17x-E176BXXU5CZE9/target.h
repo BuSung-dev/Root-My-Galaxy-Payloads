@@ -10,7 +10,7 @@
 
 #ifndef BUILD_FINGERPRINT
 #define BUILD_FINGERPRINT \
- "samsung/a17x/a17x:14/UP1A.231005.007/E176BXXU5CZE9:user/release-keys"
+ "samsung/a17xddins/a17x:16/BP4A.251205.006/E176BXXU5CZE9_ODM5CZE9:user/release-keys"
 #endif
 
 #define KIMAGE_TEXT_BASE 0xffffffc008000000ULL
