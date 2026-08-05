@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 2,
+  "targets": [
+    {
+      "profileId": "pa3q-S938NKSUACZF1",
+      "manufacturer": "samsung",
+      "model": "SM-S938N",
+      "device": "pa3q",
+      "kernelRelease": "6.6.98-android15-8-pd6ff1cd-abogkiS938NKSUACZF1-4k",
+      "kernelVersion": "Linux version 6.6.98-android15-8-pd6ff1cd-abogkiS938NKSUACZF1-4k (kleaf@build-host) (Android (11368308, +pgo, +bolt, +lto, +mlgo, based on r510928) clang version 18.0.0 (https://android.googlesource.com/toolchain/llvm-project 477610d4d0d988e69dbc3fae4fe86bff3f07f2b5), LLD 18.0.0) #1 SMP PREEMPT Mon Jun  1 08:35:51 UTC 2026",
+      "kernelBuildVersion": "#1 SMP PREEMPT Mon Jun  1 08:35:51 UTC 2026",
+      "buildDisplay": "BP4A.251205.006.S938NKSUACZF1",
+      "buildFingerprint": "samsung/pa3qksx/pa3q:16/BP4A.251205.006/S938NKSUACZF1_OKRACZF1:user/release-keys",
+      "sdk": 36,
+      "abi": "arm64-v8a",
+      "pageSize": 4096,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/pa3q-S938NKSUACZF1/cve-2026-43499-app.so",
+        "size": 104128
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-s25u-kdp",
+        "size": 6407096,
+        "kmi": "android15-6.6",
+        "managerPackage": "me.weishu.kernelsu"
+      }
+    },
+    {
+      "profileId": "pa3q-S9380ZHUBCZF1",
+      "manufacturer": "samsung",
+      "model": "SM-S9380",
+      "device": "pa3q",
+      "kernelRelease": "6.6.98-android15-8-pd6ff1cd-abogkiS9380ZHUBCZF1-4k",
+      "kernelVersion": "Linux version 6.6.98-android15-8-pd6ff1cd-abogkiS9380ZHUBCZF1-4k (kleaf@build-host) (Android (11368308, +pgo, +bolt, +lto, +mlgo, based on r510928) clang version 18.0.0 (https://android.googlesource.com/toolchain/llvm-project 477610d4d0d988e69dbc3fae4fe86bff3f07f2b5), LLD 18.0.0) #1 SMP PREEMPT Mon Jun  1 07:07:55 UTC 2026",
+      "kernelBuildVersion": "#1 SMP PREEMPT Mon Jun  1 07:07:55 UTC 2026",
+      "buildDisplay": "BP4A.251205.006.S9380ZHUBCZF1",
+      "buildFingerprint": "samsung/pa3qzhx/pa3q:16/BP4A.251205.006/S9380ZHUBCZF1_OZSBCZF1:user/release-keys",
+      "sdk": 36,
+      "abi": "arm64-v8a",
+      "pageSize": 4096,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/pa3q-S9380ZHUBCZF1/cve-2026-43499-app.so",
+        "size": 104128
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-s25u-kdp",
+        "size": 6407096,
+        "kmi": "android15-6.6",
+        "managerPackage": "me.weishu.kernelsu"
+      }
+    },
+    {
+      "profileId": "e3q-S928USQS6DZF2",
+      "manufacturer": "samsung",
+      "model": "SM-S928U",
+      "device": "e3q",
+      "kernelRelease": "6.1.145-android14-11-33419968-abS928USQS6DZF2",
+      "kernelVersion": "Linux version 6.1.145-android14-11-33419968-abS928USQS6DZF2 (build-user@build-host) (Android (10087095, +pgo, +bolt, +lto, -mlgo, based on r487747c) clang version 17.0.2 (https://android.googlesource.com/toolchain/llvm-project d9f89f4d16663d5012e5c09495f3b30ece3d2362), LLD 17.0.2) #1 SMP PREEMPT Tue Jun  9 08:23:14 UTC 2026",
+      "kernelBuildVersion": "#1 SMP PREEMPT Tue Jun  9 08:23:14 UTC 2026",
+      "buildDisplay": "BP4A.251205.006.S928USQS6DZF2",
+      "buildFingerprint": "samsung/e3quew/e3q:16/BP4A.251205.006/S928USQS6DZF2:user/release-keys",
+      "sdk": 36,
+      "abi": "arm64-v8a",
+      "pageSize": 4096,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/e3q-S928USQS6DZF2/cve-2026-43499-app.so",
+        "size": 104128
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-e3q-S928USQS6DZF2-kdp",
+        "size": 4726416,
+        "kmi": "android14-6.1",
+        "managerPackage": "me.weishu.kernelsu"
+      }
+    },
+    {
+      "profileId": "essi-A566EXXSCCZG6",
+      "manufacturer": "samsung",
+      "model": "SM-A566E",
+      "device": "a56x",
+      "kernelRelease": "6.6.102-android15-8-abA566EXXSCCZG6-4k",
+      "kernelVersion": "Linux version 6.6.102-android15-8-abA566EXXSCCZG6-4k (kleaf@build-host) (Android (11368308, +pgo, +bolt, +lto, +mlgo, based on r510928) clang version 18.0.0 (https://android.googlesource.com/toolchain/llvm-project 477610d4d0d988e69dbc3fae4fe86bff3f07f2b5), LLD 18.0.0) #1 SMP PREEMPT Thu Jul  9 11:02:17 UTC 2026",
+      "kernelBuildVersion": "#1 SMP PREEMPT Thu Jul  9 11:02:17 UTC 2026",
+      "buildDisplay": "BP4A.251205.006.A566EXXSCCZG6",
+      "buildFingerprint": "samsung/a56xnsxx/a56x:16/BP4A.251205.006/A566EXXSCCZG6_OXECCZG6:user/release-keys",
+      "sdk": 36,
+      "abi": "arm64-v8a",
+      "pageSize": 4096,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/essi-A566EXXSCCZG6/cve-2026-43499-app.so",
+        "size": 104128
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-A566EXXSCCZG6-kdp",
+        "size": 4765336,
+        "kmi": "android15-6.6",
+        "managerPackage": "me.weishu.kernelsu"
+      }
+    },
+    {
+      "profileId": "a36xq-A366WVLS3AYG1",
+      "manufacturer": "samsung",
+      "model": "SM-A366W",
+      "device": "a36xq",
+      "kernelRelease": "6.6.46-android15-8-30526735-abogkiA366WVLS3AYG1-4k",
+      "kernelVersion": "Linux version 6.6.46-android15-8-30526735-abogkiA366WVLS3AYG1-4k (kleaf@build-host) (Android (11368308, +pgo, +bolt, +lto, +mlgo, based on r510928) clang version 18.0.0 (https://android.googlesource.com/toolchain/llvm-project 477610d4d0d988e69dbc3fae4fe86bff3f07f2b5), LLD 18.0.0) #1 SMP PREEMPT Thu Jul  3 06:21:01 UTC 2025",
+      "kernelBuildVersion": "#1 SMP PREEMPT Thu Jul  3 06:21:01 UTC 2025",
+      "buildDisplay": "AP3A.240905.015.A2.A366WVLS3AYG1",
+      "buildFingerprint": "samsung/a36xqcs/a36xq:15/AP3A.240905.015.A2/A366WVLS3AYG1_OYV3AYG1:user/release-keys",
+      "sdk": 35,
+      "abi": "arm64-v8a",
+      "pageSize": 4096,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/a36xq-A366WVLS3AYG1/cve-2026-43499-app.so",
+        "size": 128688
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-A366WVLS3AYG1-kdp",
+        "size": 4889120,
+        "kmi": "android15-6.6",
+        "managerPackage": "me.weishu.kernelsu"
+      }
+    }
+  ]
+}
