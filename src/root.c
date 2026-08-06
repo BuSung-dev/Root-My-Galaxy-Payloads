@@ -310,7 +310,7 @@ int install_android_root(int fd) {
   if (installed) {
 #endif
     int holder_ready = 0;
-    for (int attempt = 0; attempt < 200; attempt++) {
+    for (int attempt = 0; attempt < 1000; attempt++) {
       if (root_hold_socket_ready()) {
         holder_ready = 1;
         break;

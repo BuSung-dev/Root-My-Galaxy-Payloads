@@ -20,6 +20,7 @@ static int pipe_fds_reclaim[PIPE_RECLAIM][2];
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
 static int p0_gate_holders[PIPE_RECLAIM][2];
 static int p0_gate_holders_initialized;
+static void spawn_p0_ref_keeper(int retained_pipe_index);
 
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
 static void close_p0_gate_holders(void) {
@@ -775,11 +776,18 @@ int install_pipe_physrw(int fd) {
   physrw_write64_ok =
     physrw_write64_ok && physrw_read64_after == physrw_write64_value;
 
-  return physrw_read_ok &&
-         memcmp(physrw_readback, seed, sizeof(seed)) == 0 &&
-         physrw_write_ok &&
-         memcmp(physrw_after_write, overwrite, sizeof(overwrite)) == 0 &&
-         physrw_read64_ok && physrw_write64_ok;
+  int physrw_ok = physrw_read_ok &&
+                  memcmp(physrw_readback, seed, sizeof(seed)) == 0 &&
+                  physrw_write_ok &&
+                  memcmp(physrw_after_write, overwrite, sizeof(overwrite)) == 0 &&
+                  physrw_read64_ok && physrw_write64_ok;
+#if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
+  if (physrw_ok && pipebuf_pipe_idx >= 0 && p0_gate_holders_initialized) {
+    spawn_p0_ref_keeper(pipebuf_pipe_idx);
+    pr_info("phys step spawned p0 ref keeper pipe=%d\n", pipebuf_pipe_idx);
+  }
+#endif
+  return physrw_ok;
 }
 
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
@@ -819,9 +827,15 @@ static int pipe_duplicate_bytes(
 }
 
 static int transfer_p0_references_to_root(int retained_pipe_index) {
+  int gate_holder_fd = (p0_gate_holders_initialized
+                            ? p0_gate_holders[retained_pipe_index][0]
+                            : -1);
+  if (gate_holder_fd < 0) {
+    gate_holder_fd = pipe_fds_reclaim[retained_pipe_index][0];
+  }
   int retained_fds[] = {
     pipe_fds_reclaim[retained_pipe_index][0],
-    p0_gate_holders[retained_pipe_index][0],
+    gate_holder_fd,
     reclaim_receiver_fd(),
   };
   for (size_t index = 0;

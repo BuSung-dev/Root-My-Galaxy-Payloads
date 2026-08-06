@@ -109,10 +109,24 @@
     {
       "payloadId": "essi-A566EXXSCCZG6",
       "displayName": "Galaxy A56 5G | Kernel 6.6.102",
-      "models": ["SM-A5660", "SM-A566B", "SM-A566E", "SM-A566S", "SM-A566U1", "SM-A566W"],
+      "models": ["SM-A5660", "SM-A566E", "SM-A566S", "SM-A566U1", "SM-A566W"],
       "kernelVersions": ["6.6.102"],
       "exploit": {
         "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/essi-A566EXXSCCZG6/cve-2026-43499-app.so",
+        "size": 104128
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-A566EXXSCCZG6-kdp",
+        "size": 4765336
+      }
+    },
+    {
+      "payloadId": "essi-A566BXXSCCZG7",
+      "displayName": "Galaxy A56 5G | Kernel 6.6.102",
+      "models": ["SM-A566B"],
+      "kernelVersions": ["6.6.102"],
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/essi-A566BXXSCCZG7/cve-2026-43499-app.so",
         "size": 104128
       },
       "kernelsu": {
