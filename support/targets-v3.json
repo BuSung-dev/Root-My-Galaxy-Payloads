@@ -191,6 +191,24 @@
       }
     },
     {
+      "payloadId": "dm3q-S9180ZCS8FZE3",
+      "displayName": "Galaxy S23 Ultra | Kernel 5.15.189 (CHC)",
+      "models": [
+        "SM-S9180"
+      ],
+      "kernelVersions": [
+        "5.15.189"
+      ],
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/dm3q-S9180ZCS8FZE3/cve-2026-43499-app.so",
+        "size": 90080
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-dm3q-S9180ZCS8FZE3-kdp",
+        "size": 4556352
+      }
+    },
+    {
       "payloadId": "e1s-S921NKSSFDZF3",
       "displayName": "Galaxy S24 | Kernel 6.1.157",
       "models": [
