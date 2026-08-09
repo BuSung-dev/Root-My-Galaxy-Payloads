@@ -63,6 +63,20 @@
       }
     },
     {
+      "payloadId": "q7q-F966NKSSBBZG3",
+      "displayName": "Galaxy Z Fold 7 Korean | Kernel 6.6.98",
+      "models": ["SM-F966N"],
+      "kernelVersions": ["6.6.98"],
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/q7q-F966NKSSBBZG3/cve-2026-43499-app.so",
+        "size": 89624
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-s25u-kdp",
+        "size": 6407096
+      }
+    },
+    {
       "payloadId": "e3q-S928USQS6DZF2",
       "displayName": "Galaxy S24 Ultra | Kernel 6.1.145",
       "models": ["SM-S928U"],
