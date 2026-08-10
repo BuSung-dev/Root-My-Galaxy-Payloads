@@ -26,6 +26,8 @@ between KMIs.
 | `ksud-samsung-android14-6.1-kdp` | Same verified 6.1 targets | `android14-6.1` | Late-load binary embedding the 6.1 module |
 | `android12-5.10_kernelsu-samsung-kdp.ko` | `SM-A155N` `A155NKSS6BYH1` | `android12-5.10` | Standalone Samsung KDP/RKP/DEFEX module built against the exact A15 kernel |
 | `ksud-samsung-android12-5.10-kdp` | `SM-A155N` `A155NKSS6BYH1` | `android12-5.10` | Late-load binary embedding the 5.10 module |
+| `android12-5.10_kernelsu-r0s-S901BXXSNGZD7-kdp.ko` | `SM-S901B`, `S901BXXSNGZD7` | `android12-5.10` | Exact r0s no-patch-text module with target `vermagic`, audited for manual relocation against the recovered GZD7 vmlinux |
+| `ksud-r0s-S901BXXSNGZD7-kdp` | Same exact r0s build | `android12-5.10` | Late-load binary embedding the r0s 5.10 module |
 
 The standalone `.ko` files are retained for auditing. Root My Galaxy downloads
 the corresponding `ksud-*` file because `ksud late-load` loads its embedded
