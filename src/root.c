@@ -44,6 +44,13 @@ struct umh_kernel_data {
 _Static_assert(sizeof(struct umh_subprocess_info) == 112,
                "subprocess_info layout");
 _Static_assert(sizeof(struct umh_completion) == 32, "completion layout");
+#if defined(SHELL_PERF_PAGE_ORACLE) && SHELL_PERF_PAGE_ORACLE
+_Static_assert(ROOT_UMH_WORK_OFF + sizeof(struct umh_subprocess_info) <=
+                   ROOT_UMH_DATA_OFF,
+               "shell root work overlaps data");
+_Static_assert(ROOT_UMH_DATA_OFF + sizeof(struct umh_kernel_data) <= PAGE_SIZE,
+               "shell root data exceeds page");
+#endif
 
 static int root_read_data(
     int fd, uintptr_t target, void *data, size_t len) {
@@ -304,6 +311,11 @@ int install_android_root(int fd) {
   pr_info("root direct start uid=%u fd=%d\n", root_uid_before, fd);
   int installed = install_workqueue_umh_root(fd);
 #if defined(APP_PAYLOAD) && APP_PAYLOAD
+#if defined(QEMU_FORCED_SLIDE_TEST) && QEMU_FORCED_SLIDE_TEST
+  if (installed) {
+    pr_info("root p0 reference holder not required for qemu forced slide\n");
+  }
+#else
 #if defined(APP_PHYS_VIRTUAL_BASE_ORACLE) && APP_PHYS_VIRTUAL_BASE_ORACLE
   if (installed && (p0_gate_page_struct || p0_probe_page_struct)) {
 #else
@@ -328,6 +340,7 @@ int install_android_root(int fd) {
     pr_info("root p0 reference holder not required for cached virtual base\n");
 #endif
   }
+#endif
 #endif
   return installed;
 }

