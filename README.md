@@ -21,6 +21,7 @@ It intentionally does not contain Android application source code.
 | `essi-A566EXXSCCZG6` | Galaxy A56 5G `SM-A566E` | `6.6.102` | Device-tested |
 | `a36xq-A366WVLS3AYG1` | Galaxy A36 5G `SM-A366W` | `6.6.46` | Device-tested |
 | `dm3q-S9180ZHS8FZF5` | Galaxy S23 Ultra `SM-S9180` | `5.15.189` | Test in progress |
+| `a25x-A256EXXUCEZE6` | Galaxy A25 5G `SM-A256E` | `5.10.240` | Device-tested standalone; app integration pending |
 
 Schema version 3 keeps each exploit and KernelSU artifact once. Its flat
 `models` and `kernelVersions` arrays define runtime compatibility. See
@@ -48,6 +49,7 @@ make TARGET=a15-A155NKSS6BYH1 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=essi-A566EXXSCCZG6 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=a36xq-A366WVLS3AYG1 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=dm3q-S9180ZHS8FZF5 ANDROID_NDK_HOME=/path/to/android-ndk
+make TARGET=a25x-A256EXXUCEZE6 ANDROID_NDK_HOME=/path/to/android-ndk standalone
 ```
 
 Outputs:
@@ -80,5 +82,7 @@ The SM-S926B DZDR analysis and device-validation record is in
 [`docs/SM-S926B-S926BXXUEDZDR.md`](docs/SM-S926B-S926BXXUEDZDR.md).
 The SM-A366W AYG1 device validation is in
 [`docs/SM-A366W-A366WVLS3AYG1.md`](docs/SM-A366W-A366WVLS3AYG1.md).
+The standalone SM-A256E ZE6 validation record is in
+[`docs/SM-A256E-A256EXXUCEZE6.md`](docs/SM-A256E-A256EXXUCEZE6.md).
 
 Use only on devices you own or are explicitly authorized to test.

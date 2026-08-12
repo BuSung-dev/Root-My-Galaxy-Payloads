@@ -41,9 +41,13 @@ COMMON_CFLAGS := \
 
 .DEFAULT_GOAL := all
 
-.PHONY: all clean info release
+.PHONY: all standalone clean info release
 
 all: $(PRELOAD) $(APP_PRELOAD) $(ROOT_HELPER)
+
+# Build only the standalone LD_PRELOAD chain and its root helper.  This is
+# useful for device ports whose app-domain P0 path has not been validated yet.
+standalone: $(PRELOAD) $(ROOT_HELPER)
 
 release: $(APP_RELEASE)
 

