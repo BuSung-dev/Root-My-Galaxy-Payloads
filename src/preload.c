@@ -153,8 +153,11 @@ __attribute__((constructor)) static void load(void) {
         _exit(1);
       }
       char delay[16];
+      char attempt_text[16];
       snprintf(delay, sizeof(delay), "%d", delay_usec);
+      snprintf(attempt_text, sizeof(attempt_text), "%d", attempt);
       SYSCHK(setenv("PSELECT_DELAY_USEC", delay, 1));
+      SYSCHK(setenv("S23_SUPERVISOR_ATTEMPT", attempt_text, 1));
 #if defined(APP_PAYLOAD) && defined(SLIDE_P0_OFFSET_CANDIDATES)
       const char *forced_offset = getenv("SLIDE_P0_OFFSET");
       if (forced_offset) {

