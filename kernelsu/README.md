@@ -16,6 +16,8 @@ between KMIs.
 | `ksud-A366WVLS3AYG1-kdp` | Same exact A36 build | `android15-6.6` | Device-tested late-load binary embedding the exact A36 no-patch-text module |
 | `android14-6.1_kernelsu-e3q-S928USQS6DZF2-kdp.ko` | `SM-S928U/SM-S928U1`, `S928USQS6DZF2` | `android14-6.1` | Exact E3Q module with target `vermagic`, audited for manual relocation |
 | `ksud-e3q-S928USQS6DZF2-kdp` | Same exact E3Q build | `android14-6.1` | Late-load binary embedding the E3Q module |
+| `android14-6.1_kernelsu-e3q-S928BXXS6DZF2-kdp.ko` | `SM-S928B`, `S928BXXS6DZF2` | `android14-6.1` | E3Q international (Snapdragon SM8650) module, same KMI as S928U; `vermagic` re-keyed to `abS928BXXS6DZF2` |
+| `ksud-e3q-S928BXXS6DZF2-kdp` | Same exact S928B build | `android14-6.1` | Late-load binary embedding the S928B module |
 | `android14-6.1_kernelsu-e2s-S926BXXUEDZDR-kdp.ko` | `SM-S926B`, `S926BXXUEDZDR` | `android14-6.1` | Exact E2S no-patch-text module with target `vermagic`, audited for manual relocation |
 | `ksud-e2s-S926BXXUEDZDR-kdp` | Same exact E2S build | `android14-6.1` | Device-tested late-load binary embedding the E2S no-patch-text module |
 | `android14-6.1_kernelsu-e1s-S921NKSSFDZF3-kdp.ko` | `SM-S921N`, `S921NKSSFDZF3` | `android14-6.1` | Exact S921N no-patch-text module with target `vermagic`, audited for manual relocation |
@@ -33,7 +35,11 @@ the corresponding `ksud-*` file because `ksud late-load` loads its embedded
 
 The generic 6.1 files and E3Q pair are build-verified but device-untested. The
 E3Q pair is tied to the full S928U DZF2 release string and must not be replaced
-with the generic 6.1 pair. The E2S pair is tied to the S926B DZDR release,
+with the generic 6.1 pair. The S928B pair shares the S928U Snapdragon SM8650 KMI
+(`33419968`, same `6.1.145-android14-11` series) and differs only by the
+`abS928BXXS6DZF2` release key in `vermagic`; both the module and the
+re-embedded `ksud` were rebuilt from the S928U source with that single release
+string change. The E2S pair is tied to the S926B DZDR release,
 static-audited, and device-tested: late-load reports version code `32525`, and
 the loader runs in `u:r:ksu:s0`. The E1S pair is tied to the S921B DZE1 release,
 static-audited against the recovered DZE1 `vmlinux` (202 undefined symbols, zero
