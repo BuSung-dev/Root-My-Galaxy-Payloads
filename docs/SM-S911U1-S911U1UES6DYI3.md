@@ -286,3 +286,42 @@ the S911U1UES6DYI3 firmware binaries, and the trace event ID was confirmed
 on-device. Hardware execution on the SM-S911U1 has not yet been performed;
 `SLIDE_PSELECT_WORD_SHIFT` is the one constant expected to possibly need a
 device-run correction.
+
+## Postmortem: first module load panicked; rebuilt with the kernel's exact clang
+
+The first clang-22-built module crashed the phone during insertion:
+`mod_sysfs_setup+0x25c` walked a garbage pointer (`0x000b800090000150`,
+level-0 translation fault) before any module code ran — the manual
+relocation loader mis-parsed the module's ELF. Root cause: this kernel is
+`CONFIG_CFI_CLANG` + `CONFIG_LTO_CLANG_FULL` + SCS, and the clang-22
+module build silently received **no CFI/LTO instrumentation** (the 5.15
+kbuild's compiler probes fail on modern clang), producing a section layout
+the kernel's loader mishandles. The device-proven FZE1 module by contrast
+contains `.text.__cfi_check_fail` and hash-named LTO data sections.
+
+The device IKCONFIG records the kernel's compiler: `Android clang 14.0.7
+(r450784e)`. NDK r25c ships clang 14.0.7 from the **same llvm-project
+commit** (`4c603efb…`, build wrapper r450784d1). The module was rebuilt
+with it (modules_prepare re-run under clang 14, same vermagic override and
+whitelist steps): the resulting `.ko` now carries `.rela.text.__cfi_check_fail`
+and `.rela.data..Lanon.e21dd8106d8b9de6595c3ab7b6647bac.1` — **the same
+anonymous-section hash as the device-proven FZE1 module**, confirming
+toolchain fidelity. Audits unchanged (211 imports, 0 missing, 0 CRC
+mismatches, `__versions` still empty).
+
+Updated artifacts:
+
+```text
+kernelsu/android13-5.15.153_kernelsu-dm1q-S911U1UES6DYI3-kdp.ko
+size: 372480
+SHA-256 a7f375b4da0e4ebc…
+
+kernelsu/ksud-dm1q-S911U1UES6DYI3-kdp
+size: 4639088
+SHA-256 4253a29ab1c6d2e1…
+```
+
+Lesson recorded for future ports: on CFI/LTO Samsung kernels, build the
+module with the compiler named in the target IKCONFIG
+(`CONFIG_CC_VERSION_TEXT`), not a host toolchain, and diff the module's
+section list against a known-good KMI sibling before shipping.
