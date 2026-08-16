@@ -9,6 +9,9 @@ endif
 ifeq ($(TARGET),dm1q-S911BXXSAFZE1)
 APP_TARGET_CFLAGS := -DSLIDE_STACK_WRITER=1
 endif
+ifeq ($(TARGET),dm1q-S911U1UES6DYI3)
+APP_TARGET_CFLAGS := -DSLIDE_STACK_WRITER=1
+endif
 
 TARGET_HEADER := src/targets/$(TARGET)/target.h
 TARGET_INCLUDE := targets/$(TARGET)/target.h

@@ -103,7 +103,53 @@ first member (offset `0x0`) in this build.
 Cross-check: the `boot_id` entry's `.data` field in the raw Image contains
 exactly `sysctl_bootid`, confirming both boot-id derivations.
 
-## Slide parameters
+## Route update: PR 231 cross-validation and the tracefs/MCAST route
+
+After this profile's first build, PR #231 added a device-tested
+`dm1q-S911BXXSAFZE1` port (SM-S911B, 5.15.189, One UI 8) whose full chain
+succeeded on hardware. Its values independently confirm every layout this
+profile derived from BTF: `cred` 0x798, `real_cred` 0x790,
+`sched_task_group` 0x400, the whole fake-task pi block (0x38/0x7c/0x84/
+0x884/0x898/0x8a8/0x8b0), `worker_pool` 0x20/0x34, event ID 108, and
+`P0_KERNEL_PHYS_LOAD` 0x80080000 — identical despite the 36-sublevel gap.
+
+That cross-check also exposes a defect in the older `dm3q-S9180ZHS8FZF5`
+profile: it ships `cred` 0x5e0, `pi_lock` 0x924, `worklist` 0x28 for the
+same `33413713` kernel build family, contradicting the device-proven values
+— which plausibly explains why that profile never progressed past
+"test in progress".
+
+The profile was therefore rebuilt on the PR 231 exploit generation:
+tracefs KASLR slide (canonical data mode; never force `SLIDE_P0_OFFSET`),
+controlled mm_struct slab, SKB reclaim, MCAST stale-waiter write
+(`SLIDE_STACK_WRITER=1`), closed fops route, configfs, pipe, UMH root,
+`ksud --allow-shell` late-load. The pselect/PI-stack-reclaim machinery —
+and with it `SLIDE_PSELECT_WORD_SHIFT`, this port's one unresolved
+constant — is not used by this route; the earlier analysis is retained
+below for the record.
+
+New firmware-specific derivation required by the tracefs slide:
+`SLIDE_TRACEFS_VFORK_CALLER_OFF` — for a vfork parent blocked in
+`wait_for_vfork_done`, the wchan unwind (`in_sched_functions` skips
+`__sched` frames) lands at the return of `bl wait_for_common` inside
+`wait_for_vfork_done`: `0xffffffc0080c8fb4` → `0x000c8fb4`
+(FZE1 uses 0x000c8fe4 for the same structure). The worker anchor stays
+`0x0010d370` as derived earlier. The `p0_fingerprint.h` probe offset
+(0x1f0000) matches the PR 231 convention.
+
+Updated artifacts:
+
+```text
+artifacts/dm1q-S911U1UES6DYI3/cve-2026-43499-app.so
+size: 130464
+SHA-256 35d03089ef6192d14d4b6f1b0472d0f77f2529d8afda3947e9aa2351a3a586e3
+```
+
+(The 104128-byte fixed-size `release` target predates the PR 231 route,
+whose payloads are ~130 KB; like the FZE1 artifacts, the plain app build
+is published with its true size in the feed.)
+
+## Slide parameters (original pselect-route build, superseded)
 
 - `SLIDE_TRACEFS_EVENT_ID` **108**, read authoritatively on-device from
   `/sys/kernel/tracing/events/sched/sched_blocked_reason/id`. The offline
