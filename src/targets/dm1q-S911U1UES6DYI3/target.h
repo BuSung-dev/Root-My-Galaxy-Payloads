@@ -28,8 +28,10 @@
 #define APP_CLOSED_FOPS_ROUTE 1
 #define APP_CONTROLLED_MM_GROUP_RECLAIM 1
 #define APP_FOPS_ROUTE_COARSE_DELAY_USEC 50000
-#define APP_FOPS_ROUTE_FINE_DELAY_TICKS \
-  0ULL, 0x10ULL, 0x20ULL, 0x30ULL, 0x40ULL, 0x60ULL, 0x80ULL, 0x18ULL
+/* Runs 1-3 evidence: attempt-1 timing (0 ticks) passed the PI/MCAST stage;
+   attempt-2 timing (0x10) panicked twice at rtmutex_common.h:118. Pin all
+   attempts to the passing value until hardware says otherwise. */
+#define APP_FOPS_ROUTE_FINE_DELAY_TICKS 0ULL
 #define APP_FOPS_BEFORE_PIPE 1
 #define APP_EXACT_PIPE_BUFFER_ONLY 1
 #define APP_PRODUCTION_STACK_PI_RIGHT_ONLY 1
