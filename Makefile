@@ -2,6 +2,11 @@ API ?= 35
 TARGET ?= pa3q-S938NKSUACZF1
 OUTDIR ?= build/$(TARGET)
 
+APP_TARGET_CFLAGS :=
+ifneq ($(filter dm2q-S916BXXSAFZG1 dm2q-S916NKSS8FZG1,$(TARGET)),)
+APP_TARGET_CFLAGS := -DSLIDE_STACK_WRITER=1
+endif
+
 TARGET_HEADER := src/targets/$(TARGET)/target.h
 TARGET_INCLUDE := targets/$(TARGET)/target.h
 TARGET_CC := $(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android$(API)-clang
@@ -58,11 +63,11 @@ $(ROOT_HELPER): src/su_daemon.c | $(OUTDIR)
 	$(TARGET_CC) -fPIE -pie -O2 -g0 -Wall -Wextra $< -ldl -o $@
 
 $(APP_PRELOAD): $(APP_PRELOAD_SRCS) $(TARGET_HEADER) src/offset.h src/common.h src/kernelsnitch/*.h | $(OUTDIR)
-	$(TARGET_CC) -DAPP_PAYLOAD=1 -fPIC $(COMMON_CFLAGS) $(APP_PRELOAD_SRCS) \
+	$(TARGET_CC) -DAPP_PAYLOAD=1 $(APP_TARGET_CFLAGS) -fPIC $(COMMON_CFLAGS) $(APP_PRELOAD_SRCS) \
 	  -shared -pthread -o $@
 
 $(APP_RELEASE): $(APP_PRELOAD_SRCS) $(TARGET_HEADER) src/offset.h src/common.h src/kernelsnitch/*.h | $(OUTDIR)
-	$(TARGET_CC) -DAPP_PAYLOAD=1 -fPIC -Oz -g0 \
+	$(TARGET_CC) -DAPP_PAYLOAD=1 $(APP_TARGET_CFLAGS) -fPIC -Oz -g0 \
 	  -fno-unwind-tables -fno-asynchronous-unwind-tables \
 	  -ffunction-sections -fdata-sections \
 	  -Wall -Wextra -Wno-unused-parameter -Wno-sign-compare \
@@ -74,6 +79,7 @@ $(APP_RELEASE): $(APP_PRELOAD_SRCS) $(TARGET_HEADER) src/offset.h src/common.h s
 
 info:
 	@echo "TARGET=$(TARGET)"
+	@echo "APP_TARGET_CFLAGS=$(APP_TARGET_CFLAGS)"
 	@echo "TARGET_CC=$(TARGET_CC)"
 	@echo "PRELOAD=$(PRELOAD)"
 	@echo "APP_PRELOAD=$(APP_PRELOAD)"

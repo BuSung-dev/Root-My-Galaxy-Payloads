@@ -177,6 +177,36 @@
         "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-e1s-S921NKSSFDZF3-kdp",
         "size": 4758872
       }
+    },
+    {
+      "payloadId": "galaxy-s23plus",
+      "displayName": "Galaxy S23+ | Kernel 5.15.189",
+      "models": [ "SM-S916B" ],
+      "kernelVersions": [ "5.15.189" ],
+      "requiresFreshP0Session": false,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/dm2q-S916BXXSAFZG1/cve-2026-43499-app.so",
+        "size": 130048
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-dm2q-S916BXXSAFZG1-kdp",
+        "size": 4879560
+      }
+    },
+    {
+      "payloadId": "galaxy-s23plus-korean",
+      "displayName": "Galaxy S23+ Korean Version | Kernel 5.15.189",
+      "models": [ "SM-S916N" ],
+      "kernelVersions": [ "5.15.189" ],
+      "requiresFreshP0Session": false,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/dm2q-S916NKSS8FZG1/cve-2026-43499-app.so",
+        "size": 130512
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-dm2q-S916BXXSAFZG1-kdp",
+        "size": 4879560
+      }
     }
   ]
 }
