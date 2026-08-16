@@ -175,18 +175,63 @@ hardware and should be regenerated. This port used 0x1f0000.
 
 ## KernelSU compatibility
 
-Pending: the module is built from KernelSU `v3.2.5` (commit `b0bc817`, patch
-`kernelsu/patches/KernelSU-v3.2.5-samsung-kdp-rkp-defex.patch` applies
-cleanly) against the Samsung OSS `SM-S911B_15_Opensource_S911BXXS8DYI3`
-Kalama 5.15 tree with the exact target release override:
+Built from KernelSU `v3.2.5` (commit `b0bc817`) with
+`kernelsu/patches/KernelSU-v3.2.5-samsung-kdp-rkp-defex.patch` plus the
+incremental
+`kernelsu/patches/KernelSU-v3.2.5-dm1q-android13-5.15-build-fix.patch`
+(Samsung `android13-5.15` still names the ucounts parameter type
+`enum ucount_type`; the 5.16+ `enum rlimit_type` rename is guarded by
+version).
+
+Source tree: Samsung OSS `SM-S911B_15_Opensource.zip` (Kalama 5.15,
+DYF1-era base) overlaid with the per-build
+`SM-S911B_15_Opensource_S911BXXS8DYI3.zip` delta; the tree's Makefile then
+reports exactly 5.15.153. The build used the **exact device IKCONFIG** read
+over ADB from `/proc/config.gz` — critical because this kernel enables
+`CONFIG_TRIM_UNUSED_KSYMS`, `CONFIG_LTO_CLANG_FULL`, `CONFIG_CFI_CLANG`,
+`CONFIG_SHADOW_CALL_STACK`, `CONFIG_MODVERSIONS`, and signature enforcement.
+Procedure: `olddefconfig` + `modules_prepare` with `LLVM=1 LLVM_IAS=1`
+(host clang 22 plus `-Wno-default-const-init-var-unsafe` for one new
+clang-22 warning tripping 5.15's `-Werror`), empty
+`UNUSED_KSYMS_WHITELIST`, literal target release written into
+`include/config/kernel.release` and `include/generated/utsrelease.h`,
+SELinux `genheaders` run for the external module, and the module built with
+`CONFIG_KSU=m CONFIG_KSU_SAMSUNG_KDP=y CONFIG_KSU_SAMSUNG_RKP=y
+CONFIG_KSU_SAMSUNG_DEFEX=y KBUILD_MODPOST_WARN=1`.
+
+Metadata and audits:
 
 ```text
 vermagic: 5.15.153-android13-8-30958972-abS911U1UES6DYI3 SMP preempt mod_unload modversions aarch64
+__versions size: 0            (manual-relocation late load)
+.symtab/.strtab: retained
+
+check_symbol vs recovered vmlinux.elf: pass
+audit_module_against_target.py --manual-relocation:
+  undefined symbols: 211
+  module version entries: 0
+  missing from target symbol table: 0
+  symbols resolved from kallsyms rather than target exports: 70
+  target CRC mismatches: 0
 ```
 
-This section will be completed with the static audit numbers
-(`check_symbol` + `audit_module_against_target.py --manual-relocation`)
-after the source package is obtained.
+Published artifacts (stripped with `llvm-strip --strip-debug`):
+
+```text
+kernelsu/android13-5.15.153_kernelsu-dm1q-S911U1UES6DYI3-kdp.ko
+size: 341000
+SHA-256 08a0fe7b752020bd46b9d4bcda98fd0f4e62fdb2cc8822bec713b3ee542c304b
+
+kernelsu/ksud-dm1q-S911U1UES6DYI3-kdp
+size: 4627128
+SHA-256 6cac70d110e9e6312f40fa40143bd24f6453b280d0473979209f8c1dcf38778a
+```
+
+The `ksud` embeds the module as `bin/aarch64/android13-5.15_kernelsu.ko`
+(rust-embed with compression). Verified on the target SM-S911U1 over ADB:
+the binary executes, `boot-info supported-kmis` reports `android13-5.15`
+and matches `boot-info current-kmi`, so the late-load asset selection
+resolves to this exact module.
 
 ## Validation state
 
