@@ -325,3 +325,30 @@ Lesson recorded for future ports: on CFI/LTO Samsung kernels, build the
 module with the compiler named in the target IKCONFIG
 (`CONFIG_CC_VERSION_TEXT`), not a host toolchain, and diff the module's
 section list against a known-good KMI sibling before shipping.
+
+## Postmortem 2: all three module panics were zeroed-kallsyms symbol resolution
+
+Crash #3 (with `kptr_restrict` manually cleared before the load) still died
+at `mod_sysfs_setup+0x25c`, proving the manual sysctl change never reached
+the resolver. Root cause found in `ksuinit`: its `Kptr` guard **writes
+`kptr_restrict = 1`** before reading `/proc/kallsyms`. On this kernel
+(Samsung default 2; SELinux denies the CAP_SYSLOG check under 1 for the
+loader's context) every address reads as zero, so the module was loaded
+with every external reference zero-based — the `add_usage_links` walk then
+dereferenced relocation addends as pointers.
+
+Fix (all in the loader, verified by offline dry-run against live
+kallsyms — 211/211 imports resolved, embedded addresses matched the
+running kernel exactly at slide 0x30000):
+
+1. `Kptr` now writes `0`, never `1`;
+2. resolution prefers live kallsyms, falls back to an **embedded static
+   table** (211 imports, offsets from the DYI3 `vmlinux.nm`) plus the
+   runtime slide recovered from the `_text` entry;
+3. **fail-closed**: if any import cannot be resolved to a non-zero address
+   — or the embedded fallback is needed but no slide was recovered — the
+   loader refuses with a diagnostic instead of calling `init_module`.
+
+Artifacts updated: `kernelsu/ksud-dm1q-S911U1UES6DYI3-kdp` (4663256
+bytes). The loader source delta lives in the local KernelSU tree
+(`userspace/ksuinit/src/lib.rs`, `static_syms.rs`).
