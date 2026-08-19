@@ -352,3 +352,95 @@ running kernel exactly at slide 0x30000):
 Artifacts updated: `kernelsu/ksud-dm1q-S911U1UES6DYI3-kdp` (4663256
 bytes). The loader source delta lives in the local KernelSU tree
 (`userspace/ksuinit/src/lib.rs`, `static_syms.rs`).
+
+## Postmortem 3: true root cause was the module's `this_module` relocation offset
+
+Despite the Postmortem 2 fixes, the DYI3 module still panicked
+deterministically at `mod_sysfs_setup+0x25c` (VA `000b800090000150`,
+5/5 loads). The offline dry-run had passed because it only rewrites
+`.symtab` st_value and refused unresolved symbols — it never checked the
+`.rela.gnu.linkonce.this_module` relocations, which the kernel applies to
+the live `struct module` during `load_module`.
+
+Root cause (register math + vmlinux disasm + device BTF, all confirmed):
+
+- DYI3 `.ko` relocates `init_module` at module+0x178 and `cleanup_module`
+  at module+0x368.
+- The device BTF `struct module` has `target_list` at 0x368 and `exit` at
+  0x378 (`CONFIG_DEBUG_INFO_BTF_MODULES` adds the `btf_data_size` +
+  `btf_data` pair before `target_list`).
+- `apply_relocations` (module.c:4206) therefore writes `&cleanup_module`
+  into the already-INIT_LIST_HEAD'd `target_list`; `add_usage_links`
+  (module.c:1752) then walks it as fake `module_use` entries and faults.
+- The device-proven FZE1 ko (S911B, 5.15.189) relocates at 0x178/0x378 —
+  the layout only the BTF-modules build produces.
+
+Fix (rebuild, not loader): rebuild `kernelsu.ko` with the exact device
+compiler (NDK r25c clang 14.0.7 `r450784d1`, matching the IKCONFIG
+`CONFIG_CC_VERSION_TEXT`) plus `KCFLAGS=-DCONFIG_DEBUG_INFO_BTF_MODULES=1`
+so the module's own `struct module` layout matches the device BTF
+(relocations land at 0x178/0x378). The DYI3 `out/.config` lacked
+`CONFIG_DEBUG_INFO_BTF_MODULES` even though the shipped firmware has it —
+the object-level define reproduces the shipped layout without
+pahole/BTF-gen side effects. `CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT` must NOT
+be set (DYI3 ships the real `stop_machine` patch path; the earlier
+`NO_PATCH_TEXT=y` build dropped 11 imports). Verified rebuilt ko:
+
+```text
+kernelsu/android13-5.15.153_kernelsu-dm1q-S911U1UES6DYI3-kdp.ko (fixed)
+size: 340336
+relocs: init_module@0x178 cleanup_module@0x378
+undefined: 211 (exact match with shipped bad ko, incl. stop_machine path)
+audit: 0 missing, 0 CRC mismatches, __versions empty
+vermagic: 5.15.153-android13-8-30958972-abS911U1UES6DYI3
+```
+
+The rebuilt ksud (`ksud-dm1q-S911U1UES6DYI3-kdp`, embedded fixed ko SHA
+`49c627fa…`) replaces the crashing one. Bad ko kept as
+`android13-5.15.153_kernelsu-dm1q-S911U1UES6DYI3-kdp.ko.bad-backup`.
+
+## Postmortem 4: RKP protects `sys_call_table`; `NO_PATCH_TEXT=y` is required
+
+With the Postmortem 3 fix, the module loaded and `init` ran fully —
+`mod_sysfs_setup+0x25c` was gone. A **second, different panic** appeared
+at ~302s uptime while hooking syscalls:
+
+```text
+Internal error: synchronous external abort [#1] PREEMPT SMP
+PC: copy_to_kernel_nofault+0x28/0x16c   (str x10, [x0])
+LR: ksu_patch_text_cb+0x170/0x22c [kernelsu]
+map: multi_cpu_stop <- stop_machine_cpuslocked  (ksu_patch_text)
+Modules linked in: kernelsu(OE+)
+KernelSU: sys_call_table=0xffffffc009df8958; patch syscall 42
+```
+
+The store targets `0xfffffffdfdbfeaa8` (garbage — intended
+`sys_call_table[42]` at `0xffffffc009df8aa8`); the faulting write is a
+stage-2 (hypervisor) fault on the `sys_call_table` page: Samsung's RKP
+pins it read-only at EL2. Direct `ksu_patch_text` → `stop_machine` →
+`copy_to_kernel_nofault` writes always abort, and no fixmap/bounce path
+exists on this target.
+
+Fix: **do set `CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y`** — this corrects the
+Postmortem 3 note. With it, `ksu_patch_text` is a stub returning
+`-EOPNOTSUPP`, the `sys_call_table` hook fails cleanly, and KernelSU falls
+back to the RKP-compatible kretprobe hooks (setresuid/sucompat) — the
+same path the device-proven FZE1 build (S911B, 5.15.189) uses. The 11
+dropped imports (`stop_machine` etc.) are benign: they only feed the
+disabled patch path.
+
+Final working build (deployed, verified on-device):
+
+```text
+kernelsu/android13-5.15.153_kernelsu-dm1q-S911U1UES6DYI3-kdp.ko
+size: 327120
+config: CONFIG_KSU=m CONFIG_KSU_SAMSUNG_KDP=y CONFIG_KSU_SAMSUNG_RKP=y
+        CONFIG_KSU_SAMSUNG_DEFEX=y CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y
+        KCFLAGS=-DCONFIG_DEBUG_INFO_BTF_MODULES=1
+ksud-dm1q-S911U1UES6DYI3-kdp: 4761608 B, embeds fixed ko
+Result: kernelsu module loads + init runs; no panic on late-load
+        (verified 2026-08-18: `kernelsu ... - Live (OE)` after --late-load)
+```
+
+Full chain now works: root via CVE-2026-43499 → `--late-load` → `kernelsu`
+live in `/proc/modules`, no panic.
