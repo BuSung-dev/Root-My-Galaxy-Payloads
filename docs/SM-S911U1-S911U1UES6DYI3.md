@@ -281,11 +281,12 @@ resolves to this exact module.
 
 ## Validation state
 
-The profile and offsets are mathematically and statically validated against
-the S911U1UES6DYI3 firmware binaries, and the trace event ID was confirmed
-on-device. Hardware execution on the SM-S911U1 has not yet been performed;
-`SLIDE_PSELECT_WORD_SHIFT` is the one constant expected to possibly need a
-device-run correction.
+The full chain has been executed on an SM-S911U1 running S911U1UES6DYI3:
+root via CVE-2026-43499, `--late-load`, and a live `kernelsu` module in
+`/proc/modules` with no panic (verified 2026-08-18; see Postmortem 4 for the
+final artifact set). The pselect-route constant `SLIDE_PSELECT_WORD_SHIFT`
+was never exercised on hardware: the shipped build uses the PR 231
+tracefs/MCAST route, which does not read it.
 
 ## Postmortem: first module load panicked; rebuilt with the kernel's exact clang
 
