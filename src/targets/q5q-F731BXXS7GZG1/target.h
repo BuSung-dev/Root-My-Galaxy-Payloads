@@ -8,7 +8,7 @@
 #define BUILD_VARIANT_LABEL "q5q-F731BXXS7GZG1-root-umh"
 #endif
 #ifndef BUILD_FINGERPRINT
-#define BUILD_FINGERPRINT "samsung/q5qxxx/q5q:16/BP4A.251205.006.F731BXXS7GZG1:user/release-keys"
+#define BUILD_FINGERPRINT "samsung/q5qxxx/q5q:16/BP4A.251205.006/F731BXXS7GZG1:user/release-keys"
 #endif
 
 #define KMALLOC_CGROUP_TYPE 1
