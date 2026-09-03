@@ -325,104 +325,120 @@ static int install_workqueue_umh_root(int fd) {
   uint64_t list_next = 0;
   uint64_t list_prev = 0;
   uint32_t nr_idle = 0;
-  for (int i = 0; i < 200; i++) {
-    if (!root_read64(fd, worklist, &list_next) ||
-        !root_read64(fd, worklist + sizeof(uint64_t), &list_prev) ||
-        !root_read32(fd, pool + POOL_NR_IDLE_OFF, &nr_idle)) {
-      pr_error("root umh pool state read failed\n");
-      goto cleanup;
-    }
-    if (list_next == worklist && list_prev == worklist && nr_idle > 0) {
-      break;
-    }
-    usleep(1000);
-  }
-  if (list_next != worklist || list_prev != worklist || nr_idle == 0) {
-    pr_error("root umh pool busy pool=%016zx list=%016llx/%016llx "
-             "head=%016zx idle=%u\n",
-             pool, (unsigned long long)list_next,
-             (unsigned long long)list_prev, worklist, nr_idle);
-    goto cleanup;
-  }
-
   uint32_t color = 0;
   uint32_t refcnt = 0;
   uint32_t nr_active = 0;
   uint32_t max_active = 0;
-  if (!root_read32(fd, pwq + PWQ_WORK_COLOR_OFF, &color) ||
-      !root_read32(fd, pwq + PWQ_REFCNT_OFF, &refcnt) ||
-      !root_read32(fd, pwq + PWQ_NR_ACTIVE_OFF, &nr_active) ||
-      !root_read32(fd, pwq + PWQ_MAX_ACTIVE_OFF, &max_active)) {
-    pr_error("root umh pwq state read failed\n");
-    goto cleanup;
-  }
-  if (color >= 16 || refcnt == 0 || nr_active >= max_active) {
-    pr_error("root umh bad pwq state color=%u refcnt=%u active=%u/%u\n",
-             color, refcnt, nr_active, max_active);
-    goto cleanup;
-  }
-
-  uintptr_t inflight_addr =
-      pwq + PWQ_NR_IN_FLIGHT_OFF + color * sizeof(uint32_t);
+  uintptr_t inflight_addr = 0;
   uint32_t nr_inflight = 0;
-  if (!root_read32(fd, inflight_addr, &nr_inflight) ||
-      nr_inflight == UINT32_MAX || nr_active == UINT32_MAX ||
-      refcnt == UINT32_MAX) {
-    pr_error("root umh bad counters inflight=%u active=%u refcnt=%u\n",
-             nr_inflight, nr_active, refcnt);
-    goto cleanup;
-  }
-  uintptr_t fake_entry = fake_work_addr + WORK_ENTRY_OFF;
-  uint64_t work_data = pwq | ((uint64_t)color << 4) | 5;
+  uintptr_t fake_entry = 0;
+  uint64_t work_data = 0;
   struct umh_subprocess_info fake;
-  memset(&fake, 0, sizeof(fake));
-  memcpy(fake.work + WORK_DATA_OFF, &work_data, sizeof(work_data));
-  memcpy(fake.work + WORK_ENTRY_OFF, &worklist, sizeof(worklist));
-  memcpy(fake.work + WORK_ENTRY_OFF + sizeof(uint64_t),
-         &worklist, sizeof(worklist));
-  memcpy(fake.work + WORK_FUNC_OFF, &umh_work_func,
-         sizeof(umh_work_func));
-  fake.complete = completion_addr;
-  fake.path = path_addr;
-  fake.argv = argv_addr;
-  fake.envp = envp_addr;
-
-  int data_write = root_write_data(
-      fd, umh_data_addr, &umh_data, sizeof(umh_data));
-  int work_write = root_write_data(
-      fd, fake_work_addr, &fake, sizeof(fake));
-  if (!data_write || !work_write ||
-      !root_read_data(fd, umh_data_addr, scratch_readback,
-                      sizeof(umh_data)) ||
-      memcmp(scratch_readback, &umh_data, sizeof(umh_data)) != 0 ||
-      !root_read_data(fd, fake_work_addr, scratch_readback,
-                      sizeof(fake)) ||
-      memcmp(scratch_readback, &fake, sizeof(fake)) != 0) {
-    pr_error("root umh scratch write/readback failed data=%d work=%d\n",
-             data_write, work_write);
-    goto cleanup;
-  }
-
-  if (selinux_old != permissive) {
-    selinux_changed = 1;
-    if (!root_write_global(fd, selinux_addr, &permissive,
-                           sizeof(permissive)) ||
-        !root_read_global(fd, selinux_addr, &selinux_readback,
-                          sizeof(selinux_readback)) ||
-        selinux_readback != permissive) {
-      pr_error("root umh selinux write/readback failed now=%u\n",
-               selinux_readback);
+  int data_write = 0;
+  int work_write = 0;
+  int queue_attempt = 0;
+  for (;;) {
+    int pool_idle = 0;
+    for (int i = 0; i < 200; i++) {
+      if (!root_read64(fd, worklist, &list_next) ||
+          !root_read64(fd, worklist + sizeof(uint64_t), &list_prev) ||
+          !root_read32(fd, pool + POOL_NR_IDLE_OFF, &nr_idle)) {
+        pr_error("root umh pool state read failed\n");
+        goto cleanup;
+      }
+      if (list_next == worklist && list_prev == worklist && nr_idle > 0) {
+        pool_idle = 1;
+        break;
+      }
+      usleep(1000);
+    }
+    if (!pool_idle) {
+      pr_error("root umh pool busy pool=%016zx list=%016llx/%016llx "
+               "head=%016zx idle=%u\n",
+               pool, (unsigned long long)list_next,
+               (unsigned long long)list_prev, worklist, nr_idle);
       goto cleanup;
     }
-  }
+    if (!root_read32(fd, pwq + PWQ_WORK_COLOR_OFF, &color) ||
+        !root_read32(fd, pwq + PWQ_REFCNT_OFF, &refcnt) ||
+        !root_read32(fd, pwq + PWQ_NR_ACTIVE_OFF, &nr_active) ||
+        !root_read32(fd, pwq + PWQ_MAX_ACTIVE_OFF, &max_active)) {
+      pr_error("root umh pwq state read failed\n");
+      goto cleanup;
+    }
+    if (color >= 16 || refcnt == 0 || nr_active >= max_active) {
+      pr_error("root umh bad pwq state color=%u refcnt=%u active=%u/%u\n",
+               color, refcnt, nr_active, max_active);
+      goto cleanup;
+    }
 
-  if (!root_read64(fd, worklist, &list_next) ||
-      !root_read64(fd, worklist + sizeof(uint64_t), &list_prev) ||
-      list_next != worklist || list_prev != worklist) {
-    pr_error("root umh worklist changed before queue next=%016llx prev=%016llx\n",
-             (unsigned long long)list_next,
-             (unsigned long long)list_prev);
-    goto cleanup;
+    inflight_addr =
+        pwq + PWQ_NR_IN_FLIGHT_OFF + color * sizeof(uint32_t);
+    if (!root_read32(fd, inflight_addr, &nr_inflight) ||
+        nr_inflight == UINT32_MAX || nr_active == UINT32_MAX ||
+        refcnt == UINT32_MAX) {
+      pr_error("root umh bad counters inflight=%u active=%u refcnt=%u\n",
+               nr_inflight, nr_active, refcnt);
+      goto cleanup;
+    }
+    fake_entry = fake_work_addr + WORK_ENTRY_OFF;
+    work_data = pwq | ((uint64_t)color << 4) | 5;
+    memset(&fake, 0, sizeof(fake));
+    memcpy(fake.work + WORK_DATA_OFF, &work_data, sizeof(work_data));
+    memcpy(fake.work + WORK_ENTRY_OFF, &worklist, sizeof(worklist));
+    memcpy(fake.work + WORK_ENTRY_OFF + sizeof(uint64_t),
+           &worklist, sizeof(worklist));
+    memcpy(fake.work + WORK_FUNC_OFF, &umh_work_func,
+           sizeof(umh_work_func));
+    fake.complete = completion_addr;
+    fake.path = path_addr;
+    fake.argv = argv_addr;
+    fake.envp = envp_addr;
+
+    data_write = root_write_data(
+        fd, umh_data_addr, &umh_data, sizeof(umh_data));
+    work_write = root_write_data(
+        fd, fake_work_addr, &fake, sizeof(fake));
+    if (!data_write || !work_write ||
+        !root_read_data(fd, umh_data_addr, scratch_readback,
+                        sizeof(umh_data)) ||
+        memcmp(scratch_readback, &umh_data, sizeof(umh_data)) != 0 ||
+        !root_read_data(fd, fake_work_addr, scratch_readback,
+                        sizeof(fake)) ||
+        memcmp(scratch_readback, &fake, sizeof(fake)) != 0) {
+      pr_error("root umh scratch write/readback failed data=%d work=%d\n",
+               data_write, work_write);
+      goto cleanup;
+    }
+
+    if (selinux_old != permissive) {
+      selinux_changed = 1;
+      if (!root_write_global(fd, selinux_addr, &permissive,
+                             sizeof(permissive)) ||
+          !root_read_global(fd, selinux_addr, &selinux_readback,
+                            sizeof(selinux_readback)) ||
+          selinux_readback != permissive) {
+        pr_error("root umh selinux write/readback failed now=%u\n",
+                 selinux_readback);
+        goto cleanup;
+      }
+    }
+
+    if (!root_read64(fd, worklist, &list_next) ||
+        !root_read64(fd, worklist + sizeof(uint64_t), &list_prev) ||
+        list_next != worklist || list_prev != worklist) {
+      pr_warning("root umh worklist changed before queue attempt=%d "
+                 "next=%016llx prev=%016llx\n",
+                 queue_attempt, (unsigned long long)list_next,
+                 (unsigned long long)list_prev);
+      if (++queue_attempt >= 8) {
+        pr_error("root umh worklist kept changing; giving up after "
+                 "%d attempts\n", queue_attempt);
+        goto cleanup;
+      }
+      continue;
+    }
+    break;
   }
 
   inflight_changed = 1;

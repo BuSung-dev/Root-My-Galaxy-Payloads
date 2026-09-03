@@ -255,6 +255,48 @@
       }
     },
     {
+      "payloadId": "dm1q-S911BXXSAFZE1",
+      "displayName": "Galaxy S23 | Kernel 5.15.189",
+      "models": ["SM-S911B"],
+      "kernelVersions": ["5.15.189"],
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/dm1q-S911BXXSAFZE1/cve-2026-43499-app.so",
+        "size": 130608
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-dm1q-S911BXXSAFZE1-kdp",
+        "size": 4879560
+      }
+    },
+    {
+      "payloadId": "dm1q-S911BXXU9FZDP",
+      "displayName": "Galaxy S23 | Kernel 5.15.189 (FZDP)",
+      "models": ["SM-S911B"],
+      "kernelVersions": ["abS911BXXU9FZDP"],
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/dm1q-S911BXXU9FZDP/cve-2026-43499-app.so",
+        "size": 130608
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-dm1q-S911BXXU9FZDP-kdp",
+        "size": 4879560
+      }
+    },
+    {
+      "payloadId": "dm1q-S911BXXSAFZG1",
+      "displayName": "Galaxy S23 | Kernel 5.15.189 (SAFZG1)",
+      "models": ["SM-S911B"],
+      "kernelVersions": ["abS911BXXSAFZG1"],
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/dm1q-S911BXXSAFZG1/cve-2026-43499-app.so",
+        "size": 130608
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-dm1q-S911BXXSAFZG1-kdp",
+        "size": 4879560
+      }
+    },
+    {
       "payloadId": "e1s-S921NKSSFDZF3",
       "displayName": "Galaxy S24 | Kernel 6.1.157",
       "models": ["SM-S921N"],

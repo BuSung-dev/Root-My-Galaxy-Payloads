@@ -1858,6 +1858,17 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
 
     if (payload_mode == PAGE_PAYLOAD_FOPS) {
       put_fake_fops_table(p, FOPS_TABLE_OFF);
+      if (getenv("FOPS_TABLE_DIAG")) {
+        uint64_t w;
+        pr_info("fops table diag fake_fops=%016zx payload_base=%016zx "
+                "SKB_DATA_DELTA=%lld\n",
+                fake_fops, payload_base, (long long)SKB_DATA_DELTA);
+        for (size_t i = 0; i < 14; ++i) {
+          memcpy(&w, p + FOPS_TABLE_OFF + i * 8, 8);
+          pr_info("fops table diag [0x%02zx]=%016llx\n", i * 8,
+                  (unsigned long long)w);
+        }
+      }
 #if defined(APP_PAYLOAD) && APP_PAYLOAD && \
     defined(APP_FOPS_TABLE_MIRROR_OFF)
       /*
