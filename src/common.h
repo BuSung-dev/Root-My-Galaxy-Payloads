@@ -330,6 +330,10 @@ extern int fops_data_probe_active;
 extern int data_alias_uses_slide;
 extern int data_addr_canonical;
 extern int slide_p0_session_fresh;
+#if defined(APP_SLIDE_NOPHYS_ROUTE) && APP_SLIDE_NOPHYS_ROUTE
+extern int slide_bootid_route;
+extern int slide_bootid_slide_done;
+#endif
 extern int memfd_leak;
 
 int run_exploit(int argc, char **argv);
@@ -423,6 +427,7 @@ int repair_fake_fops_llseek(int fd);
 int restore_slide_boot_id(int fd);
 int install_child_root(int fd);
 int try_cfi_stage(void);
+void spawn_p0_ref_keeper(int retained_pipe_index);
 
 
 

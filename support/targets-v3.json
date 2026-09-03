@@ -270,6 +270,18 @@
       }
     },
     {
+      "payloadId": "q6q-F9560ZCU3DZDP",
+      "displayName": "Galaxy Z Fold6 | Kernel 6.1.145",
+      "models": ["SM-F9560"],
+      "kernelVersions": ["6.1.145"],
+      "requiresFreshP0Session": true,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/q6q-F9560ZCU3DZDP/cve-2026-43499-app.so",
+        "size": 137680
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-q6q-F9560ZCU3DZDP-kdp",
+        "size": 4767424
       "payloadId": "dm1q-S911U1UES6DYI3",
       "displayName": "Galaxy S23 (base) | Kernel 5.15.153 | tracefs/MCAST route",
       "models": ["SM-S911U1"],

