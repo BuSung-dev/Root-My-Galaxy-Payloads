@@ -11,6 +11,14 @@ This repository contains the device-specific native side of
 
 It intentionally does not contain Android application source code.
 
+## Adding a target
+
+`tools/generate_target.py` derives a full `src/targets/<profile>/target.h`
+and `p0_fingerprint.h` pair from the firmware's `boot.img` (symbols, BTF
+struct offsets, trace event id, worker caller, physical load addresses, P0
+fingerprint). See [`docs/PORTING-script.md`](docs/PORTING-script.md) for
+usage and [`docs/PORTING.md`](docs/PORTING.md) for the manual procedure.
+
 ## Supported payloads
 
 | Payload | Compatible models | Kernel version | Status |

@@ -13,6 +13,11 @@ The no-BTF Android 5.10 procedure and legacy `rt_mutex_waiter` layout are
 recorded separately in
 [`SM-A155N-A155NKSS6BYH1.md`](SM-A155N-A155NKSS6BYH1.md).
 
+For a new port, most of sections 2-5 can be skipped:
+[`tools/generate_target.py`](../tools/generate_target.py) derives the
+kernel constants and P0 fingerprint automatically from the boot.img. See
+[`PORTING-script.md`](PORTING-script.md) for usage.
+
 ## 1. Identify the exact firmware
 
 Target identity:
