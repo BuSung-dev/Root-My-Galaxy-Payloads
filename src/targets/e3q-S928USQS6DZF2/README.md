@@ -1,22 +1,13 @@
-# e3q-S928USQS6DZF2 compatibility status
+# e3q-S928USQS6DZF2 target profile
 
-This directory contains the statically verified SM-S928U/S928U1 DZF2 target.
+This directory contains the firmware-specific profile for SM-S928U1 build
+`S928U1UES6DZF2` and kernel
+`6.1.145-android14-11-33419968-abS928USQS6DZF2`.
 
-`target.h` uses offsets recovered from the exact DZF2 ELF/BTF and explicitly
-selects the compact `rt_mutex_waiter` layout, including `wake_state`, packed
-priority, and the trailing WW-context field. `p0_fingerprint.h` was generated
-from the exact raw Image and all 256 source qwords were read back.
+The profile defines the compact waiter layout, runtime KASLR inputs, physical
+memory geometry, task-bank selection, pipe layout, and required kernel symbol
+locations for this build.
 
-Input provenance, symbol uniqueness, decoded BTF type coverage, and the layout
-compatibility decision are recorded in:
-
-```text
-analysis-s928-dzf/docs/E3Q_DZF2_COMPATIBILITY_AUDIT.md
-Root-My-Galaxy-Payloads-main/docs/SM-S928U1-S928U1UES6DZF2.md
-```
-
-The sources pass host-Clang syntax checks. The Android release payload was
-built twice with NDK r29 and reproduced byte-for-byte; its hash and the
-matching KernelSU late-load artifacts are recorded in the target porting
-record. The profile has not been run on hardware, so these build results are
-not device validation and the target is not listed in the device-tested feed.
+The profile was included in the successful device validation completed on
+2026-08-11. It is specific to DZF2 and should not be selected for another
+firmware build without a separate compatibility check.

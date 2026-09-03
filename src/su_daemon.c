@@ -29,8 +29,10 @@
 #define SH_PATH "/system/bin/sh"
 #define KSU_LOADER_PATH "/data/local/tmp/ksud-s25u-kdp"
 #define LOGCAT_PATH "/system/bin/logcat"
+#define BOOTSTRAP_MARKER_CONFIG "/data/local/tmp/cve43499-root-marker-path"
 
 static uid_t allowed_client_uid = 2000;
+static char bootstrap_marker_path[PATH_MAX];
 
 #define SU_PROTOCOL_MAGIC 0x53553235U
 #define SU_PROTOCOL_VERSION 1U
@@ -477,10 +479,10 @@ static int run_kernelsu_late_load(struct su_request *request, int conn) {
     }
     if (loader == 0) {
       /* Let the downloaded target-specific ksud select its embedded module
-       * from the running kernel.  Hard-coding android15-6.6 made the shared
-       * loader path unusable for exact 6.1 payloads such as E2S. */
-      execl(LOGCAT_PATH, "logcat", "late-load", "--package-name",
-            "me.weishu.kernelsu", (char *)NULL);
+       * from the running kernel.  Ephemeral mode avoids replacing an existing
+       * /data/adb/ksud while the app only needs the module for this boot. */
+      execl(LOGCAT_PATH, "logcat", "late-load", "--ephemeral",
+            "--package-name", "me.weishu.kernelsu", (char *)NULL);
       dprintf(STDERR_FILENO, "late-load: exec: %s\n", strerror(errno));
       _exit(12);
     }
@@ -870,6 +872,17 @@ static int daemon_main(void) {
   }
   chmod(BOOTSTRAP_SOCK_PATH, 0666);
 
+  if (bootstrap_marker_path[0]) {
+    int marker_fd = open(bootstrap_marker_path,
+                         O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+    if (marker_fd >= 0) {
+      static const char ready[] = "uid=0\n";
+      write_full(marker_fd, ready, sizeof(ready) - 1);
+      fsync(marker_fd);
+      close(marker_fd);
+    }
+  }
+
   for (;;) {
     int conn = accept4(fd, NULL, NULL, SOCK_CLOEXEC);
     if (conn < 0 && errno == EINTR) {
@@ -893,11 +906,31 @@ static int daemon_main(void) {
   }
 }
 
+static void load_bootstrap_marker_config(void) {
+  int fd = open(BOOTSTRAP_MARKER_CONFIG, O_RDONLY | O_CLOEXEC);
+  if (fd < 0) {
+    return;
+  }
+  ssize_t count = read(fd, bootstrap_marker_path,
+                       sizeof(bootstrap_marker_path) - 1);
+  close(fd);
+  unlink(BOOTSTRAP_MARKER_CONFIG);
+  if (count <= 0) {
+    bootstrap_marker_path[0] = '\0';
+    return;
+  }
+  bootstrap_marker_path[count] = '\0';
+  bootstrap_marker_path[strcspn(bootstrap_marker_path, "\r\n")] = '\0';
+  if (bootstrap_marker_path[0] != '/') {
+    bootstrap_marker_path[0] = '\0';
+  }
+}
+
 static int umh_main(int argc, char **argv) {
   if (geteuid() != 0) {
     return 126;
   }
-  if (argc != 3) {
+  if (argc != 3 && argc != 4) {
     return 124;
   }
   char *end = NULL;
@@ -908,6 +941,12 @@ static int umh_main(int argc, char **argv) {
     return 123;
   }
   allowed_client_uid = (uid_t)parsed_uid;
+  if (argc == 4 && argv[3][0] == '/') {
+    snprintf(bootstrap_marker_path, sizeof(bootstrap_marker_path), "%s",
+             argv[3]);
+  } else {
+    load_bootstrap_marker_config();
+  }
   if (setresgid(0, 0, 0) != 0 || setresuid(0, 0, 0) != 0 ||
       getuid() != 0 || geteuid() != 0 || getgid() != 0 || getegid() != 0) {
     return 125;

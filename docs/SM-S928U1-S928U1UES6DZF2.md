@@ -325,17 +325,16 @@ The release command was:
 
 ```sh
 make TARGET=e3q-S928USQS6DZF2 \
-  ANDROID_NDK_HOME=/home/steve/.local/android-ndk/android-ndk-r29 release
+  ANDROID_NDK_HOME=/path/to/android-ndk-r29 stable
 ```
 
-The unpadded stripped AArch64 shared object is 88,856 bytes. The Makefile
-fixed-size result is 104,128 bytes. Two forced release builds produced the
-same SHA-256, and the published local artifact is byte-identical:
+The stable AArch64 application payload is padded to 104,128 bytes. Repeated
+builds produce the same SHA-256:
 
 ```text
 artifacts/e3q-S928USQS6DZF2/cve-2026-43499-app.so
 size 104128
-SHA-256 693d86f889f3137cfc7d455b1ff9aa4673bd112c98a9ff68382e98b5adc10dbd
+SHA-256 b2931d8980f969b5a0cb05bd67f6804f445ad4a4c867a7b4c4081c2ffac5b36a
 ```
 
 `make all` also completed for the root-domain shared object, app-domain
@@ -374,17 +373,48 @@ The resulting binary names the embedded KMI asset. Published artifacts are:
 | File | Size (bytes) | SHA-256 |
 | --- | ---: | --- |
 | `kernelsu/android14-6.1_kernelsu-e3q-S928USQS6DZF2-kdp.ko` | 400,152 | `ed7afea6cd221d5698739d3a1633264c084ffb77f2df730e5808941e0a555de5` |
-| `kernelsu/ksud-e3q-S928USQS6DZF2-kdp` | 4,726,416 | `50c10e5110048b901287c311e6cff12d4f59fff888b1e6023db7bb6f7ddbed88` |
+| `kernelsu/ksud-e3q-S928USQS6DZF2-kdp` | 4,998,352 | `10c1bf87f8e475e6ab8c5d1c5a085aa1544ee091f4451ad65141ea75261ab610` |
 
 SM-S921B is Exynos 2400 and its 6.1 module is not used or shared with this
 Snapdragon E3Q build.
 
 ## Completion boundary
 
-All offline porting gates are complete: exact firmware provenance, ABL load
-address proof, symbols and BTF layouts, slide constants, P0 readback, payload
-reproducibility, exact KernelSU vermagic, target-symbol audit, and embedded
-late-load build. Hardware diagnostics have validated the corrected pselect
-placement and skb fragment boundary, but target-page reuse and a complete
-oracle hit remain unverified. The profile stays experimental while debugging
-continues.
+All target gates are complete. Device testing verified runtime KASLR recovery,
+task-bank selection, the pselect write window, physical read and write access,
+bootstrap-root startup, and KernelSU activation. The profile is limited to the
+exact SM-S928U1 DZF2 firmware listed above.
+
+## Device validation (2026-08-11)
+
+The complete public-source path was validated on an SM-S928U1 running exact
+firmware `S928U1UES6DZF2` and kernel
+`6.1.145-android14-11-33419968-abS928USQS6DZF2`.
+
+### Root My Galaxy
+
+![Root My Galaxy showing KernelSU active](SM-S928U1-S928U1UES6DZF2-RootMyGalaxy.jpg)
+
+### KernelSU Manager
+
+![KernelSU Manager showing Working LKM on SM-S928U1](SM-S928U1-S928U1UES6DZF2-KernelSU.jpg)
+
+### Result
+
+- Root My Galaxy completed all installation stages;
+- physical read and write checks completed successfully;
+- the bootstrap-root service was verified by the application monitor;
+- KernelSU Manager reports `Working <LKM> [Jailbreak mode]`, version `32525-2`;
+- KernelSU control channel verification completed successfully;
+- `su -c id` returned `uid=0(root) ... context=u:r:ksu:s0`;
+- SELinux remained Enforcing.
+
+### Published artifacts
+
+| File | Size (bytes) | SHA-256 |
+| --- | ---: | --- |
+| `artifacts/e3q-S928USQS6DZF2/cve-2026-43499-app.so` | 104,128 | `b2931d8980f969b5a0cb05bd67f6804f445ad4a4c867a7b4c4081c2ffac5b36a` |
+| `kernelsu/android14-6.1_kernelsu-e3q-S928USQS6DZF2-kdp.ko` | 400,152 | `ed7afea6cd221d5698739d3a1633264c084ffb77f2df730e5808941e0a555de5` |
+| `kernelsu/ksud-e3q-S928USQS6DZF2-kdp` | 4,998,352 | `10c1bf87f8e475e6ab8c5d1c5a085aa1544ee091f4451ad65141ea75261ab610` |
+
+Support remains limited to the exact SM-S928U1 DZF2 profile.
