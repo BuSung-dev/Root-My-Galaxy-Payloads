@@ -12,6 +12,8 @@ between KMIs.
 | `ksud-s25u-kdp` | `SM-S938N`, `S938NKSUACZF1` | `android15-6.6` | Late-load binary embedding the 6.6 module |
 | `android15-6.6_kernelsu-A566EXXSCCZG6-kdp.ko` | `SM-A566E`, `A566EXXSCCZG6` | `android15-6.6` | Exact A56 module with target `vermagic`, audited for manual relocation; live text patching disabled for Exynos EL2 |
 | `ksud-A566EXXSCCZG6-kdp` | Same exact A56 build | `android15-6.6` | Device-tested late-load binary embedding the A56 6.6 no-patch-text module |
+| `android15-6.6_kernelsu-X520XXS6BZA3-kdp.ko` | `SM-X520`, `X520XXS6BZA3` | `android15-6.6` | Exact X520 module with target `vermagic`, audited for manual relocation; live text patching disabled for Exynos EL2 |
+| `ksud-X520XXS6BZA3-kdp` | Same exact X520 build | `android15-6.6` | Late-load binary embedding the exact X520 no-patch-text module; hardware validation pending |
 | `android15-6.6_kernelsu-A366WVLS3AYG1-kdp.ko` | `SM-A366W`, `A366WVLS3AYG1` | `android15-6.6` | Exact A36 module with target `vermagic`, audited for manual relocation; live text patching disabled for Samsung KDP/RKP |
 | `ksud-A366WVLS3AYG1-kdp` | Same exact A36 build | `android15-6.6` | Device-tested late-load binary embedding the exact A36 no-patch-text module |
 | `android14-6.1_kernelsu-e3q-S928USQS6DZF2-kdp.ko` | `SM-S928U/SM-S928U1`, `S928USQS6DZF2` | `android14-6.1` | Exact E3Q module with target `vermagic`, audited for manual relocation |
@@ -42,19 +44,7 @@ The standalone `.ko` files are retained for auditing. Root My Galaxy downloads
 the corresponding `ksud-*` file because `ksud late-load` loads its embedded
 `<kmi>_kernelsu.ko` asset.
 
-The S916B FZG1 pair is built from Samsung's released `SM-S916B_16_Opensource` tree with the live FZG1 config and Android clang `r450784e`. Its zero-length `__versions` section and retained symbol tables are intended for KernelSU's kallsyms-aware manual loader. Audit against the exact recovered FZG1 `vmlinux.elf` found all 200 undefined names. Plain `insmod` is not supported. The target patch [`KernelSU-v3.2.5-dm2q-fzg1.patch`](patches/KernelSU-v3.2.5-dm2q-fzg1.patch) selects the exact FZG1 `enum ucount_type` ABI and hard-stops RKP syscall-table writes; the build also sets `CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y`. Use the root helper's guarded `--late-load` operation so the loader's security-domain and stdio transition can complete safely. Module initialization is not yet confirmed on S916B hardware.
 
-The generic 6.1 files remain build-verified only. The E3Q pair is
-device-tested and tied to the full S928U DZF2 release string; it must not be replaced
-with the generic 6.1 pair. The S928B pair is tied to the full S928B DZF2 release,
-uses the no-patch-text Samsung path, is statically audited, and has now been
-hardware-tested through module load: the exact `ksud` loaded `kernelsu.ko`,
-entered `u:r:ksu:s0`, and survived without a reboot. KernelSU Manager and
-Root Checker were then verified: Manager reported `Working <LKM> [Jailbreak
-mode]`, version `32525-2`, and one superuser, while Root Checker reported root
-access installed. The root remains per-boot because no boot image was
-modified; reboot survival is untested.
-The E2S pair is tied to the S926B DZDR release,
 static-audited, and device-tested: late-load reports version code `32525`, and
 the loader runs in `u:r:ksu:s0`. The E1S pair is tied to the S921B DZE1 release,
 static-audited against the recovered DZE1 `vmlinux` (202 undefined symbols, zero
