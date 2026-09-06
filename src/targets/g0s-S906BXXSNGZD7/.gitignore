@@ -1,0 +1,21 @@
+# Build output directories
+build/
+buildroot-tc/
+
+# Compiled objects and libraries
+*.o
+*.so
+*.a
+
+# Python
+__pycache__/
+*.pyc
+
+# Generator intermediates
+target_generator/kallsyms
+target_generator/kallsyms.txt
+target_generator/Image
+target_generator/config.txt
+
+# Test targets / QEMU test environments
+tests-targets/
