@@ -21,9 +21,10 @@ It intentionally does not contain Android application source code.
 | `essi-A566EXXSCCZG6` | Galaxy A56 5G `SM-A566E` | `6.6.102` | Device-tested |
 | `a36xq-A366WVLS3AYG1` | Galaxy A36 5G `SM-A366W` | `6.6.46` | Device-tested |
 | `dm3q-S9180ZHS8FZF5` | Galaxy S23 Ultra `SM-S9180` | `5.15.189` | Test in progress |
+| `gts10fewifi-X520XXS6BZA3` | Galaxy Tab S10 FE `SM-X520` | `6.6.77` | Offline-validated; hardware validation in progress |
 
-Schema version 3 keeps each exploit and KernelSU artifact once. Its flat
-`models` and `kernelVersions` arrays define runtime compatibility. See
+Schema version 4 preserves existing payload entries and adds optional exact-build
+constraints plus non-installable metadata records. See
 [`support/README.md`](support/README.md) for the matching rules.
 
 The port is based on the exploit source published at
@@ -32,9 +33,9 @@ The port is based on the exploit source published at
 ## Feed delivery
 
 Root My Galaxy resolves the payload repository's current commit first and
-fetches `support/targets-v3.json` and every artifact from that immutable
+fetches `support/targets-v4.json` and every artifact from that immutable
 commit. Per-artifact SHA-256 fields and manifest signatures are not part of
-schema version 3. `targets-v2.json` is retained for released 0.2.3 clients.
+schema version 4. Older v2 and v3 manifests remain available for released clients.
 
 ## Build
 
@@ -48,6 +49,7 @@ make TARGET=a15-A155NKSS6BYH1 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=essi-A566EXXSCCZG6 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=a36xq-A366WVLS3AYG1 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=dm3q-S9180ZHS8FZF5 ANDROID_NDK_HOME=/path/to/android-ndk
+make TARGET=gts10fewifi-X520XXS6BZA3 ANDROID_NDK_HOME=/path/to/android-ndk
 ```
 
 Outputs:

@@ -12,6 +12,8 @@ between KMIs.
 | `ksud-s25u-kdp` | `SM-S938N`, `S938NKSUACZF1` | `android15-6.6` | Late-load binary embedding the 6.6 module |
 | `android15-6.6_kernelsu-A566EXXSCCZG6-kdp.ko` | `SM-A566E`, `A566EXXSCCZG6` | `android15-6.6` | Exact A56 module with target `vermagic`, audited for manual relocation; live text patching disabled for Exynos EL2 |
 | `ksud-A566EXXSCCZG6-kdp` | Same exact A56 build | `android15-6.6` | Device-tested late-load binary embedding the A56 6.6 no-patch-text module |
+| `android15-6.6_kernelsu-X520XXS6BZA3-kdp.ko` | `SM-X520`, `X520XXS6BZA3` | `android15-6.6` | Exact X520 module with target `vermagic`, audited for manual relocation; live text patching disabled for Exynos EL2 |
+| `ksud-X520XXS6BZA3-kdp` | Same exact X520 build | `android15-6.6` | Late-load binary embedding the exact X520 no-patch-text module; hardware validation pending |
 | `android15-6.6_kernelsu-A366WVLS3AYG1-kdp.ko` | `SM-A366W`, `A366WVLS3AYG1` | `android15-6.6` | Exact A36 module with target `vermagic`, audited for manual relocation; live text patching disabled for Samsung KDP/RKP |
 | `ksud-A366WVLS3AYG1-kdp` | Same exact A36 build | `android15-6.6` | Device-tested late-load binary embedding the exact A36 no-patch-text module |
 | `android14-6.1_kernelsu-e3q-S928USQS6DZF2-kdp.ko` | `SM-S928U/SM-S928U1`, `S928USQS6DZF2` | `android14-6.1` | Exact E3Q module with target `vermagic`, audited for manual relocation |
@@ -30,6 +32,15 @@ between KMIs.
 The standalone `.ko` files are retained for auditing. Root My Galaxy downloads
 the corresponding `ksud-*` file because `ksud late-load` loads its embedded
 `<kmi>_kernelsu.ko` asset.
+
+The X520 pair was built from the same patched KernelSU v3.2.5 commit. The
+standalone module is 304648 bytes with SHA-256
+`dc2d49b2d7a2e698b1c2e41a14107f7c27d31cdc1b43b917047c831f08e7c084`;
+the 4865944-byte loader has SHA-256
+`3049e4002849c260b9d4182b54e457840765647af0509ec8b8fdbb22603f5429`.
+Its manual-relocation audit against the exact BZA3 ELF and `Module.symvers`
+reports 214 undefined imports, zero missing target symbols, zero module-version
+entries, and zero CRC mismatches.
 
 The generic 6.1 files and E3Q pair are build-verified but device-untested. The
 E3Q pair is tied to the full S928U DZF2 release string and must not be replaced
