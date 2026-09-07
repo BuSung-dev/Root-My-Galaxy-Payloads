@@ -31,6 +31,14 @@ The S916B FZG1 profile is shell-only today. Its exact tracefs route works from `
 
 The S918B FZF5 profile is hardware-verified through the app's Shizuku mode (exploit, KernelSU late-load, granted `su` under enforcing). Its physical-P0 fallback also engages in unprivileged app-domain execution, but rooting without Shizuku is not yet hardware-confirmed. See [`docs/SM-S918B-S918BXXSAFZF5.md`](docs/SM-S918B-S918BXXSAFZF5.md).
 
+The Japanese carrier model `SCG26` on build `SCG26KDS1DZG1` has a separate,
+exact-build temporary-root field result using a locally modified S928B payload
+through an authorized Shizuku shell. It completed without reboot, loaded
+KernelSU once, and retained the same boot ID across three root samples. This is
+not an SCG26 profile or feed entry; independent SCG26 firmware derivation is
+still required. See
+[`docs/SCG26-SCG26KDS1DZG1.md`](docs/SCG26-SCG26KDS1DZG1.md).
+
 Schema version 3 keeps each exploit and KernelSU artifact once. Its flat
 `models` and `kernelVersions` arrays define runtime compatibility. See
 [`support/README.md`](support/README.md) for the matching rules.
@@ -99,5 +107,8 @@ The SM-A536E GZG3 device validation is in
 [`docs/SM-A536E-A536EXXSNGZG3.md`](docs/SM-A536E-A536EXXSNGZG3.md).
 The SM-S9280 China (CHC) DZF2 port and validation record is in
 [`docs/SM-S9280-S9280ZCS6DZF2.md`](docs/SM-S9280-S9280ZCS6DZF2.md).
+The exact-build SCG26 temporary-root field result and its fail-closed
+orchestration contract are in
+[`docs/SCG26-SCG26KDS1DZG1.md`](docs/SCG26-SCG26KDS1DZG1.md).
 
 Use only on devices you own or are explicitly authorized to test.
