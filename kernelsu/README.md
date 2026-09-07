@@ -20,6 +20,8 @@ between KMIs.
 | `ksud-e3q-S928BXXS6DZF2-kdp` | Same exact S928B build | `android14-6.1` | Late-load binary embedding the S928B no-patch-text module; module-load hardware-tested |
 | `android14-6.1_kernelsu-e2s-S926BXXUEDZDR-kdp.ko` | `SM-S926B`, `S926BXXUEDZDR` | `android14-6.1` | Exact E2S no-patch-text module with target `vermagic`, audited for manual relocation |
 | `ksud-e2s-S926BXXUEDZDR-kdp` | Same exact E2S build | `android14-6.1` | Device-tested late-load binary embedding the E2S no-patch-text module |
+| `android14-6.1_kernelsu-A556EXXUEDZE4-kdp.ko` | `SM-A556E`, `A556EXXUEDZE4` | `android14-6.1` | Device-tested A55 no-patch-text module; exact `vermagic`, target-symbol audit passed |
+| `ksud-A556EXXUEDZE4-kdp` | Same exact A55 build | `android14-6.1` | Device-tested late-load binary embedding the A55 module |
 | `android14-6.1_kernelsu-e1s-S921NKSSFDZF3-kdp.ko` | `SM-S921N`, `S921NKSSFDZF3` | `android14-6.1` | Exact S921N no-patch-text module with target `vermagic`, audited for manual relocation |
 | `ksud-e1s-S921NKSSFDZF3-kdp` | Same exact S921N build | `android14-6.1` | Device-tested late-load binary embedding the S921N no-patch-text module |
 | `android14-6.1_kernelsu-e1s-S921BXXSFDZE1-kdp.ko` | `SM-S921B`, `S921BXXSFDZE1` | `android14-6.1` | Exact E1S no-patch-text module with target `vermagic`, audited for manual relocation |
@@ -56,7 +58,13 @@ access installed. The root remains per-boot because no boot image was
 modified; reboot survival is untested.
 The E2S pair is tied to the S926B DZDR release,
 static-audited, and device-tested: late-load reports version code `32525`, and
-the loader runs in `u:r:ksu:s0`. The E1S pair is tied to the S921B DZE1 release,
+the loader runs in `u:r:ksu:s0`. The A55 DZE4 pair reuses the same
+no-patch-text android14-6.1 build after an exact target-ELF audit (202
+undefined imports, zero missing symbols, empty `__versions`, zero CRC
+mismatches, and no `stop_machine`). It was loaded through the app's Shizuku
+path, and KernelSU Manager reported `Working <LKM> [Jailbreak mode]`, version
+`32525-2`. The E1S pair
+is tied to the S921B DZE1 release,
 static-audited against the recovered DZE1 `vmlinux` (202 undefined symbols, zero
 missing, zero CRC mismatches, no `stop_machine`), and device-tested: the
 no-patch-text module late-loads cleanly and reports KernelSU active. On the same
