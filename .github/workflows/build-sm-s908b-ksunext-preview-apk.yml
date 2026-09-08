@@ -1,0 +1,168 @@
+name: "Build SM-S908B KernelSU Next Preview"
+
+on:
+  push:
+    branches:
+      - port-sm-s908b-s908bxxsmgzb2
+    paths:
+      - "artifacts/b0s-S908BXXSMGZB2/**"
+      - "src/targets/b0s-S908BXXSMGZB2/**"
+      - "tools/patch-s908b-ksunext-preview.py"
+      - ".github/workflows/build-sm-s908b-ksunext-preview-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KSU_NEXT_RELEASE: v3.3.0-android12-5.10
+  KSU_NEXT_KO_URL: https://github.com/sarabpal-dev/KernelSU-Next/releases/download/v3.3.0-android12-5.10/kernelsu-android12-5.10.ko
+  KSU_NEXT_KO_SIZE: "461880"
+  KSU_NEXT_KO_SHA256: 51ba8ddbb1237c44b591c9766d2caf9a221dc45a1c59e9162337c3ff27150e29
+  KSU_NEXT_MANAGER_URL: https://github.com/sarabpal-dev/KernelSU-Next/releases/download/v3.3.0-android12-5.10/KernelSU_Next_v3.3.0-release.apk
+  KSU_NEXT_MANAGER_SIZE: "6719195"
+  KSU_NEXT_MANAGER_SHA256: c0fa21f716ca8a3cafaa633037de4e6eae0098a70b04c188cac4020ef65fd345
+
+jobs:
+  build-preview:
+    name: "Build S908B PR #272 KernelSU Next Preview"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout PR payload branch
+        uses: actions/checkout@v4
+        with:
+          path: payloads
+
+      - name: Checkout Root My Galaxy app source
+        uses: actions/checkout@v4
+        with:
+          repository: BuSung-dev/Root-My-Galaxy
+          ref: 23adf39fcd4f1be4e73184ee960a6d5399baf147
+          path: app-src
+
+      - name: Verify exploit and KernelSU Next pair
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          EXPLOIT_URL="https://raw.githubusercontent.com/peppicry/Root-My-Galaxy-Payloads/${GITHUB_SHA}/artifacts/b0s-S908BXXSMGZB2/cve-2026-43499-app.so"
+
+          curl -fsSL "$EXPLOIT_URL" -o /tmp/s908b-exploit.so
+          curl -fL --retry 3 "$KSU_NEXT_KO_URL" -o /tmp/kernelsu-next.ko
+          curl -fL --retry 3 "$KSU_NEXT_MANAGER_URL" -o /tmp/KernelSU_Next_Manager.apk
+
+          test "$(stat -c%s /tmp/s908b-exploit.so)" = "1757752"
+          test "$(stat -c%s /tmp/kernelsu-next.ko)" = "$KSU_NEXT_KO_SIZE"
+          test "$(stat -c%s /tmp/KernelSU_Next_Manager.apk)" = "$KSU_NEXT_MANAGER_SIZE"
+
+          printf '%s  %s\n' \
+            'd2b52dc52a69571a145a64f0f57ae53884383a996661066ca84b52a45eb691bf' \
+            '/tmp/s908b-exploit.so' | sha256sum -c -
+          printf '%s  %s\n' "$KSU_NEXT_KO_SHA256" '/tmp/kernelsu-next.ko' | sha256sum -c -
+          printf '%s  %s\n' "$KSU_NEXT_MANAGER_SHA256" '/tmp/KernelSU_Next_Manager.apk' | sha256sum -c -
+
+      - name: Patch app for KernelSU Next preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 payloads/tools/patch-s908b-ksunext-preview.py app-src "$GITHUB_SHA"
+          grep -F "KernelSU Next EXPERIMENTAL" \
+            app-src/app/src/main/java/dev/busung/s25uroot/PayloadRepository.kt
+          grep -F "/system/bin/insmod" \
+            app-src/app/src/main/java/dev/busung/s25uroot/InstallViewModel.kt
+          grep -F 'KERNEL_SU_MANAGER_PACKAGE = "com.rifsxd.ksunext"' \
+            app-src/app/src/main/java/dev/busung/s25uroot/MainActivity.kt
+          grep -F '<package android:name="com.rifsxd.ksunext" />' \
+            app-src/app/src/main/AndroidManifest.xml
+          if grep -Fq 'KERNEL_SU_MANAGER_PACKAGE = "me.weishu.kernelsu"' \
+            app-src/app/src/main/java/dev/busung/s25uroot/MainActivity.kt; then
+            echo "Preview still targets original KernelSU Manager" >&2
+            exit 1
+          fi
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools platforms;android-37.0 build-tools;37.0.0 cmake;3.22.1"
+          accept-android-sdk-licenses: true
+
+      - name: Set up NDK r28
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r28
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build KernelSU Next preview APK
+        working-directory: app-src
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Package KernelSU Next preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p preview-output
+
+          cp app-src/app/build/outputs/apk/debug/app-debug.apk \
+            preview-output/RootMyGalaxy-S908B-PR272-KernelSUNext-Preview.apk
+          cp /tmp/KernelSU_Next_Manager.apk \
+            preview-output/KernelSU_Next_v3.3.0-release.apk
+
+          cat > preview-output/README-TEST.txt <<EOF
+          Root My Galaxy — SM-S908B PR #272 — KernelSU Next Preview
+
+          This is a separate experimental build. It does not replace the normal
+          PR #272 Preview and it does not change the validated exploit payload.
+
+          Device matcher: SM-S908B
+          Kernel matcher: 5.10.237
+          Hardware-validated firmware: S908BXXSMGZB2
+
+          Root flow:
+          1. Run the same PR #272 exploit.
+          2. After uid=0 is obtained, stage the Samsung 5.10 KernelSU Next LKM.
+          3. Load it with insmod through the existing root helper.
+          4. Treat insmod rc=0 as kernel acceptance of the LKM.
+          5. Open the bundled KernelSU Next Manager for runtime confirmation.
+
+          Manager package: com.rifsxd.ksunext
+          Manager launcher: com.rifsxd.ksunext/.ui.MainActivity
+          KernelSU Next source: sarabpal-dev/KernelSU-Next
+          Release: $KSU_NEXT_RELEASE
+          Module SHA-256: $KSU_NEXT_KO_SHA256
+          Manager SHA-256: $KSU_NEXT_MANAGER_SHA256
+
+          Hardware validation:
+          - SM-S908B / S908BXXSMGZB2: successful on physical hardware.
+          - KernelSU Next Manager reported running in LKM / Jailbreak mode.
+          - su returned uid=0(root), context u:r:ksu:s0, with SELinux Enforcing.
+
+          Important:
+          - Root is temporary and disappears after reboot.
+          - The normal PR #272 KernelSU path remains the tested fallback.
+          EOF
+
+          (
+            cd preview-output
+            sha256sum \
+              RootMyGalaxy-S908B-PR272-KernelSUNext-Preview.apk \
+              KernelSU_Next_v3.3.0-release.apk \
+              > SHA256SUMS.txt
+          )
+
+      - name: Upload KernelSU Next preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: RootMyGalaxy-S908B-PR272-KernelSUNext-Preview
+          path: preview-output/*
+          if-no-files-found: error
+          retention-days: 30

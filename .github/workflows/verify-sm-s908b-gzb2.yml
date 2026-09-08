@@ -1,0 +1,100 @@
+# Rebuild the deterministic SM-S908B GZB2 payload and check the exact
+# S901B GZD7 KernelSU files used by the S908B tests.
+#
+# The KernelSU files are hash-checked here, not rebuilt. Runtime validation is
+# covered by the device records in docs/SM-S908B-S908BXXSMGZB2.md.
+
+name: Verify SM-S908B GZB2 payload
+
+on:
+  push:
+    paths:
+      - "src/targets/b0s-S908BXXSMGZB2/**"
+      - "artifacts/b0s-S908BXXSMGZB2/**"
+      - "kernelsu/ksud-r0s-S901BXXSNGZD7-kdp"
+      - "kernelsu/android12-5.10_kernelsu-r0s-S901BXXSNGZD7-kdp.ko"
+      - ".github/workflows/verify-sm-s908b-gzb2.yml"
+  pull_request:
+    paths:
+      - "src/targets/b0s-S908BXXSMGZB2/**"
+      - "artifacts/b0s-S908BXXSMGZB2/**"
+      - "kernelsu/ksud-r0s-S901BXXSNGZD7-kdp"
+      - "kernelsu/android12-5.10_kernelsu-r0s-S901BXXSNGZD7-kdp.ko"
+      - ".github/workflows/verify-sm-s908b-gzb2.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check bundled KernelSU files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          KSUD="kernelsu/ksud-r0s-S901BXXSNGZD7-kdp"
+          KO="kernelsu/android12-5.10_kernelsu-r0s-S901BXXSNGZD7-kdp.ko"
+
+          test "$(stat -c%s "$KSUD")" = "4621280"
+          test "$(stat -c%s "$KO")" = "323168"
+
+          printf '%s  %s\n' \
+            'fc0097be827dab2078ba23e7af223905cc8ab38c763a602982071439ae7ed962' \
+            "$KSUD" | sha256sum -c -
+          printf '%s  %s\n' \
+            '47a66801c8a1e94a757924fd30099065cea62edc80e14b83b0879cca22fef568' \
+            "$KO" | sha256sum -c -
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Android NDK r28c
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;28.2.13676358"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+
+      - name: Rebuild and verify payload identities
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SOURCE_DIR="src/targets/b0s-S908BXXSMGZB2/ionstack-s908b-gzb2"
+          PAYLOAD="$SOURCE_DIR/build/S908BXXSMGZB2/bin/cve-2026-43499"
+          EXP32="$SOURCE_DIR/build/S908BXXSMGZB2/bin/cve-exp32"
+          PUBLISHED_PAYLOAD="artifacts/b0s-S908BXXSMGZB2/cve-2026-43499-app.so"
+
+          EXPECTED_PAYLOAD_SHA="d2b52dc52a69571a145a64f0f57ae53884383a996661066ca84b52a45eb691bf"
+          EXPECTED_EXP32_SHA="023190461719fc4cc11a7d114ff8da5132f1afa0eba32c907053e83682914152"
+
+          env -u CC -u NDK_ROOT -u ANDROID_NDK_ROOT -u NDK_TOOLCHAIN \
+            ANDROID_NDK_HOME="$ANDROID_NDK_HOME" \
+            make -C "$SOURCE_DIR" \
+              PROJECT=S908BXXSMGZB2 \
+              API=35 \
+              API32=28 \
+              NDK_ROOT="$ANDROID_NDK_HOME" \
+              NDK_TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64" \
+              HOST_CC32=__force_ndk_arm32__ \
+              USE_BUILDROOT= \
+              clean preload
+
+          printf '%s  %s\n' "$EXPECTED_PAYLOAD_SHA" "$PAYLOAD" | sha256sum -c -
+          printf '%s  %s\n' "$EXPECTED_EXP32_SHA" "$EXP32" | sha256sum -c -
+          test "$(stat -c%s "$PAYLOAD")" = "1757752"
+          strings "$PAYLOAD" | grep -F '[cleanup] resetting pipe attempt before retry'
+
+          cmp --silent "$PAYLOAD" "$PUBLISHED_PAYLOAD"
+
+          echo "PAYLOAD_REPRODUCED=PASS"
+          echo "EXP32_REPRODUCED=PASS"
+          stat -c '%n %s bytes' "$PAYLOAD" "$EXP32" "$PUBLISHED_PAYLOAD"
