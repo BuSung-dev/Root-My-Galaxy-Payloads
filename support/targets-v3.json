@@ -331,6 +331,48 @@
         "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-e3q-S9280ZCS6DZF2-kdp",
         "size": 4879856
       }
+    },
+    {
+      "payloadId": "pa1q-S931BXXUCZZI4",
+      "displayName": "Galaxy S25 | Kernel 6.6.127 (S931BXXUCZZI4) | tracefs route",
+      "models": ["SM-S931B"],
+      "kernelVersions": ["6.6.127"],
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/pa1q-S931BXXUCZZI4/cve-2026-43499-app.so",
+        "size": 104128
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-pa1q-S931BXXUCZZI4-kdp",
+        "size": 6419120
+      }
+    },
+    {
+      "payloadId": "pa3q-S938BXXUCZZI4",
+      "displayName": "Galaxy S25 Ultra | Kernel 6.6.127 (S938BXXUCZZI4) | tracefs route",
+      "models": ["SM-S938B"],
+      "kernelVersions": ["6.6.127"],
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/pa3q-S938BXXUCZZI4/cve-2026-43499-app.so",
+        "size": 104128
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-pa3q-S938BXXUCZZI4-kdp",
+        "size": 6419120
+      }
+    },
+    {
+      "payloadId": "pa2q-S936BXXUCZZI4",
+      "displayName": "Galaxy S25+ | Kernel 6.6.127 (S936BXXUCZZI4) | tracefs route",
+      "models": ["SM-S936B"],
+      "kernelVersions": ["6.6.127"],
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/pa2q-S936BXXUCZZI4/cve-2026-43499-app.so",
+        "size": 104128
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-pa2q-S936BXXUCZZI4-kdp",
+        "size": 6419120
+      }
     }
   ]
 }

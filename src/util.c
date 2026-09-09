@@ -298,6 +298,22 @@ char ashmem_path[256] = "/dev/ashmem";
 __attribute__((weak)) void app_publish_writer_started(void) {
 }
 
+__attribute__((weak)) void app_publish_write_landed(int ok) {
+  (void)ok;
+}
+
+__attribute__((weak)) int app_fops_retry_count(void) {
+  return 0;
+}
+
+__attribute__((weak)) int app_route_delay_next_index(void) {
+  return 0;
+}
+
+__attribute__((weak)) int app_fops_retry_next(void) {
+  return 1;
+}
+
 __attribute__((weak)) void app_publish_slide_ready(void) {
 }
 

@@ -1,4 +1,4 @@
-# Samsung KernelSU late-load builds
+﻿# Samsung KernelSU late-load builds
 
 The files in this directory are built from KernelSU `v3.2.5`, commit
 `b0bc817b4e966aa6aa830834eaf6ef765d821d40`. They are not interchangeable
@@ -10,6 +10,10 @@ between KMIs.
 | --- | --- | --- | --- |
 | `android15-6.6_kernelsu-s25u-kdp.ko` | `SM-S938N`, `S938NKSUACZF1` | `android15-6.6` | Standalone reference module from the previously deployed S25U build |
 | `ksud-s25u-kdp` | `SM-S938N`, `S938NKSUACZF1` | `android15-6.6` | Late-load binary embedding the 6.6 module |
+| `android15-6.6_kernelsu-pa1q-S931BXXUCZZI4-kdp.ko` | `SM-S931B`, `S931BXXUCZZI4` | `android15-6.6` | Exact S25 One UI 9 beta 2 (6.6.127 p33f4ffe) module with target `vermagic`, empty `__versions`; CI-built in DDK, symbol-audited (221/221 imports resolved) |
+| `android15-6.6_kernelsu-pa3q-S938BXXUCZZI4-kdp.ko` | `SM-S938B`, `S938BXXUCZZI4` | `android15-6.6` | Exact S25 Ultra One UI 9 beta 2 (6.6.127 p33f4ffe) module with target `vermagic`, empty `__versions`; CI-built in DDK, import set identical to the ZZI4 module (221/221) |
+| `android15-6.6_kernelsu-pa2q-S936BXXUCZZI4-kdp.ko` | `SM-S936B`, `S936BXXUCZZI4` | `android15-6.6` | Exact S25+ One UI 9 beta 2 (6.6.127 p33f4ffe) module with target `vermagic`, empty `__versions`; CI-built in DDK, import set identical to the ZZI4 module (221/221) |
+| `ksud-pa1q-S931BXXUCZZI4-kdp` | Same exact ZZI4 build | `android15-6.6` | Late-load binary embedding the ZZI4 no-LTO module; hardware-validated late-load (Working <LKM>, u:r:ksu:s0) |
 | `android15-6.6_kernelsu-A566EXXSCCZG6-kdp.ko` | `SM-A566E`, `A566EXXSCCZG6` | `android15-6.6` | Exact A56 module with target `vermagic`, audited for manual relocation; live text patching disabled for Exynos EL2 |
 | `ksud-A566EXXSCCZG6-kdp` | Same exact A56 build | `android15-6.6` | Device-tested late-load binary embedding the A56 6.6 no-patch-text module |
 | `android15-6.6_kernelsu-A366WVLS3AYG1-kdp.ko` | `SM-A366W`, `A366WVLS3AYG1` | `android15-6.6` | Exact A36 module with target `vermagic`, audited for manual relocation; live text patching disabled for Samsung KDP/RKP |

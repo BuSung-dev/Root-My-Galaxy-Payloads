@@ -1,0 +1,175 @@
+name: build-s936b-kernelsu
+
+on:
+  workflow_dispatch:
+
+env:
+  TARGET_RELEASE: 6.6.127-android15-8-p33f4ffe-abogkiS936BXXUCZZI4-4k
+  KSU_COMMIT: b0bc817b4e966aa6aa830834eaf6ef765d821d40
+  RMG_BRANCH: pa1q-s931b-6.6.127
+  RMG_REPO: https://github.com/mitschud/Root-My-Galaxy-Payloads.git
+  KSU_REPO: https://github.com/tiann/KernelSU.git
+
+jobs:
+  ko:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/ylarod/ddk-min:android15-6.6-20260828
+      options: --user root
+    steps:
+      - name: Fetch patch repo and KernelSU
+        shell: bash
+        run: |
+          set -euxo pipefail
+          command -v git >/dev/null || (apt-get update -qq && apt-get install -y -qq git)
+          git config --global --add safe.directory '*'
+          git clone --depth 1 --branch "$RMG_BRANCH" "$RMG_REPO" "$GITHUB_WORKSPACE/rmg"
+          git clone "$KSU_REPO" /work/KernelSU
+          cd /work/KernelSU
+          git checkout "$KSU_COMMIT"
+          git fetch --tags --force
+          git apply "$GITHUB_WORKSPACE/rmg/kernelsu/patches/KernelSU-v3.2.5-samsung-kdp-rkp-defex.patch"
+          git status --short | head -5
+      - name: Locate DDK kernel tree and fix utsrelease
+        shell: bash
+        run: |
+          set -euxo pipefail
+          KDIR=$(ls -d /opt/ddk/kdir/*6.6* 2>/dev/null | head -1)
+          test -n "$KDIR"
+          echo "KDIR=$KDIR" >> "$GITHUB_ENV"
+          echo "$TARGET_RELEASE" > "$KDIR/include/config/kernel.release"
+          sed -i "s|^#define UTS_RELEASE .*|#define UTS_RELEASE \"$TARGET_RELEASE\"|" \
+            "$KDIR/include/generated/utsrelease.h"
+          cat "$KDIR/include/generated/utsrelease.h" "$KDIR/include/config/kernel.release"
+      - name: Build kernelsu.ko
+        shell: bash
+        run: |
+          set -euxo pipefail
+          export PATH="$(ls -d /opt/ddk/clang/*/bin | head -1):$PATH"
+          export ARCH=arm64 LLVM=1 LLVM_IAS=1
+          cd /work/KernelSU/kernel
+          make -C "$KDIR" M="$PWD" src="$PWD" \
+            CONFIG_KSU=m \
+            CONFIG_KSU_SAMSUNG_KDP=y \
+            CONFIG_KSU_SAMSUNG_RKP=y \
+            CONFIG_KSU_SAMSUNG_DEFEX=y \
+            KBUILD_MODPOST_WARN=1 \
+            modules -j"$(nproc)"
+          ls -la kernelsu.ko
+      - name: Empty __versions, strip debug, verify vermagic
+        shell: bash
+        run: |
+          set -euxo pipefail
+          export PATH="$(ls -d /opt/ddk/clang/*/bin | head -1):$PATH"
+          cd /work/KernelSU/kernel
+          file kernelsu.ko || true
+          llvm-strip -d kernelsu.ko
+          llvm-objcopy --remove-section __versions kernelsu.ko
+          (modinfo -F vermagic kernelsu.ko 2>/dev/null) || \
+            strings kernelsu.ko | grep -m1 -o '6\.6\.127[^ ]* .*aarch64' || true
+          sha256sum kernelsu.ko
+      - name: Upload raw kernelsu.ko (pre-postprocessing)
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernelsu-s936b-raw.ko
+          path: /work/KernelSU/kernel/kernelsu.ko
+          if-no-files-found: error
+      - name: Build no-LTO variant
+        shell: bash
+        run: |
+          set -euxo pipefail
+          export PATH="$(ls -d /opt/ddk/clang/*/bin | head -1):$PATH"
+          export ARCH=arm64 LLVM=1 LLVM_IAS=1
+          cd /work/KernelSU/kernel
+          make -C "$KDIR" M="$PWD" src="$PWD" clean
+          make -C "$KDIR" M="$PWD" src="$PWD" \
+            CONFIG_KSU=m \
+            CONFIG_KSU_SAMSUNG_KDP=y \
+            CONFIG_KSU_SAMSUNG_RKP=y \
+            CONFIG_KSU_SAMSUNG_DEFEX=y \
+            CONFIG_LTO_CLANG= \
+            CONFIG_LTO_CLANG_THIN= \
+            CONFIG_LTO_NONE=y \
+            KBUILD_MODPOST_WARN=1 \
+            modules -j"$(nproc)"
+          ls -la kernelsu.ko
+      - name: Upload kernelsu.ko
+        uses: actions/upload-artifact@v4
+        with:
+          name: android15-6.6_kernelsu-s936b.ko
+          path: /work/KernelSU/kernel/kernelsu.ko
+          if-no-files-found: error
+
+  ksud:
+    runs-on: ubuntu-latest
+    needs: ko
+    steps:
+      - name: Install rust + android target
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rustup toolchain install stable --profile minimal
+          rustup target add aarch64-linux-android
+      - name: Fetch NDK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          if [ -d "$ANDROID_HOME/ndk" ] && compgen -G "$ANDROID_HOME/ndk/*" >/dev/null; then
+            NDK=$(ls -d "$ANDROID_HOME"/ndk/* | head -1)
+          else
+            curl -sSLo /tmp/ndk.zip https://dl.google.com/android/repository/android-ndk-r27c-linux.zip
+            mkdir -p /opt/ndk
+            unzip -q /tmp/ndk.zip -d /opt/ndk
+            NDK=$(ls -d /opt/ndk/android-ndk-* | head -1)
+          fi
+          echo "NDK=$NDK" >> "$GITHUB_ENV"
+      - name: Fetch patch repo and KernelSU
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config --global --add safe.directory '*'
+          git clone --depth 1 --branch "$RMG_BRANCH" "$RMG_REPO" "$GITHUB_WORKSPACE/rmg"
+          git clone "$KSU_REPO" KernelSU
+          cd KernelSU
+          git checkout "$KSU_COMMIT"
+          git fetch --tags --force
+          git apply "$GITHUB_WORKSPACE/rmg/kernelsu/patches/KernelSU-v3.2.5-samsung-kdp-rkp-defex.patch"
+      - name: Download built ko and embed as ksud asset
+        uses: actions/download-artifact@v4
+        with:
+          name: android15-6.6_kernelsu-s936b.ko
+          path: ko
+      - name: Place ko into ksud assets
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p KernelSU/userspace/ksud/bin/aarch64
+          cp ko/kernelsu.ko KernelSU/userspace/ksud/bin/aarch64/android15-6.6_kernelsu.ko
+          ls -la KernelSU/userspace/ksud/bin/aarch64/
+      - name: Install libclang (bindgen requirement)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libclang-dev
+          LIBCLANG_DIR=$(dirname "$(find /usr/lib -name 'libclang.so*' | head -1)")
+          echo "LIBCLANG_PATH=$LIBCLANG_DIR" >> "$GITHUB_ENV"
+      - name: Build ksud
+        shell: bash
+        run: |
+          set -euxo pipefail
+          NDKBIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export PATH="$NDKBIN:$PATH"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$NDKBIN/aarch64-linux-android35-clang"
+          export CC_aarch64_linux_android="$NDKBIN/aarch64-linux-android35-clang"
+          export AR_aarch64_linux_android="$NDKBIN/llvm-ar"
+          cd KernelSU/userspace
+          cargo build --release --target aarch64-linux-android -p ksud
+          file ../target/aarch64-linux-android/release/ksud
+          sha256sum ../target/aarch64-linux-android/release/ksud
+      - name: Upload ksud
+        uses: actions/upload-artifact@v4
+        with:
+          name: ksud-pa2q-S936BXXUCZZI4-kdp
+          path: KernelSU/target/aarch64-linux-android/release/ksud
+          if-no-files-found: error
