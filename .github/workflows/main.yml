@@ -1,0 +1,43 @@
+name: Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        type: string
+        description: Enter the device profile (e.g., e3q-S928USQS6DZF2)
+        required: true
+      release:
+        type: boolean
+        description: Enable release build
+        default: false
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+
+    - name: Setup Android NDK
+      uses: nttld/setup-ndk@v1.6
+      id: setup-ndk
+      with:
+        ndk-version: r28
+        local-cache: false
+
+    - name: Build (debug)
+      run: make TARGET=${{ inputs.target }} ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}
+
+    - name: Build (release)
+      if: ${{ inputs.release }}
+      run: make TARGET=${{ inputs.target }} ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }} release
+
+    - name: Upload artifacts 
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.target }}
+        path: "./build/${{ inputs.target }}/*"
+
