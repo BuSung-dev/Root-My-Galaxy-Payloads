@@ -24,7 +24,11 @@
 #include <termios.h>
 #include <unistd.h>
 
+#ifdef X818_ALT_SOCKET
+#define BOOTSTRAP_SOCK_PATH "/data/local/tmp/temp_su_x818.sock"
+#elif !defined(BOOTSTRAP_SOCK_PATH)
 #define BOOTSTRAP_SOCK_PATH "/data/local/tmp/temp_su.sock"
+#endif
 #define HOLD_READY_SOCKET "cve43499_roothold"
 #define SH_PATH "/system/bin/sh"
 #define KSU_LOADER_PATH "/data/local/tmp/ksud-s25u-kdp"
@@ -417,11 +421,13 @@ struct ksu_get_info_cmd {
   uint32_t uapi_version;
 };
 
-static int verify_kernelsu_control(void) {
+static int verify_kernelsu_control_once(int report_errors) {
   int fd = -1;
   syscall(SYS_reboot, 0xDEADBEEF, 0xCAFEBABE, 0, &fd);
   if (fd < 0) {
-    dprintf(STDERR_FILENO, "late-load: KernelSU driver fd unavailable\n");
+    if (report_errors) {
+      dprintf(STDERR_FILENO, "late-load: KernelSU driver fd unavailable\n");
+    }
     return 13;
   }
 
@@ -432,10 +438,12 @@ static int verify_kernelsu_control(void) {
   close(fd);
   if (ret != 0 || info.version == 0 || (info.flags & 1U) == 0 ||
       (info.flags & 4U) == 0) {
-    dprintf(STDERR_FILENO,
-            "late-load: KernelSU control check failed ret=%d errno=%d "
-            "version=%u flags=0x%x\n",
-            ret, saved_errno, info.version, info.flags);
+    if (report_errors) {
+      dprintf(STDERR_FILENO,
+              "late-load: KernelSU control check failed ret=%d errno=%d "
+              "version=%u flags=0x%x\n",
+              ret, saved_errno, info.version, info.flags);
+    }
     return 14;
   }
 
@@ -444,6 +452,25 @@ static int verify_kernelsu_control(void) {
           "uapi=%u features=0x%x\n",
           info.version, info.flags, info.uapi_version, info.features);
   return 0;
+}
+
+static int verify_kernelsu_control(void) {
+  return verify_kernelsu_control_once(1);
+}
+
+/* ksud daemonizes before loading the embedded LKM.  The first process exits
+ * successfully while its grandchild is still initializing KernelSU, so an
+ * immediate ioctl probe can report a false rc=13.  Wait briefly for the
+ * driver hand-off, then emit one final diagnostic if it never becomes ready. */
+static int wait_kernelsu_control(void) {
+  const int attempts = 100;
+  for (int attempt = 0; attempt < attempts; ++attempt) {
+    if (verify_kernelsu_control_once(0) == 0) {
+      return 0;
+    }
+    usleep(100000);
+  }
+  return verify_kernelsu_control();
 }
 
 static int run_kernelsu_late_load(struct su_request *request, int conn) {
@@ -479,9 +506,10 @@ static int run_kernelsu_late_load(struct su_request *request, int conn) {
     }
     if (loader == 0) {
       /* Let the downloaded target-specific ksud select its embedded module
-       * from the running kernel.  Ephemeral mode avoids replacing an existing
-       * /data/adb/ksud while the app only needs the module for this boot. */
-      execl(LOGCAT_PATH, "logcat", "late-load", "--ephemeral",
+       * from the running kernel.  The X818U build embeds the retargeted
+       * android13-5.15 module, so loading and late-load stages stay in one
+       * ksud process.  allow_shell=1 is required for the temporary SU path. */
+      execl(LOGCAT_PATH, "logcat", "late-load", "--allow-shell",
             "--package-name", "me.weishu.kernelsu", (char *)NULL);
       dprintf(STDERR_FILENO, "late-load: exec: %s\n", strerror(errno));
       _exit(12);
@@ -490,6 +518,145 @@ static int run_kernelsu_late_load(struct su_request *request, int conn) {
     int loader_status = wait_status(loader);
     if (loader_status != 0) {
       _exit(loader_status);
+    }
+    _exit(wait_kernelsu_control());
+  }
+  close_request_fds(request);
+  return wait_status(pid);
+}
+
+/* Load a module supplied by the caller, then run the target-specific ksud
+ * late-load stages.  The loader is still bind-mounted over logcat inside a
+ * private mount namespace, matching the Samsung DEFEX/Safeplace workaround
+ * used by the normal late-load path.  Both paths are restricted to the
+ * temporary staging directory so the client cannot request an arbitrary
+ * system mount from the shell UID.
+ *
+ * The late-load child is forked before insmod.  On Samsung KDP/DEFEX kernels,
+ * loading KernelSU can change the security state of the calling task enough
+ * that a subsequent fork returns EAGAIN/EPERM even though the module loaded
+ * successfully.  Pre-creating the child and releasing it through a pipe
+ * preserves the known-good bind-mount route while avoiding that post-insmod
+ * fork window.
+ */
+static int is_safe_staged_path(const char *path) {
+  return path && strncmp(path, "/data/local/tmp/", 16) == 0 &&
+         strchr(path + 16, '\0') != NULL && strlen(path) < PATH_MAX;
+}
+
+static int run_kernelsu_external_late_load(struct su_request *request,
+                                           int conn) {
+  if (request->header.argc != 4 ||
+      !is_safe_staged_path(request->argv[2]) ||
+      !is_safe_staged_path(request->argv[3])) {
+    dprintf(STDERR_FILENO,
+            "late-load: expected staged loader and module paths\n");
+    return 2;
+  }
+  const char *loader_path = request->argv[2];
+  const char *module_path = request->argv[3];
+
+  pid_t pid = fork();
+  if (pid < 0) {
+    return 1;
+  }
+  if (pid == 0) {
+    if (dup2(request->stdin_fd, STDIN_FILENO) < 0 ||
+        dup2(request->stdout_fd, STDOUT_FILENO) < 0 ||
+        dup2(request->stderr_fd, STDERR_FILENO) < 0 ||
+        fchdir(request->cwd_fd) != 0) {
+      _exit(126);
+    }
+    close(conn);
+    close_request_fds(request);
+
+    if (unshare(CLONE_NEWNS) != 0 ||
+        mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, NULL) != 0) {
+      dprintf(STDERR_FILENO, "late-load: private mount namespace: %s\n",
+              strerror(errno));
+      _exit(10);
+    }
+    if (mount(loader_path, LOGCAT_PATH, NULL, MS_BIND, NULL) != 0) {
+      dprintf(STDERR_FILENO, "late-load: bind mount: %s\n", strerror(errno));
+      _exit(11);
+    }
+
+    int late_gate[2] = {-1, -1};
+    if (pipe2(late_gate, O_CLOEXEC) != 0) {
+      dprintf(STDERR_FILENO, "late-load: gate pipe: %s\n", strerror(errno));
+      _exit(12);
+    }
+
+    /* Create the late-load task before loading the LKM.  It waits with its
+     * inherited root credentials and only execs ksud after the gate byte. */
+    pid_t late_loader = fork();
+    if (late_loader < 0) {
+      dprintf(STDERR_FILENO, "late-load: late fork: %s\n", strerror(errno));
+      close(late_gate[0]);
+      close(late_gate[1]);
+      _exit(12);
+    }
+    if (late_loader == 0) {
+      close(late_gate[1]);
+      char gate = 0;
+      ssize_t got;
+      do {
+        got = read(late_gate[0], &gate, sizeof(gate));
+      } while (got < 0 && errno == EINTR);
+      close(late_gate[0]);
+      if (got != (ssize_t)sizeof(gate) || gate != 'K') {
+        dprintf(STDERR_FILENO, "late-load: gate closed before module load\n");
+        _exit(12);
+      }
+      execl(LOGCAT_PATH, "logcat", "late-load", "--ephemeral",
+            "--package-name", "me.weishu.kernelsu", (char *)NULL);
+      dprintf(STDERR_FILENO, "late-load: exec: %s\n", strerror(errno));
+      _exit(12);
+    }
+    close(late_gate[0]);
+
+    pid_t loader = fork();
+    if (loader < 0) {
+      dprintf(STDERR_FILENO, "late-load: insmod fork: %s\n", strerror(errno));
+      close(late_gate[1]);
+      kill(late_loader, SIGTERM);
+      wait_status(late_loader);
+      _exit(12);
+    }
+    if (loader == 0) {
+      close(late_gate[1]);
+      execl(LOGCAT_PATH, "logcat", "insmod", module_path, "allow_shell=1",
+            (char *)NULL);
+      dprintf(STDERR_FILENO, "late-load: insmod exec: %s\n", strerror(errno));
+      _exit(12);
+    }
+    int loader_status = wait_status(loader);
+    if (loader_status != 0) {
+      dprintf(STDERR_FILENO, "late-load: insmod status=%d\n", loader_status);
+      close(late_gate[1]);
+      kill(late_loader, SIGTERM);
+      wait_status(late_loader);
+      _exit(loader_status);
+    }
+
+    char gate = 'K';
+    ssize_t sent;
+    do {
+      sent = write(late_gate[1], &gate, sizeof(gate));
+    } while (sent < 0 && errno == EINTR);
+    close(late_gate[1]);
+    if (sent != (ssize_t)sizeof(gate)) {
+      dprintf(STDERR_FILENO, "late-load: gate write: %s\n",
+              strerror(errno));
+      kill(late_loader, SIGTERM);
+      wait_status(late_loader);
+      _exit(12);
+    }
+
+    int late_status = wait_status(late_loader);
+    if (late_status != 0) {
+      dprintf(STDERR_FILENO, "late-load: late-load status=%d\n", late_status);
+      _exit(late_status);
     }
     _exit(verify_kernelsu_control());
   }
@@ -841,11 +1008,16 @@ static void serve_one(int conn) {
 
   int is_kernelsu_late_load = request.header.argc == 2 &&
                               strcmp(request.argv[1], "--late-load") == 0;
-  int status = is_kernelsu_late_load
-                   ? run_kernelsu_late_load(&request, conn)
-                   : request.header.interactive
-                         ? run_interactive(&request, conn)
-                         : run_direct(&request, conn);
+  int is_kernelsu_external_late_load =
+      request.header.argc == 4 &&
+      strcmp(request.argv[1], "--late-load-external") == 0;
+  int status = is_kernelsu_external_late_load
+                   ? run_kernelsu_external_late_load(&request, conn)
+                   : is_kernelsu_late_load
+                         ? run_kernelsu_late_load(&request, conn)
+                         : request.header.interactive
+                               ? run_interactive(&request, conn)
+                               : run_direct(&request, conn);
   send_response(conn, status);
   free_request(&request);
 }

