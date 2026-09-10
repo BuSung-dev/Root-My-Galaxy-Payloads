@@ -11,6 +11,11 @@ Each entry contains only:
 - one or more versions in `kernelVersions`;
 - `url` and `size` for the exploit and KernelSU artifacts.
 
+An entry may also set `buildIds` to a list of exact `ro.build.display.id`
+values. When present, the client requires the device build ID to match one of
+those values in addition to the model and kernel-version checks. Use this
+field for a profile whose offsets or module are tied to one firmware release.
+
 An entry may additionally set `requiresFreshP0Session` to `true` when slide
 discovery and exploitation must run in the same payload process. The app then
 disables its per-boot P0 cache for that profile and gives the single combined

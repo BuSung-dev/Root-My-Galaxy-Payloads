@@ -318,6 +318,22 @@
       }
     },
     {
+      "payloadId": "gts9p-X818USQS7EZF1",
+      "displayName": "Galaxy Tab S9+ 5G SM-X818U | Kernel 5.15.189 (X818USQS7EZF1)",
+      "models": ["SM-X818U"],
+      "kernelVersions": ["5.15.189"],
+      "buildIds": ["BP4A.251205.006.X818USQS7EZF1"],
+      "requiresFreshP0Session": true,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/gts9p-X818USQS7EZF1/cve-2026-43499-app.so",
+        "size": 133088
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-gts9p-X818USQS7EZF1-kdp",
+        "size": 4890208
+      }
+    },
+    {
       "payloadId": "e3q-S9280ZCS6DZF2",
       "displayName": "Galaxy S24 Ultra China | Kernel 6.1.145 (S9280ZCS6DZF2)",
       "models": ["SM-S9280"],

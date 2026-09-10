@@ -18,6 +18,9 @@ endif
 ifeq ($(TARGET),gts9-X710XXS6EZF1)
 APP_TARGET_CFLAGS := -DSLIDE_STACK_WRITER=1
 endif
+ifeq ($(TARGET),gts9p-X818USQS7EZF1)
+APP_TARGET_CFLAGS := -DSLIDE_STACK_WRITER=1
+endif
 ifeq ($(TARGET),a53x-A536EXXSNGZG3)
 API := 31
 endif
@@ -98,7 +101,7 @@ $(PRELOAD): $(PRELOAD_SRCS) $(TARGET_HEADER) src/offset.h src/common.h src/kerne
 	  -shared -pthread -o $@
 
 $(ROOT_HELPER): src/su_daemon.c | $(OUTDIR)
-	$(TARGET_CC) -fPIE -pie -O2 -g0 -Wall -Wextra $< -ldl -o $@
+	$(TARGET_CC) -fPIE -pie -O2 -g0 -Wall -Wextra $(TARGET_CFLAGS) $< -ldl -o $@
 
 $(APP_PRELOAD): $(APP_PRELOAD_SRCS) $(TARGET_HEADER) src/offset.h src/common.h src/kernelsnitch/*.h | $(OUTDIR)
 	$(TARGET_CC) -DAPP_PAYLOAD=1 $(APP_TARGET_CFLAGS) -fPIC $(COMMON_CFLAGS) $(APP_PRELOAD_SRCS) \

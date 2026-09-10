@@ -924,8 +924,13 @@ static int transfer_p0_references_to_root(int retained_pipe_index) {
   struct sockaddr_un address;
   memset(&address, 0, sizeof(address));
   address.sun_family = AF_UNIX;
+#ifdef X818_ALT_SOCKET
+  const char *root_socket_path = "/data/local/tmp/temp_su_x818.sock";
+#else
+  const char *root_socket_path = "/data/local/tmp/temp_su.sock";
+#endif
   snprintf(address.sun_path, sizeof(address.sun_path), "%s",
-           "/data/local/tmp/temp_su.sock");
+           root_socket_path);
   if (connect(socket_fd, (struct sockaddr *)&address, sizeof(address)) != 0) {
     close(socket_fd);
     return 0;
