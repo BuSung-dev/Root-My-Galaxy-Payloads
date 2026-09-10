@@ -16,6 +16,7 @@ It intentionally does not contain Android application source code.
 | Payload | Compatible models | Kernel version | Status |
 | --- | --- | --- | --- |
 | `galaxy-s25-series-2026-06-07` | Galaxy S25, S25+, S25 Edge, and S25 Ultra regional models | `6.6.98` | Device-tested |
+| `pa2q-S9360ZHSCCZG1` | Galaxy S25+ `SM-S9360` (Hong Kong `OZS`, `pd6ff1cd` GKI) | `6.6.98` | Device-tested |
 | `e3q-S928USQS6DZF2` | Galaxy S24 Ultra `SM-S928U1` | `6.1.145` | Device-tested |
 | `e3q-S9280ZCS6DZF2` | Galaxy S24 Ultra China `SM-S9280` | `6.1.145` | Device-tested |
 | `e2s-S926BXXUEDZDR` | Galaxy S24+ `SM-S926B` | `6.1.157` | Device-tested |
@@ -99,5 +100,8 @@ The SM-A536E GZG3 device validation is in
 [`docs/SM-A536E-A536EXXSNGZG3.md`](docs/SM-A536E-A536EXXSNGZG3.md).
 The SM-S9280 China (CHC) DZF2 port and validation record is in
 [`docs/SM-S9280-S9280ZCS6DZF2.md`](docs/SM-S9280-S9280ZCS6DZF2.md).
+The SM-S9360 Hong Kong (OZS) ZHS port, its exact-release tie-breaker against
+the China ZCS build, and the module-rescue procedure are in
+[`docs/SM-S9360-S9360ZHSCCZG1.md`](docs/SM-S9360-S9360ZHSCCZG1.md).
 
 Use only on devices you own or are explicitly authorized to test.
