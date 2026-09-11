@@ -331,6 +331,21 @@
         "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-e3q-S9280ZCS6DZF2-kdp",
         "size": 4879856
       }
+    },
+    {
+      "payloadId": "b5q-F731BXXS7GZG1",
+      "displayName": "Galaxy Z Flip5 SM-F731B | Kernel 5.15.189 (F731BXXS7GZG1)",
+      "models": ["SM-F731B"],
+      "kernelVersions": ["5.15.189"],
+      "requiresFreshP0Session": true,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/b5q-F731BXXS7GZG1/cve-2026-43499-app.so",
+        "size": 132920
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-b5q-F731BXXS7GZG1-kdp",
+        "size": 4879560
+      }
     }
   ]
 }
