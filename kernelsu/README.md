@@ -33,6 +33,8 @@ between KMIs.
 | `ksud-dm2q-S916BXXSAFZG1-kdp` | Same exact S916B build | `android13-5.15` | Kallsyms-aware late-load binary embedding the exact-source FZG1 module; hardware load untested |
 | `android13-5.15.189_kernelsu-gts9-X710XXS6EZF1.ko` | `SM-X710`, `X710XXS6EZF1` | `android13-5.15` | Exact-source module with target `vermagic`; RKP syscall-table and live text patching disabled; audited against the recovered X710 vmlinux (200 undefined imports, zero missing, zero CRC mismatches) |
 | `ksud-gts9-X710XXS6EZF1-kdp` | Same exact X710 build | `android13-5.15` | Device-tested late-load binary embedding the exact X710 no-patch-text module; KernelSU Manager reports `Working <LKM> [Jailbreak mode]` |
+| `android13-5.15.189_kernelsu-b5q-F731BXXS7GZG1.ko` | `SM-F731B`, `F731BXXS7GZG1` | `android13-5.15` | Exact-source module with target `vermagic`; RKP syscall-table and live text patching disabled; audited against the recovered b5q vmlinux (200 undefined imports, zero missing, zero CRC mismatches) |
+| `ksud-b5q-F731BXXS7GZG1-kdp` | Same exact b5q build | `android13-5.15` | Device-tested late-load binary embedding the exact b5q no-patch-text module; KernelSU Manager reports `Working <LKM> [Jailbreak mode]` |
 | `android13-5.15.153_kernelsu-dm1q-S911U1UES6DYI3-kdp.ko` | `SM-S911U1`, `S911U1UES6DYI3` | `android13-5.15.153` | Exact DYI3 module with target `vermagic`, audited for manual relocation; no-patch-text build (RKP) with kretprobe fallback hooks |
 | `ksud-dm1q-S911U1UES6DYI3-kdp` | Same exact DYI3 build | `android13-5.15.153` | Device-tested late-load binary embedding the exact DYI3 no-patch-text module |
 | `android12-5.10_kernelsu-A536EXXSNGZG3-kdp.ko` | `SM-A536E`, `A536EXXSNGZG3` | `android12-5.10` | Device-tested exact A53 module with Samsung KDP/RKP/DEFEX support and live text/table patching disabled |
@@ -73,7 +75,7 @@ passes the recovered-target symbol audit, and was loaded on hardware with
 KernelSU Manager reporting `Working <LKM> [Jailbreak mode]` and version
 `32525-2`. The A536E GZG3 5.10 pair was also loaded from the normal Root My
 Galaxy app flow; KernelSU Manager reported `Working <LKM> [Jailbreak mode]`
-and version `32525-2`. The older A15 5.10 pair remains device-untested. The exact F9360ZCSAIZF1 no-LTO module above is device-tested (full-chain root and KernelSU Manager recognition on hardware, 2026-08-12 and 2026-09-01).
+and version `32525-2`. The older A15 5.10 pair remains device-untested. The exact F9360ZCSAIZF1 no-LTO module above is device-tested (full-chain root and KernelSU Manager recognition on hardware, 2026-08-12 and 2026-09-01). The Z Flip5 b5q-F731BXXS7GZG1 pair is exact-release, static-audited against the recovered b5q vmlinux (200 undefined symbols, zero missing, zero CRC mismatches), and device-tested on hardware with KernelSU Manager reporting `Working <LKM> [Jailbreak mode]`.
 
 ## Why the stock module crashes on Samsung
 
