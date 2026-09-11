@@ -37,6 +37,8 @@ between KMIs.
 | `ksud-dm1q-S911U1UES6DYI3-kdp` | Same exact DYI3 build | `android13-5.15.153` | Device-tested late-load binary embedding the exact DYI3 no-patch-text module |
 | `android12-5.10_kernelsu-A536EXXSNGZG3-kdp.ko` | `SM-A536E`, `A536EXXSNGZG3` | `android12-5.10` | Device-tested exact A53 module with Samsung KDP/RKP/DEFEX support and live text/table patching disabled |
 | `ksud-A536EXXSNGZG3-kdp` | Same exact A53 build | `android12-5.10` | Device-tested late-load binary embedding the exact A53 module |
+| `android13-5.15.148_kernelsu-dm2q-S916U1UES6CYB3-kdp.ko` | `SM-S916U1`, `S916U1UES6CYB3` | `android13-5.15` | Exact S916U1 no-patch-text module with target `vermagic`, audited for manual relocation (200 imports, 0 missing, 0 CRC mismatches) |
+| `ksud-dm2q-S916U1UES6CYB3-kdp` | Same exact S916U1 build | `android13-5.15` | Device-tested late-load binary embedding the exact S916U1 no-patch-text module |
 
 The standalone `.ko` files are retained for auditing. Root My Galaxy downloads
 the corresponding `ksud-*` file because `ksud late-load` loads its embedded
@@ -74,6 +76,28 @@ KernelSU Manager reporting `Working <LKM> [Jailbreak mode]` and version
 `32525-2`. The A536E GZG3 5.10 pair was also loaded from the normal Root My
 Galaxy app flow; KernelSU Manager reported `Working <LKM> [Jailbreak mode]`
 and version `32525-2`. The older A15 5.10 pair remains device-untested. The exact F9360ZCSAIZF1 no-LTO module above is device-tested (full-chain root and KernelSU Manager recognition on hardware, 2026-08-12 and 2026-09-01).
+The S916U1 CYB3 5.15.148 pair is tied to the `S916U1UES6CYB3` release and
+device-tested through the Root My Galaxy app (Shizuku mode): the `ksud` loaded
+its embedded no-patch-text module, the process entered `u:r:ksu:s0`, and
+KernelSU Manager reported `Working <LKM> [Jailbreak mode]` with version
+`32525-2` under SELinux enforcing. It uses the same Samsung KDP/RKP/DEFEX
+patch as the other 5.15 Samsung builds and disables live text patching
+(`CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y`) because RKP pins `sys_call_table`
+read-only at EL2. The pair resolves `sys_call_table` before the RKP
+dispatcher early-return, so the Samsung sucompat kprobes register and
+app-facing `su` works: `/system/bin/su -c id` returns `uid=0` in
+`u:r:ksu:s0` and `ksud feature list` reports `su_compat [ENABLED]`.
+Published artifacts:
+
+```text
+android13-5.15.148_kernelsu-dm2q-S916U1UES6CYB3-kdp.ko
+  size: 356040
+  SHA-256: 3f8bfcfc0e382c161c34f9b1578a3874d574c5dd22abf172f5e7ba556a112ab7
+
+ksud-dm2q-S916U1UES6CYB3-kdp
+  size: 4920304
+  SHA-256: 127e9b4ad5bcaa0ef69c8d1b0b7c107464510da55821846eff0823be683ae179
+```
 
 ## Why the stock module crashes on Samsung
 

@@ -331,6 +331,20 @@
         "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-e3q-S9280ZCS6DZF2-kdp",
         "size": 4879856
       }
+    },
+    {
+      "payloadId": "dm2q-S916U1UES6CYB3",
+      "displayName": "Galaxy S23+ (US) SM-S916U1 | Kernel 5.15.148 (S916U1UES6CYB3)",
+      "models": ["SM-S916U1"],
+      "kernelVersions": ["5.15.148"],
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/dm2q-S916U1UES6CYB3/cve-2026-43499-app.so",
+        "size": 132776
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-dm2q-S916U1UES6CYB3-kdp",
+        "size": 4920304
+      }
     }
   ]
 }
