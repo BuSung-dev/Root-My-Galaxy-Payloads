@@ -15,6 +15,7 @@ It intentionally does not contain Android application source code.
 
 | Payload | Compatible models | Kernel version | Status |
 | --- | --- | --- | --- |
+| `b7s-F766BXXSCBZH3` | Galaxy Z Flip7 `SM-F766B` | `6.6.102` | Device-tested |
 | `galaxy-s25-series-2026-06-07` | Galaxy S25, S25+, S25 Edge, and S25 Ultra regional models | `6.6.98` | Device-tested |
 | `e3q-S928USQS6DZF2` | Galaxy S24 Ultra `SM-S928U1` | `6.1.145` | Device-tested |
 | `e3q-S9280ZCS6DZF2` | Galaxy S24 Ultra China `SM-S9280` | `6.1.145` | Device-tested |
@@ -48,6 +49,7 @@ schema version 3. `targets-v2.json` is retained for released 0.2.3 clients.
 ## Build
 
 ```sh
+make TARGET=b7s-F766BXXSCBZH3 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=pa3q-S938NKSUACZF1 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=e3q-S928USQS6DZF2 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=e2s-S926BXXUEDZDR ANDROID_NDK_HOME=/path/to/android-ndk
@@ -99,5 +101,7 @@ The SM-A536E GZG3 device validation is in
 [`docs/SM-A536E-A536EXXSNGZG3.md`](docs/SM-A536E-A536EXXSNGZG3.md).
 The SM-S9280 China (CHC) DZF2 port and validation record is in
 [`docs/SM-S9280-S9280ZCS6DZF2.md`](docs/SM-S9280-S9280ZCS6DZF2.md).
+The SM-F766B BZH3 port and validation record is in
+[`docs/SM-F766B-F766BXXSCBZH3.md`](docs/SM-F766B-F766BXXSCBZH3.md).
 
 Use only on devices you own or are explicitly authorized to test.

@@ -331,6 +331,21 @@
         "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-e3q-S9280ZCS6DZF2-kdp",
         "size": 4879856
       }
+    },
+    {
+      "payloadId": "b7s-F766BXXSCBZH3",
+      "displayName": "Galaxy Z Flip7 | Kernel 6.6.102 (F766BXXSCBZH3)",
+      "models": ["SM-F766B"],
+      "kernelVersions": ["6.6.102"],
+      "requiresFreshP0Session": false,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/b7s-F766BXXSCBZH3/cve-2026-43499-app.so",
+        "size": 104128
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-b7s-F766BXXSCBZH3-kdp",
+        "size": 4873248
+      }
     }
   ]
 }
