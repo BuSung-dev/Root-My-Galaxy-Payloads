@@ -26,9 +26,15 @@ table are per-build:
 ## Verification status
 
 Confirmed working: full chain through a downstream temp-root app in
-Shizuku (tracefs KASLR) mode, including the physical-P0 oracle fallback,
-KernelSU 32525 late-load (`--kmi android16-6.12`), and granted `su` under
-enforcing SELinux. Pair with KernelSU Manager v3.2.5 (32525).
+Shizuku (tracefs KASLR) mode, including KernelSU 32525 late-load
+(`--kmi android16-6.12`) and granted `su` under enforcing SELinux. Pair
+with KernelSU Manager v3.2.5 (32525).
+
+Physical-P0 fallback is NOT confirmed on this kernel: the oracle prepares
+correctly (`pipes=240`) but its 6.12 slide scan never converges — killed by
+supervisor timeout at 45s, 90s, and 120s across two harnesses, and an
+extended probing run panicked the kernel. Treat this profile as
+Shizuku-mode only (same standing as `dm3q-S918BXXSAFZF5`'s fallback note).
 
 Note: upstream KernelSU v3.3.0/32601 was tried on this kernel and its
 embedded `android16-6.12` LKM panicked during late-load, so the feed pins
