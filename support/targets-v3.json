@@ -318,6 +318,25 @@
       }
     },
     {
+      "payloadId": "gts9uwifi-X910XXS6EZH3",
+      "displayName": "Galaxy Tab S9 Ultra Wi-Fi SM-X910 | Kernel 5.15.189 (X910XXS6EZH3)",
+      "models": [
+        "SM-X910"
+      ],
+      "kernelVersions": [
+        "5.15.189"
+      ],
+      "requiresFreshP0Session": true,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/gts9uwifi-X910XXS6EZH3/cve-2026-43499-app.so",
+        "size": 140104
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-gts9uwifi-X910XXS6EZH3-kdp",
+        "size": 4783256
+      }
+    },
+    {
       "payloadId": "e3q-S9280ZCS6DZF2",
       "displayName": "Galaxy S24 Ultra China | Kernel 6.1.145 (S9280ZCS6DZF2)",
       "models": ["SM-S9280"],
