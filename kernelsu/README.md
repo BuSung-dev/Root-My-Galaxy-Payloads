@@ -37,6 +37,8 @@ between KMIs.
 | `ksud-dm1q-S911U1UES6DYI3-kdp` | Same exact DYI3 build | `android13-5.15.153` | Device-tested late-load binary embedding the exact DYI3 no-patch-text module |
 | `android12-5.10_kernelsu-A536EXXSNGZG3-kdp.ko` | `SM-A536E`, `A536EXXSNGZG3` | `android12-5.10` | Device-tested exact A53 module with Samsung KDP/RKP/DEFEX support and live text/table patching disabled |
 | `ksud-A536EXXSNGZG3-kdp` | Same exact A53 build | `android12-5.10` | Device-tested late-load binary embedding the exact A53 module |
+| `android13-5.15.148_kernelsu-dm2q-S916BXXS8CYBD-kdp.ko` | `SM-S916B`, `S916BXXS8CYBD` | `android13-5.15` | Exact S916B no-patch-text module with target `vermagic`, audited for manual relocation (200 imports, 0 missing, 0 CRC mismatches) |
+| `ksud-dm2q-S916BXXS8CYBD-kdp` | Same exact S916B build | `android13-5.15` | Device-tested late-load binary embedding the exact S916B no-patch-text module |
 
 The standalone `.ko` files are retained for auditing. Root My Galaxy downloads
 the corresponding `ksud-*` file because `ksud late-load` loads its embedded
@@ -74,6 +76,23 @@ KernelSU Manager reporting `Working <LKM> [Jailbreak mode]` and version
 `32525-2`. The A536E GZG3 5.10 pair was also loaded from the normal Root My
 Galaxy app flow; KernelSU Manager reported `Working <LKM> [Jailbreak mode]`
 and version `32525-2`. The older A15 5.10 pair remains device-untested. The exact F9360ZCSAIZF1 no-LTO module above is device-tested (full-chain root and KernelSU Manager recognition on hardware, 2026-08-12 and 2026-09-01).
+The S916B CYBD 5.15.148 pair is tied to the `S916BXXS8CYBD` release and
+device-tested through the Root My Galaxy app (Shizuku mode): the `ksud` loaded
+its embedded no-patch-text module, KernelSU Manager reported
+`Working <LKM> [Jailbreak mode]` with version `32525-2` under SELinux
+enforcing, and `su_compat` is enabled so app-facing `su` works. It resolves
+`sys_call_table` before the RKP dispatcher early-return, so the Samsung
+sucompat kprobes register. Published artifacts:
+
+```text
+android13-5.15.148_kernelsu-dm2q-S916BXXS8CYBD-kdp.ko
+  size: 356040
+  SHA-256: 4ced75234a61807b62bbaafae30ba82fb6d054657a7434d4ce8033e748bf1664
+
+ksud-dm2q-S916BXXS8CYBD-kdp
+  size: 4920304
+  SHA-256: 0e149b6be467cc2ce222057039e2ea977d1aec2e564b58369a0056ad19d35ac1
+```
 
 ## Why the stock module crashes on Samsung
 
