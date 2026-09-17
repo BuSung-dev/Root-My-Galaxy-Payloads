@@ -227,7 +227,7 @@
     },
     {
       "payloadId": "a53x-A536EXXSNGZG3",
-      "displayName": "Galaxy A53 5G | Kernel 5.10.237",
+      "displayName": "Galaxy A53 5G | Kernel 5.10.237 | GZG3/OGZH2",
       "models": ["SM-A536E"],
       "kernelVersions": ["5.10.237"],
       "requiresFreshP0Session": true,
@@ -237,7 +237,7 @@
       },
       "kernelsu": {
         "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-A536EXXSNGZG3-kdp",
-        "size": 4870752
+        "size": 5090760
       }
     },
     {

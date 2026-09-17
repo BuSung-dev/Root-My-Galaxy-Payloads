@@ -1,7 +1,9 @@
 # Samsung KernelSU late-load builds
 
 The files in this directory are built from KernelSU `v3.2.5`, commit
-`b0bc817b4e966aa6aa830834eaf6ef765d821d40`. They are not interchangeable
+`b0bc817b4e966aa6aa830834eaf6ef765d821d40`, except the `A536EXXSNGZG3`
+pair, which was rebuilt from KernelSU `v3.3.0`, commit
+`932014ab5b2c9b74a3d11e2ec4d17dd10fc9442e`. They are not interchangeable
 between KMIs.
 
 ## Versioned artifacts
@@ -35,8 +37,8 @@ between KMIs.
 | `ksud-gts9-X710XXS6EZF1-kdp` | Same exact X710 build | `android13-5.15` | Device-tested late-load binary embedding the exact X710 no-patch-text module; KernelSU Manager reports `Working <LKM> [Jailbreak mode]` |
 | `android13-5.15.153_kernelsu-dm1q-S911U1UES6DYI3-kdp.ko` | `SM-S911U1`, `S911U1UES6DYI3` | `android13-5.15.153` | Exact DYI3 module with target `vermagic`, audited for manual relocation; no-patch-text build (RKP) with kretprobe fallback hooks |
 | `ksud-dm1q-S911U1UES6DYI3-kdp` | Same exact DYI3 build | `android13-5.15.153` | Device-tested late-load binary embedding the exact DYI3 no-patch-text module |
-| `android12-5.10_kernelsu-A536EXXSNGZG3-kdp.ko` | `SM-A536E`, `A536EXXSNGZG3` | `android12-5.10` | Device-tested exact A53 module with Samsung KDP/RKP/DEFEX support and live text/table patching disabled |
-| `ksud-A536EXXSNGZG3-kdp` | Same exact A53 build | `android12-5.10` | Device-tested late-load binary embedding the exact A53 module |
+| `android12-5.10_kernelsu-A536EXXSNGZG3-kdp.ko` | `SM-A536E`, `A536EXXSNGZG3` | `android12-5.10` | Device-tested v3.3.0 exact A53 module with Samsung KDP/RKP/DEFEX support and live text/table patching disabled; target `vermagic`, zero-length `__versions`, manual-relocation audit passed |
+| `ksud-A536EXXSNGZG3-kdp` | Same exact A53 build | `android12-5.10` | Device-tested v3.3.0 late-load binary embedding the exact A53 module; embedded module blob hash-verified |
 
 The standalone `.ko` files are retained for auditing. Root My Galaxy downloads
 the corresponding `ksud-*` file because `ksud late-load` loads its embedded
@@ -73,7 +75,14 @@ passes the recovered-target symbol audit, and was loaded on hardware with
 KernelSU Manager reporting `Working <LKM> [Jailbreak mode]` and version
 `32525-2`. The A536E GZG3 5.10 pair was also loaded from the normal Root My
 Galaxy app flow; KernelSU Manager reported `Working <LKM> [Jailbreak mode]`
-and version `32525-2`. The older A15 5.10 pair remains device-untested. The exact F9360ZCSAIZF1 no-LTO module above is device-tested (full-chain root and KernelSU Manager recognition on hardware, 2026-08-12 and 2026-09-01).
+and version `32525-2`. The A536E pair has since been upgraded to v3.3.0
+(`KSU_VERSION` 32601); the v3.3.0 module and `ksud` are build- and statically
+verified, and device-tested: the v3.3.0 build loads and KernelSU Manager
+reports `Working <LKM> [Jailbreak mode]`, version `32601-2`, with no driver
+and manager mismatch. The older A15 5.10
+pair remains device-untested. The exact F9360ZCSAIZF1 no-LTO module above is
+device-tested (full-chain root and KernelSU Manager recognition on hardware,
+2026-08-12 and 2026-09-01).
 
 ## Why the stock module crashes on Samsung
 
@@ -114,6 +123,25 @@ contains the complete source delta from the tagged v3.2.5 tree:
 - stage `ksud` at `/data/local/tmp/.ksud-stage`, rename it onto the same
   `/data` filesystem before loading the module, then finish labels/assets after
   the module is active.
+
+[`patches/KernelSU-v3.3.0-samsung-kdp-rkp-defex.patch`](patches/KernelSU-v3.3.0-samsung-kdp-rkp-defex.patch)
+is the same tree onto the tagged v3.3.0 commit and produces the
+`A536EXXSNGZG3` artifacts. It additionally records the redirects required
+because the upstream KernelSU git dependencies were deleted from GitHub:
+
+- `adb_client` moves from `Kernel-SU/adb_client` to `cocool97/adb_client` at
+  the identical pinned revision `d97a9664` (crate v3.1.1);
+- `prop-rs-android` (`Kernel-SU/ksu_props`, `prop-rs-android` v0.2.0) moves to
+  `5ec1cff/resetprop-rs`, which preserves the identical commit
+  `6f572310` (Kernel-SU/ksu_props was a mirror of that repository);
+- `java-properties` moves from `Kernel-SU/java-properties` to
+  `KernelSU-Next/java-properties` at the identical commit `42a4aa94`, which was
+  rebased away on the Kernel-SU branch;
+- `rustix` (in `ksuinit`) moves from `Kernel-SU/rustix` to
+  `KernelSU-Next/rustix` at the identical commit `4a53fbc`.
+
+All four redirects keep the original pinned revisions so the resulting lock,
+sources, and binaries match the upstream v3.3.0 build.
 
 ## 6.1 generalization
 
@@ -325,3 +353,103 @@ Copy the stripped KO to
 `userspace/ksud/bin/aarch64/android12-5.10_kernelsu.ko`, force `ksud` to
 recompile after the asset changes, and publish the KO and late-load binary as
 one versioned pair.
+
+## Rebuild the A536E GZG3 5.10 artifact on v3.3.0
+
+The `A536EXXSNGZG3` pair is the only v3.3.0 build in this directory. Apply the
+v3.3.0 patch to a clean v3.3.0 checkout:
+
+```sh
+git checkout v3.3.0
+git apply KernelSU-v3.3.0-samsung-kdp-rkp-defex.patch
+```
+
+The DDK android12-5.10 kernel config defaults to `CONFIG_LTO_CLANG_FULL=y`
+plus `CONFIG_CFI_CLANG=y`. Under full LTO, `ksu_patch_text()`'s
+`CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT` stub is inlined and LTO dead-code
+elimination drops the `selinux_hide` write hooks, removing the
+`scnprintf`/`security_compute_av_user`/`security_context_str_to_sid`/
+`security_sid_to_context` undefined imports the manual loader needs. The
+released module is therefore built with thin LTO (the same setting the stock
+v3.2.5 Samsung artifacts used):
+
+```sh
+scripts/config --file "$KDIR/.config" --set-val LTO_CLANG_THIN y \
+  --disable LTO_CLANG_FULL
+make olddefconfig modules_prepare
+```
+
+`modules_prepare` regenerates `utsrelease.h`; re-apply the exact target
+release to `$KDIR/include/config/kernel.release` and
+`$KDIR/include/generated/utsrelease.h`:
+
+```text
+5.10.237-android12-9-31999025-abA536EXXSNGZG3
+```
+
+Leave the kdir `Module.symvers` empty (back up the DDK's own); the late loader
+requires a zero-length `__versions` section. Build with the same compiler
+target as the first configuration step:
+
+```sh
+make -C "$KDIR" M="$PWD/kernel" src="$PWD/kernel" \
+  ARCH=arm64 LLVM=1 LLVM_IAS=1 \
+  CROSS_COMPILE=aarch64-linux-gnu- \
+  CLANG_TRIPLE=aarch64-linux-gnu- \
+  CONFIG_KSU=m \
+  CONFIG_KSU_SAMSUNG_KDP=y \
+  CONFIG_KSU_SAMSUNG_RKP=y \
+  CONFIG_KSU_SAMSUNG_DEFEX=y \
+  CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y \
+  KBUILD_MODPOST_WARN=1 modules
+```
+
+Validate and strip only debug sections:
+
+```sh
+kernel/check_symbol kernel/kernelsu.ko "$KDIR/vmlinux"
+modinfo kernel/kernelsu.ko | grep vermagic
+readelf -SW kernel/kernelsu.ko | grep __versions
+llvm-strip -d kernel/kernelsu.ko
+```
+
+The audit resolution against the target vmlinux reports all 168 undefined
+imports present (the only v3.2.5/`tracepoint_probe_register` difference is
+v3.3.0's intended `tracepoint_probe_register_prio`). Expected metadata:
+
+```text
+vermagic: 5.10.237-android12-9-31999025-abA536EXXSNGZG3 SMP preempt mod_unload modversions aarch64
+__versions size: 0
+scmversion: g932014ab5b2c-dirty
+```
+
+For the late-load binary, install `rustup` with the
+`aarch64-linux-android` target, generate the cargo config against an NDK that
+provides the `aarch64-linux-android26-clang` linker, then build:
+
+```sh
+$HOME/.cargo/bin/rustup target add aarch64-linux-android
+python3 scripts/setup_cargo_config.py --ndk-root "path/to/ndk"
+export PATH="$HOME/.cargo/bin:$PATH"
+(cd userspace && cargo build --release --target aarch64-linux-android -p ksud)
+```
+
+The patch's `Cargo.toml` redirects resolve the dependencies whose upstream
+git repositories were deleted (see Patch contents). The published artifacts
+are:
+
+```text
+android12-5.10_kernelsu-A536EXXSNGZG3-kdp.ko
+size: 347432
+SHA-256: c8a8ceb752c4b17140a1da3825549eb481d67e94f1283fd7a2f8ca24bcce77a4
+
+ksud-A536EXXSNGZG3-kdp
+size: 5090760
+SHA-256: 10c395d7358e832d971ae93ec1adf6930ef41f5374ea3df0ea2b992b8c5aba0c
+```
+
+The embedded module inside `ksud` was verified byte-for-byte: a raw-deflate
+asset at `0x3045e` inflates to 347432 bytes with the module's SHA-256. The
+v3.3.0 pair device-tested: the module late-loads cleanly, KernelSU Manager
+reports version `32601-2`, and there is no kernel-driver and manager version
+mismatch.
