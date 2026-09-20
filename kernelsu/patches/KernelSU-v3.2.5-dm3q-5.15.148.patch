@@ -1,0 +1,36 @@
+Apply AFTER patches/KernelSU-v3.2.5-samsung-kdp-rkp-defex.patch.
+See KernelSU-v3.2.5-dm3q-5.15.148.NOTES.md for rationale.
+--- a/kernel/compat/samsung_kdp.c
++++ b/kernel/compat/samsung_kdp.c
+@@ -27,8 +27,14 @@
+ typedef unsigned int (*kdp_usecount_dec_and_test_t)(struct cred *cred);
+ #endif
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 16, 0)
+ typedef long (*inc_rlimit_ucounts_t)(struct ucounts *ucounts, enum rlimit_type type, long value);
+ typedef bool (*dec_rlimit_ucounts_t)(struct ucounts *ucounts, enum rlimit_type type, long value);
++#else
++/* Samsung android13-5.15 keeps the pre-5.16 enum name */
++typedef long (*inc_rlimit_ucounts_t)(struct ucounts *ucounts, enum ucount_type type, long value);
++typedef bool (*dec_rlimit_ucounts_t)(struct ucounts *ucounts, enum ucount_type type, long value);
++#endif
+ #endif
+
+ struct samsung_kdp_commit_work {
+--- a/kernel/hook/arm64/syscall_hook.c
++++ b/kernel/hook/arm64/syscall_hook.c
+@@ -206,5 +206,14 @@ void __init ksu_syscall_hook_init(void)
+     ksu_syscall_table = (syscall_fn_t *)ksu_resolve_symbol_for_functable_hook("sys_call_table");
+     pr_info("sys_call_table=0x%lx", (unsigned long)ksu_syscall_table);
+
++#if defined(CONFIG_KSU_SAMSUNG_RKP)
++    /* RKP pins sys_call_table read-only at EL2: no live table patching.
++     * The table address above must still be resolved first: the Samsung
++     * sucompat kprobes need it, otherwise su_compat stays NOT_SUPPORTED. */
++    pr_info("RKP build: syscall table patch is off\n");
++    ksu_dispatcher_nr = -1;
++    return;
++#endif
++
+     if (!ksu_syscall_table)
+         return;
