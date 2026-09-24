@@ -24,14 +24,25 @@ int memfd_leak;
 static void durable_log_checkpoint(const char *stage) {
   struct stat st;
   pr_info("durable log checkpoint stage=%s\n", stage);
-  SYSCHK(fflush(NULL));
-  SYSCHK(fstat(STDOUT_FILENO, &st));
+  if (fflush(NULL) != 0) {
+    pr_warning("durable log checkpoint flush failed stage=%s errno=%d\n",
+               stage, errno);
+    return;
+  }
+  if (fstat(STDOUT_FILENO, &st) != 0) {
+    pr_warning("durable log checkpoint stat failed stage=%s errno=%d\n",
+               stage, errno);
+    return;
+  }
   if (!S_ISREG(st.st_mode)) {
     pr_warning("durable log checkpoint skipped stage=%s mode=%#o\n",
                stage, st.st_mode);
     return;
   }
-  SYSCHK(fsync(STDOUT_FILENO));
+  if (fsync(STDOUT_FILENO) != 0) {
+    pr_warning("durable log checkpoint sync failed stage=%s errno=%d\n",
+               stage, errno);
+  }
 }
 #endif
 
@@ -593,13 +604,9 @@ int run_exploit(int argc, char **argv) {
               fake_fops, postwrite_result, probe_restored, triggered);
 #if defined(APP_FOPS_DURABLE_POSTWRITE_LOG) && \
     APP_FOPS_DURABLE_POSTWRITE_LOG
-      /* Preserve the authoritative result even if RDB dies before
-       * dlopen returns.  stdout may be a pipe (adb shell), where fsync
-       * returns EINVAL: that is not a failure worth aborting for. */
-      fflush(NULL);
-      if (fsync(STDOUT_FILENO) != 0 && errno != EINVAL && errno != EBADF) {
-        pr_warning("fsync stdout errno=%d\n", errno);
-      }
+      /* Preserve the authoritative result without aborting when stdout
+       * is a pipe or does not support fsync. */
+      durable_log_checkpoint("fops-postwrite");
 #endif
       fops_data_alias_deferred = 0;
     }
