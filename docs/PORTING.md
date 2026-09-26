@@ -399,7 +399,9 @@ artifacts/essi-S721NKSSCDZF3/cve-2026-43499-app.so
 Follow [`../kernelsu/README.md`](../kernelsu/README.md). In addition to a clean
 module build, perform all of these checks:
 
-1. apply the Samsung patch cleanly to KernelSU v3.2.5;
+1. apply the active Samsung patch cleanly to KernelSU v3.3.0
+   (`kernelsu/patches/KernelSU-v3.3.0-samsung-kdp-rkp-defex.patch`; v3.2.5
+   originals retained in the same directory for traceability);
 2. run `check_symbol` against the recovered target `vmlinux.elf`, not only the
    DDK vmlinux;
 3. inspect the target kernel configuration for `CONFIG_MODULE_FORCE_LOAD` and
