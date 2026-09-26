@@ -1,0 +1,17 @@
+--- kernel/compat/samsung_kdp.c	2026-08-16 03:07:41.300117132 -0700
++++ b/kernel/compat/samsung_kdp.c	2026-08-16 02:30:42.699257629 -0700
+@@ -22,8 +22,14 @@
+ typedef void (*kdp_assign_pgd_t)(struct task_struct *task);
+ typedef unsigned int (*kdp_usecount_dec_and_test_t)(struct cred *cred);
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 16, 0)
+ typedef long (*inc_rlimit_ucounts_t)(struct ucounts *ucounts, enum rlimit_type type, long value);
+ typedef bool (*dec_rlimit_ucounts_t)(struct ucounts *ucounts, enum rlimit_type type, long value);
++#else
++/* Samsung android13-5.15 keeps the pre-5.16 enum name */
++typedef long (*inc_rlimit_ucounts_t)(struct ucounts *ucounts, enum ucount_type type, long value);
++typedef bool (*dec_rlimit_ucounts_t)(struct ucounts *ucounts, enum ucount_type type, long value);
++#endif
+ #endif
+ 
+ struct samsung_kdp_commit_work {

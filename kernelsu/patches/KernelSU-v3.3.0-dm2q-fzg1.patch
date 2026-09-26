@@ -1,0 +1,26 @@
+diff --git a/kernel/compat/samsung_kdp.c b/kernel/compat/samsung_kdp.c
+index ec853153..42335762 100644
+--- a/kernel/compat/samsung_kdp.c
++++ b/kernel/compat/samsung_kdp.c
+@@ -23,5 +23,5 @@ typedef void (*kdp_assign_pgd_t)(struct task_struct *task);
+ typedef unsigned int (*kdp_usecount_dec_and_test_t)(struct cred *cred);
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
+-typedef long (*inc_rlimit_ucounts_t)(struct ucounts *ucounts, enum rlimit_type type, long value);
+-typedef bool (*dec_rlimit_ucounts_t)(struct ucounts *ucounts, enum rlimit_type type, long value);
++typedef long (*inc_rlimit_ucounts_t)(struct ucounts *ucounts, enum ucount_type type, long value);
++typedef bool (*dec_rlimit_ucounts_t)(struct ucounts *ucounts, enum ucount_type type, long value);
+ #endif
+diff --git a/kernel/hook/arm64/syscall_hook.c b/kernel/hook/arm64/syscall_hook.c
+index 81e76c32..15c24244 100644
+--- a/kernel/hook/arm64/syscall_hook.c
++++ b/kernel/hook/arm64/syscall_hook.c
+@@ -221,3 +221,9 @@ void __init ksu_syscall_hook_init(void)
++#if defined(CONFIG_KSU_SAMSUNG_RKP)
++    pr_info("RKP build: syscall table patch is off\n");
++    ksu_dispatcher_nr = -1;
++    return;
++#endif
++
+     // Find one ni_syscall slot for the dispatcher
+     if (ksu_find_ni_syscall_slots(&ni_slot, 1) < 1) {
+         pr_err("failed to find ni_syscall slot for dispatcher\n");

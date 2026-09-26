@@ -1,8 +1,16 @@
 # Samsung KernelSU late-load builds
 
-The files in this directory are built from KernelSU `v3.2.5`, commit
-`b0bc817b4e966aa6aa830834eaf6ef765d821d40`. They are not interchangeable
-between KMIs.
+The Samsung patches in this directory target KernelSU `v3.3.0`, commit
+`932014ab5b2c9b74a3d11e2ec4d17dd10fc9442e` (released 2026-08-28). They are
+not interchangeable between KMIs.
+
+> Upgrade note (update-kernelsu branch): the previous baseline was v3.2.5
+> (`b0bc817b4e966aa6aa830834eaf6ef765d821d40`, version code `32525`).
+> The v3.2.5 patch files are retained in `patches/` for traceability; the
+> active Samsung patches are now the `KernelSU-v3.3.0-*.patch` files with
+> `KSU_VERSION ?= 32601`. Published `.ko` / `ksud-*` binaries below remain
+> v3.2.5 artifacts until each target is rebuilt and re-audited against the
+> v3.3.0 tree — do not mix a v3.3.0 `ksud` with a v3.2.5 `.ko` or vice versa.
 
 ## Versioned artifacts
 
@@ -42,7 +50,7 @@ The standalone `.ko` files are retained for auditing. Root My Galaxy downloads
 the corresponding `ksud-*` file because `ksud late-load` loads its embedded
 `<kmi>_kernelsu.ko` asset.
 
-The S916B FZG1 pair is built from Samsung's released `SM-S916B_16_Opensource` tree with the live FZG1 config and Android clang `r450784e`. Its zero-length `__versions` section and retained symbol tables are intended for KernelSU's kallsyms-aware manual loader. Audit against the exact recovered FZG1 `vmlinux.elf` found all 200 undefined names. Plain `insmod` is not supported. The target patch [`KernelSU-v3.2.5-dm2q-fzg1.patch`](patches/KernelSU-v3.2.5-dm2q-fzg1.patch) selects the exact FZG1 `enum ucount_type` ABI and hard-stops RKP syscall-table writes; the build also sets `CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y`. Use the root helper's guarded `--late-load` operation so the loader's security-domain and stdio transition can complete safely. Module initialization is not yet confirmed on S916B hardware.
+The S916B FZG1 pair is built from Samsung's released `SM-S916B_16_Opensource` tree with the live FZG1 config and Android clang `r450784e`. Its zero-length `__versions` section and retained symbol tables are intended for KernelSU's kallsyms-aware manual loader. Audit against the exact recovered FZG1 `vmlinux.elf` found all 200 undefined names. Plain `insmod` is not supported. The target patch [`KernelSU-v3.3.0-dm2q-fzg1.patch`](patches/KernelSU-v3.3.0-dm2q-fzg1.patch) selects the exact FZG1 `enum ucount_type` ABI and hard-stops RKP syscall-table writes; the build also sets `CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y`. Use the root helper's guarded `--late-load` operation so the loader's security-domain and stdio transition can complete safely. Module initialization is not yet confirmed on S916B hardware.
 
 The generic 6.1 files remain build-verified only. The E3Q pair is
 device-tested and tied to the full S928U DZF2 release string; it must not be replaced
@@ -96,8 +104,9 @@ Three other Samsung-specific conflicts were confirmed during the 6.6 port:
 
 ## Patch contents
 
-[`patches/KernelSU-v3.2.5-samsung-kdp-rkp-defex.patch`](patches/KernelSU-v3.2.5-samsung-kdp-rkp-defex.patch)
-contains the complete source delta from the tagged v3.2.5 tree:
+[`patches/KernelSU-v3.3.0-samsung-kdp-rkp-defex.patch`](patches/KernelSU-v3.3.0-samsung-kdp-rkp-defex.patch)
+contains the complete source delta from the tagged v3.3.0 tree (ported from
+the v3.2.5 Samsung KDP/RKP/DEFEX patch; v3.2.5 original retained alongside):
 
 - resolve Samsung KDP credential helpers and release protected credentials with
   `kdp_usecount_dec_and_test()` plus `__put_cred()`;
@@ -114,6 +123,16 @@ contains the complete source delta from the tagged v3.2.5 tree:
 - stage `ksud` at `/data/local/tmp/.ksud-stage`, rename it onto the same
   `/data` filesystem before loading the module, then finish labels/assets after
   the module is active.
+
+Target-specific companions (v3.2.5 originals retained alongside for
+traceability):
+
+- [`patches/KernelSU-v3.3.0-dm2q-fzg1.patch`](patches/KernelSU-v3.3.0-dm2q-fzg1.patch):
+  FZG1 `enum ucount_type` ABI plus RKP syscall-table hard-stop.
+- [`patches/KernelSU-v3.3.0-dm1q-android13-5.15-build-fix.patch`](patches/KernelSU-v3.3.0-dm1q-android13-5.15-build-fix.patch):
+  version-gated `ucount_type` (`<5.16`) vs `rlimit_type` (`>=5.16`) build fix;
+  this is the correct generalization that supersedes the dm2q unconditional
+  typedef.
 
 ## 6.1 generalization
 
@@ -151,11 +170,11 @@ separately.
 
 ## Rebuild
 
-Apply the patch to a clean v3.2.5 checkout:
+Apply the patch to a clean v3.3.0 checkout:
 
 ```sh
-git checkout v3.2.5
-git apply KernelSU-v3.2.5-samsung-kdp-rkp-defex.patch
+git checkout v3.3.0  # 932014ab5b2c9b74a3d11e2ec4d17dd10fc9442e
+git apply KernelSU-v3.3.0-samsung-kdp-rkp-defex.patch
 ```
 
 For the Samsung 6.1 module, use DDK image
