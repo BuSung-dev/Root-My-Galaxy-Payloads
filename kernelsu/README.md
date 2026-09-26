@@ -215,6 +215,22 @@ git checkout v3.3.0  # 932014ab5b2c9b74a3d11e2ec4d17dd10fc9442e
 git apply KernelSU-v3.3.0-samsung-kdp-rkp-defex.patch
 ```
 
+Upstream v3.3.0 references DDK `20260828` (adds android17-6.18 and x64 LKM
+builds). The pinned DDK below is unchanged: keep building each target
+against its pinned DDK and exact `UTS_RELEASE`.
+
+Rebuild status on this branch: none of the published `.ko` / `ksud-*`
+binaries above has been rebuilt yet — all remain v3.2.5 artifacts. Rebuilding
+is per target, in this order: exact-`vermagic` module → `check_symbol`
+against the recovered target `vmlinux.elf` →
+`audit_module_against_target.py --manual-relocation` (zero missing, zero
+`__versions`, zero CRC mismatches, no `stop_machine` import) → embed into
+`ksud` and publish the `.ko` / `ksud-*` pair together → hardware late-load
+(`u:r:ksu:s0`, Manager `Working <LKM>` with version `32601`, no mismatch
+banner). `support/targets-v3.json` needs no schema change; only replaced
+artifacts' `size` fields get updated on rebuild. `targets-v2.json` stays
+frozen.
+
 For the Samsung 6.1 module, use DDK image
 `ghcr.io/ylarod/ddk-min:android14-6.1-20260313` and set:
 
