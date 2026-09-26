@@ -2,14 +2,21 @@ diff --git a/kernel/compat/samsung_kdp.c b/kernel/compat/samsung_kdp.c
 index ec853153..42335762 100644
 --- a/kernel/compat/samsung_kdp.c
 +++ b/kernel/compat/samsung_kdp.c
-@@ -23,5 +23,5 @@ typedef void (*kdp_assign_pgd_t)(struct task_struct *task);
+@@ -23,12 +23,12 @@ typedef void (*kdp_assign_pgd_t)(struct task_struct *task);
+ typedef void (*kdp_assign_pgd_t)(struct task_struct *task);
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+ typedef unsigned int (*kdp_usecount_sub_and_test_t)(int nr, struct cred *cred);
+ #else
  typedef unsigned int (*kdp_usecount_dec_and_test_t)(struct cred *cred);
+ #endif
  #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 -typedef long (*inc_rlimit_ucounts_t)(struct ucounts *ucounts, enum rlimit_type type, long value);
 -typedef bool (*dec_rlimit_ucounts_t)(struct ucounts *ucounts, enum rlimit_type type, long value);
 +typedef long (*inc_rlimit_ucounts_t)(struct ucounts *ucounts, enum ucount_type type, long value);
 +typedef bool (*dec_rlimit_ucounts_t)(struct ucounts *ucounts, enum ucount_type type, long value);
  #endif
+ 
+ struct samsung_kdp_commit_work {
 diff --git a/kernel/hook/arm64/syscall_hook.c b/kernel/hook/arm64/syscall_hook.c
 index 81e76c32..15c24244 100644
 --- a/kernel/hook/arm64/syscall_hook.c

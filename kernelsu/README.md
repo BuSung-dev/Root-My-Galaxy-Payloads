@@ -134,6 +134,44 @@ traceability):
   this is the correct generalization that supersedes the dm2q unconditional
   typedef.
 
+## v3.3.0 rebase notes
+
+The v3.3.0 patch set was verified with `git apply --check` and a real
+application against a clean `v3.3.0` (`932014ab`) checkout. Adaptations from
+the v3.2.5 delta:
+
+- `kernel/Kbuild`: Samsung `KDP/RKP/DEFEX/NO_PATCH_TEXT` flags re-anchored
+  around the new upstream `CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER` block and
+  the 6.18 `srcroot`/`KSU_KERNEL_DIR` guard; the `-I$(KSU_KERNEL_DIR)/..`
+  addition is kept.
+- `kernel/core/init.c`: include/init-order hunks re-anchored to the new
+  `__x86_64__ && !defined(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER)` guard;
+  upstream's added `ksu_app_profile_init()` call site is preserved.
+- `kernel/hook/arm64/patch_memory.c`: `NO_PATCH_TEXT` early-return kept;
+  the hunk now ends before upstream's new `scan_call_to()` helper.
+- `userspace/ksud`: `late_load.rs` no longer calls `install()`; it stages
+  first and then calls 2-argument `finish_install(None, None)`, matching the
+  new upstream `install(None, None)` call shape.
+  The `install()` split keeps the `data_path` boot-backup move and the
+  `libadbroot` handling inside `finish_install()`; `cli.rs`
+  keeps calling 2-arg `install()`, and `daemonize()` removal stays safe (only
+  `late-load` called it, and that call is replaced by staging).
+  Behavior change carried over from v3.2.5 and kept here: staging replaces
+  upstream's `/proc/self/exe` self-copy (with its `DO NOT resolve` rule) by
+  `current_exe()` read/write with an early-return when already running from
+  `DAEMON_PATH`, plus `rename()` of the externally staged
+  `/data/local/tmp/.ksud-stage` (staged by the payload side before invoking
+  `late-load`; `chown root:root` is applied on that rename path only).
+- Companions: `dm1q`/`dm2q` typedef hunks re-anchored to the `6.12`
+  `kdp_usecount_sub_and_test` branch now present in `samsung_kdp.c`.
+  Apply order is main patch first, then at most one companion.
+
+Unresolved upstream deltas that still need per-target hardware validation
+before any binary is rebuilt (from the Phase-0 investigation comparing
+`v3.2.5...v3.3.0`, 76 commits): the `execveat` handling, tracepoint
+minimum-priority hook ordering, webview-zygote `umount` semantics,
+and the tightened APK signature-block verification (only v2 blocks).
+
 ## 6.1 generalization
 
 The first 6.6 implementation invoked an S25U-specific secure monitor command to

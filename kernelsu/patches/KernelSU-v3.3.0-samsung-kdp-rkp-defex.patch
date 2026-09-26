@@ -11,7 +11,8 @@ index fd31bb51..5afb4d21 100644
  kernelsu-objs += feature/kernel_umount.o
  kernelsu-objs += feature/sulog.o
  kernelsu-objs += feature/sucompat.o
-@@ -61,9 +64,22 @@ endif
+@@ -60,29 +60,42 @@ endif
+ endif
  ifeq ($(CONFIG_KSU_DEBUG),y)
  ccflags-y += -DCONFIG_KSU_DEBUG=1
  endif
@@ -27,22 +28,33 @@ index fd31bb51..5afb4d21 100644
 +ifeq ($(CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT),y)
 +ccflags-y += -DCONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=1
 +endif
+ ifeq ($(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER),y)
+ ccflags-y += -DCONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER=1
  endif
- 
+ endif
+
  ccflags-y += -I$(srctree)/security/selinux -I$(srctree)/security/selinux/include
 +ccflags-y += -I$(objtree)/security/selinux -I$(objtree)/security/selinux/include
  ccflags-y += -I$(objtree)/security/selinux -include $(srctree)/include/uapi/asm-generic/errno.h
- 
+
+ ifneq ($(KBUILD_EXTMOD),)
+ # 6.18 exports the external module source as srcroot when M/MO are used.
+ ifneq ($(srcroot),)
+ KSU_KERNEL_DIR := $(srcroot)
+ endif
+ endif
+ ifndef KSU_KERNEL_DIR
  ifeq ($(filter /%,$(src)),)
-@@ -72,7 +88,7 @@ else
+ KSU_KERNEL_DIR := $(srctree)/$(src)
+ else
  KSU_KERNEL_DIR := $(src)
  endif
- 
+ endif
+
 -ccflags-y += -I$(KSU_KERNEL_DIR) -I$(KSU_KERNEL_DIR)/include
 +ccflags-y += -I$(KSU_KERNEL_DIR) -I$(KSU_KERNEL_DIR)/include -I$(KSU_KERNEL_DIR)/..
- 
+
  obj-$(CONFIG_KSU) += kernelsu.o
- 
 @@ -109,7 +125,9 @@ ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
  else
  # If there is no .git directory, use default version
@@ -400,7 +412,7 @@ index e6e1b684..f16235e2 100644
  #include "infra/symbol_resolver.h"
 +#include "compat/samsung_defex.h"
  
- #if defined(__x86_64__)
+ #if defined(__x86_64__) && !defined(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER)
  #include <asm/cpufeature.h>
 @@ -85,6 +87,8 @@ module_param_named(norc, ksu_no_custom_rc, bool, 0);
  
@@ -408,7 +420,7 @@ index e6e1b684..f16235e2 100644
  {
 +    int ret;
 +
- #if defined(__x86_64__)
+ #if defined(__x86_64__) && !defined(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER)
      // If the kernel has the hardening patch, X86_FEATURE_INDIRECT_SAFE must be set
      if (!boot_cpu_has(X86_FEATURE_INDIRECT_SAFE)) {
 @@ -120,13 +124,29 @@ int __init kernelsu_init(void)
@@ -1021,8 +1033,8 @@ index 0a71aca3..823b39b9 100644
          warn!("clear temp configs failed: {e}");
      }
  
--    utils::install(None).context("Failed to install ksud")?;
-+    utils::finish_install(None).context("Failed to finish ksud installation")?;
+-    utils::install(None, None).context("Failed to install ksud")?;
++    utils::finish_install(None, None).context("Failed to finish ksud installation")?;
  
      // 5. Handle module updates
      if let Err(e) = handle_updated_modules() {
@@ -1049,7 +1061,7 @@ diff --git a/userspace/ksud/src/utils.rs b/userspace/ksud/src/utils.rs
 index d60d56e5..f8e5f393 100644
 --- a/userspace/ksud/src/utils.rs
 +++ b/userspace/ksud/src/utils.rs
-@@ -1,7 +1,8 @@
+@@ -1,8 +1,9 @@
  use anyhow::{Context, Error, Ok, Result, bail};
 -use rustix::fs::{Mode, OFlags, open};
 +use rustix::fs::{Mode, OFlags, chown, open};
@@ -1057,13 +1069,39 @@ index d60d56e5..f8e5f393 100644
  use rustix::stdio::{dup2_stderr, dup2_stdin, dup2_stdout};
 +use rustix::thread::{Gid, Uid};
  use std::{
+     ffi::{CStr, CString, c_char, c_void},
      fs::{File, OpenOptions, create_dir_all, remove_file, write},
      io::{
-@@ -189,13 +190,42 @@ fn link_ksud_to_bin() -> Result<()> {
+@@ -230,51 +230,83 @@ fn link_ksud_to_bin() -> Result<()> {
+     }
      Ok(())
  }
- 
--pub fn install(libadbroot: Option<PathBuf>) -> Result<()> {
+
+-pub fn install(libadbroot: Option<PathBuf>, data_path: Option<PathBuf>) -> Result<()> {
++pub fn stage_daemon_from(staged_exe: impl AsRef<Path>) -> Result<()> {
+     ensure_dir_exists(defs::ADB_DIR)?;
+-    let _ = std::fs::remove_file(defs::DAEMON_PATH);
+-    std::fs::copy(
+-        // We should use /proc/self/exe, DO NOT resolve the real path
+-        // So that if someone execute /data/adb/ksud install, ksud won't be removed unexpectedly
+-        "/proc/self/exe",
+-        defs::DAEMON_PATH,
+-    )?;
++
++    std::fs::rename(staged_exe.as_ref(), defs::DAEMON_PATH).with_context(|| {
++        format!(
++            "Failed to rename {} to {}",
++            staged_exe.as_ref().display(),
++            defs::DAEMON_PATH
++        )
++    })?;
++    chown(defs::DAEMON_PATH, Some(Uid::ROOT), Some(Gid::ROOT))?;
++    #[cfg(unix)]
++    set_permissions(defs::DAEMON_PATH, Permissions::from_mode(0o755))?;
++
++    Ok(())
++}
++
 +pub fn stage_daemon() -> Result<()> {
 +    ensure_dir_exists(defs::ADB_DIR)?;
 +
@@ -1082,44 +1120,50 @@ index d60d56e5..f8e5f393 100644
 +    Ok(())
 +}
 +
-+pub fn stage_daemon_from(staged_exe: impl AsRef<Path>) -> Result<()> {
-     ensure_dir_exists(defs::ADB_DIR)?;
--    let _ = std::fs::remove_file(defs::DAEMON_PATH);
--    std::fs::copy(
--        std::env::current_exe().with_context(|| "Failed to get self exe path")?,
--        defs::DAEMON_PATH,
--    )?;
-+
-+    std::fs::rename(staged_exe.as_ref(), defs::DAEMON_PATH).with_context(|| {
-+        format!(
-+            "Failed to rename {} to {}",
-+            staged_exe.as_ref().display(),
-+            defs::DAEMON_PATH
-+        )
-+    })?;
-+    chown(defs::DAEMON_PATH, Some(Uid::ROOT), Some(Gid::ROOT))?;
-+    #[cfg(unix)]
-+    set_permissions(defs::DAEMON_PATH, Permissions::from_mode(0o755))?;
-+
-+    Ok(())
-+}
-+
-+pub fn finish_install(libadbroot: Option<PathBuf>) -> Result<()> {
++pub fn finish_install(libadbroot: Option<PathBuf>, data_path: Option<PathBuf>) -> Result<()> {
      restorecon::lsetfilecon(defs::DAEMON_PATH, restorecon::KSU_CON)?;
      // install binary assets
      assets::ensure_binaries(false).with_context(|| "Failed to extract assets")?;
-@@ -211,6 +241,11 @@ pub fn install(libadbroot: Option<PathBuf>) -> Result<()> {
+
+     link_ksud_to_bin()?;
+
+     if let Some(libadbroot) = libadbroot {
+         ensure_dir_exists(defs::LIBRARY_DIR)?;
+         let _ = std::fs::remove_file(defs::LIBADBROOT_PATH);
+         let _ = std::fs::copy(libadbroot, defs::LIBADBROOT_PATH);
+     }
+
+     if let Some(data_path) = data_path {
+         let backup_path = data_path.join(KSU_TEMP_BACKUP_DIR_NAME);
+         if backup_path.is_dir() {
+             for ent in backup_path.read_dir()? {
+                 let ent = ent?;
+                 if ent.file_type().is_ok_and(|v| v.is_file()) {
+                     let name = ent.file_name().to_string_lossy().to_string();
+                     let target = format!("{}{name}", defs::KSU_BACKUP_DIR);
+                     if name.starts_with(defs::KSU_BACKUP_FILE_PREFIX)
+                         && std::fs::rename(ent.path(), &target).is_err()
+                     {
+                         std::fs::copy(ent.path(), &target).with_context(|| {
+                             format!("failed to move {} -> {target}", ent.path().display())
+                         })?;
+                         log::info!("move boot backup {name}");
+                     }
+                 }
+             }
+             std::fs::remove_dir_all(&backup_path)?;
+         }
+     }
+
      Ok(())
  }
- 
-+pub fn install(libadbroot: Option<PathBuf>) -> Result<()> {
+
++pub fn install(libadbroot: Option<PathBuf>, data_path: Option<PathBuf>) -> Result<()> {
 +    stage_daemon()?;
-+    finish_install(libadbroot)
++    finish_install(libadbroot, data_path)
 +}
 +
  pub fn uninstall(package_name: &str) -> Result<()> {
-     if Path::new(defs::MODULE_DIR).exists() {
-         println!("- Uninstall modules..");
 @@ -255,10 +290,6 @@ pub fn daemonize_with<F: FnOnce() -> Result<()>>(use_init_pgrp: bool, configure:
      Ok(())
  }
@@ -1147,11 +1191,9 @@ index 24ee0ea3..e8ff1e26 100644
      struct patch_text_info info = {
          .dst = dst,
          .src = src,
-@@ -197,6 +202,7 @@ int ksu_patch_text(void *dst, void *src, size_t len, int flags)
+@@ -197,4 +202,5 @@ int ksu_patch_text(void *dst, void *src, size_t len, int flags)
      };
  
      return stop_machine(ksu_patch_text_cb, &info, cpu_online_mask);
 +#endif
  }
- 
- #endif /* __aarch64__ */

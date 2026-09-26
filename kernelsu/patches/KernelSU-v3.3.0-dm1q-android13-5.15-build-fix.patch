@@ -1,8 +1,13 @@
---- kernel/compat/samsung_kdp.c	2026-08-16 03:07:41.300117132 -0700
+diff --git a/kernel/compat/samsung_kdp.c b/kernel/compat/samsung_kdp.c
+--- a/kernel/compat/samsung_kdp.c	2026-08-16 03:07:41.300117132 -0700
 +++ b/kernel/compat/samsung_kdp.c	2026-08-16 02:30:42.699257629 -0700
-@@ -22,8 +22,14 @@
+@@ -23,12 +23,18 @@
  typedef void (*kdp_assign_pgd_t)(struct task_struct *task);
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+ typedef unsigned int (*kdp_usecount_sub_and_test_t)(int nr, struct cred *cred);
+ #else
  typedef unsigned int (*kdp_usecount_dec_and_test_t)(struct cred *cred);
+ #endif
  #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 +#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 16, 0)
  typedef long (*inc_rlimit_ucounts_t)(struct ucounts *ucounts, enum rlimit_type type, long value);
