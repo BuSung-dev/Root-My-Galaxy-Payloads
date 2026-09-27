@@ -7,13 +7,14 @@ Galaxy Z Flip5 (international, `b5q`) on firmware `F731BXXS7GZF1`
 Status: **hardware verified from ADB shell** — the tracefs slide route, controlled
 reclaim, MCAST stack writer, fake fops, configfs read/write, pipe physical
 read/write, root UMH, KernelSU late-load, and trusted Manager connection all
-completed on the exact firmware. The current personal feed uses a fresh-P0
-build for direct app execution without Shizuku; that binary has not completed
-an end-to-end device run.
+completed on the exact firmware. Direct fresh-P0 app execution without a PC
+or Shizuku subsequently completed end to end with the baseline payload. The
+current feed is a build-validated reliability candidate derived
+from that working route and still needs repeated device validation.
 
 The [published artifacts](../artifacts/b5q-F731BXXS7GZF1/README.md) retain
-the hardware-validated root helper and the current unverified fresh-P0 app
-library. The current
+the hardware-validated root helper and the current build-validated fresh-P0
+app candidate. The current
 KernelSU pair includes the hardware-validated SELinux hiding and `su_compat`
 fixes described below; the earlier frontend and overlay are superseded.
 
@@ -79,7 +80,7 @@ The sampled `.text` routines match; the `.data` symbol offsets differ as below:
 
 ## P0 physical address
 
-`P0_KERNEL_PHYS_LOAD = 0xa8000000` is confirmed by the failed app-domain
+`P0_KERNEL_PHYS_LOAD = 0xa8000000` is confirmed by the app-domain validation
 run's physical-P0 sample. The eight logged qwords match the exact local raw
 `kernel` image at slide `0x178000` with score 8/8 and runner-up 0. This also
 confirms the physical alias tracks the slide recovered by the earlier tracefs
@@ -88,12 +89,12 @@ diagnostic on this firmware.
 ## P0 fingerprint
 
 497 candidates at 0x1000 step, generated from the exact `kernel` image at
-`P0_ORACLE_PROBE_OFFSET = 0x1b5e000`. The failed app run's sample scores 0/8
+`P0_ORACLE_PROBE_OFFSET = 0x1b5e000`. The earlier app run's sample scores 0/8
 in the old 64K table and 8/8 at `0x178000` in this table, with runner-up 0.
 The table also includes tracefs-observed slides `0x108000` and `0x1d0000`.
 Some other image pages repeat; the scanner rejects those tied fingerprints.
-The physical page mapping is now confirmed, while the app's post-slide root
-handoff still needs an end-to-end device run.
+The physical page mapping and the app's post-slide root handoff are both
+confirmed on the exact target firmware.
 
 ## Shizuku-free app run audit
 
@@ -110,9 +111,36 @@ selected slot 0 from the slide bank left by `PAGE_PAYLOAD_SLIDE`. That
 overwrote the new FOPS route with stale page state. The app trigger now keeps
 the FOPS page's prepared state on the closed route. The reboot's exact kernel
 cause remains unknown: Android reported only the generic `reboot` reason, and
-the available ADB shell could not read a preserved kernel crash record. This
-revision has compiled, but its app-domain root handoff still needs a hardware
-retest.
+the available ADB shell could not read a preserved kernel crash record. The
+corrected baseline subsequently completed the app-domain root and
+KernelSU handoff on-device without a PC or Shizuku. The user confirmed the
+full flow working on 2026-09-23. A subsequent `256/32/4` KernelSnitch sampling
+experiment produced no successful controlled-mm leaks on the Flip5. It is now
+opt-in with `RMG_CONTROLLED_FAST=1`; the app goes directly to the working
+`256/128/8` profile and avoids paying for a guaranteed failed attempt.
+
+## Direct-app tracefs audit and page reuse
+
+The exact `super.img.lz4` policy confirms that the tracefs implementation is
+already correct but unavailable to the APK domain. `tracing_on` and
+`sched_blocked_reason` are labeled `debugfs_tracing`, and the shipping policy
+contains a `neverallow` prohibiting `untrusted_app_all` from opening or reading
+that type. The per-CPU `trace_pipe_raw` files inherit the restricted tracefs
+type. `atrace.rc` changes some DAC modes to `0666`, but SELinux still denies the
+app. Event ID 108 and caller offsets `0x10db44` and `0xc8fe4` were independently
+re-derived from the recovered firmware `vmlinux`; there is no offset fix that
+can bypass this policy. The firmware also enables E0PD/KPTI, so the A536 PRFM
+slide oracle remains opt-in (`SLIDE_SOURCE=prefetch`) and is disabled in auto
+mode.
+
+The optimization candidate instead reuses the page already proven by the P0
+gate. A fifth MCAST slot redirects a dedicated merge buffer to that page after
+the slide probe and both page-metadata restores. The payload preserves the
+`RMG-P0-ORACLE-GATE` prefix, writes a compact FOPS layout into the remaining
+bytes, and verifies the complete suffix through the retained gate reference.
+Only an exact readback skips the second controlled 32-object collection. A
+failed rewrite or clean reused-page FOPS miss resets the parent state and uses
+the original hardware-validated FOPS layout for up to three fresh attempts.
 
 ## Build
 
@@ -127,6 +155,8 @@ Validated on `SM-F731B`, running the exact
 of `0x108000` through tracefs and ended with `done=1 root=1 uid=2000->0`.
 The root helper reported `uid=0(root)` in `u:r:kernel:s0`; its temporary
 permissive state was restored to Enforcing by the KernelSU late-load flow.
+Direct app-domain execution without a PC or Shizuku was user-confirmed on
+2026-09-23 with the baseline app payload and the current KernelSU pair.
 
 Captured device evidence:
 
@@ -206,6 +236,6 @@ official Manager may replace `/data/adb/ksud` with its stock daemon.
 
 ## Open items
 
-1. Device validation of `P0_KERNEL_PHYS_LOAD` (`0xa8000000` candidate)
-2. Upstream Root My Galaxy app packaging and support-feed integration
+1. Device timing and repeated-run validation of verified P0-page reuse
+2. Upstream Root My Galaxy support-feed integration
 3. A persistent boot integration, if the bootloader is later unlocked

