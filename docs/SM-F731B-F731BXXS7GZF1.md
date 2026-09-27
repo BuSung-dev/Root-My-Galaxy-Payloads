@@ -148,6 +148,49 @@ Compact P0-page reuse remains compiled for explicit
 validated repeatedly on hardware. The previous enabled build is not published
 as a selectable feed artifact.
 
+## 2026-09-27 watchdog audit and bounded pipe preparation
+
+Eleven retained app histories measured three end-to-end successes. Seven runs
+completed the P0 gate workflow, all seven eventually acquired the gate, and
+six recovered a unique slide. Only three of those six post-slide runs reached
+root, making the FOPS/pipe half of the chain the dominant remaining failure
+source. Successful runs took 667--937 seconds; the two controlled page searches
+consumed more than 93% of that time. The adaptive clean P0 retry is retained
+because it recovered the first gate miss in the latest run.
+
+The latest failure passed the fake-fops write/read proof, restored both P0
+pages, and verified restoration of `misc_fops`. It then stopped immediately
+after `cfi starting pipe physrw` and the conservative `2048/64/8`
+KernelSnitch profile. Samsung's preserved last-kmsg records a 100-second
+software-watchdog panic. Storage interrupts stopped about nine seconds after
+pipe preparation began, while more than forty tasks accumulated in F2FS/EROFS
+page waits. UFS reported no outstanding command, saved error, or failed host,
+and the system had ample free memory and swap; this was a page-cache/storage
+wedge, not an app crash, OOM, or UFS hardware error.
+
+The bounded-pipe candidate addresses the concrete pressure and hang paths:
+
+- A target with `APP_ROOT_REF_HOLDER_REQUIRED=0` now leaves its detached P0
+  keeper blocked while retaining the selected descriptors. The old 10 ms root
+  socket loop generated about 93 denied audit events per second and raised
+  `audit_lost` to 46,585 before the panic.
+- KernelSnitch waiters first sleep on a staging futex and are moved with
+  `FUTEX_CMP_REQUEUE_PRIVATE`. The kernel's returned requeue count certifies
+  that every waiter is actually queued on the measured bucket; the former two
+  `sched_yield()` calls did not provide that guarantee. Teardown changes the
+  futex value before wake, closing the late-waiter lost-wake race.
+- Flip5 pipe-page preparation has a 30-second absolute deadline. Timeout or
+  poll failure is sticky for the exploit invocation: the child receives
+  `SIGKILL`, reap uses bounded `waitpid(WNOHANG)`, parent pipe descriptors are
+  closed, and all subsequent pipe retries are refused. Shared-memory stage and
+  index checkpoints identify the last allocator phase without depending on a
+  log write during a storage wedge.
+
+The unsuccessful `256/32/4` controlled-mm fast profile remains opt-in; this
+change does not promote it. The bounded candidate and the shared waiter barrier
+compile for b5q plus the S918B and S926B regression targets. Repeated Flip5
+hardware validation of this new binary is still pending.
+
 ## Build
 
 ```sh
@@ -242,6 +285,6 @@ official Manager may replace `/data/adb/ksud` with its stock daemon.
 
 ## Open items
 
-1. Device repeated-run validation of adaptive P0 probe/readback handling
+1. Device repeated-run validation of bounded pipe preparation and keeper quiescence
 2. Upstream Root My Galaxy support-feed integration
 3. A persistent boot integration, if the bootloader is later unlocked

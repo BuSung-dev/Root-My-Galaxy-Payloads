@@ -228,6 +228,7 @@ struct user_pipe_buffer {
 };
 
 extern pid_t pipe_prepare_child;
+extern int pipe_prepare_hard_failed;
 extern uintptr_t page_base;
 extern uintptr_t fake_lock;
 extern uintptr_t fake_w0;
@@ -452,6 +453,7 @@ void alloc_pipe_object(int pipefd[2]);
 void free_pipe_object(int pipefd[2]);
 uintptr_t prepare_pipe_buffer_page_child(void);
 uintptr_t prepare_pipe_buffer_page(void);
+int stop_pipe_prepare_child(void);
 void reset_pipe_attempt(void);
 uintptr_t direct_to_page(uintptr_t addr);
 uintptr_t direct_to_head_page(int fd, uintptr_t addr);

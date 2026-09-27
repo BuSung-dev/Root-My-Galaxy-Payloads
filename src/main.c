@@ -531,9 +531,7 @@ int run_exploit(int argc, char **argv) {
   if (getenv("FOPS_DIAGNOSTIC_STOP_AFTER_PREPARE")) {
     pr_warning("diagnostic stop after fops prepare; trigger not entered\n");
     if (pipe_prepare_child > 0) {
-      SYSCHK(kill(pipe_prepare_child, SIGKILL));
-      SYSCHK(waitpid(pipe_prepare_child, NULL, 0));
-      pipe_prepare_child = -1;
+      stop_pipe_prepare_child();
     }
     return 2;
   }
@@ -682,8 +680,7 @@ int run_exploit(int argc, char **argv) {
              physrw_read_ok, physrw_write_ok, physrw_read64_ok, physrw_write64_ok,
              root_uid_before, root_uid_after);
   if (pipe_prepare_child > 0) {
-    SYSCHK(kill(pipe_prepare_child, SIGKILL));
-    SYSCHK(waitpid(pipe_prepare_child, NULL, 0));
+    stop_pipe_prepare_child();
   }
 #if defined(QEMU_STACK_WRITER_ONLY) && QEMU_STACK_WRITER_ONLY
   int exploit_ok = atomic_load(&cfi_stage_done);

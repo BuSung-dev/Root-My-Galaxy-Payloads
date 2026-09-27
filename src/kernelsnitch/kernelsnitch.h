@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <signal.h>
 #include <limits.h>
 
 #define FUTEX_SZ (64ULL<<30)
@@ -91,6 +92,7 @@ struct kernelsnitch_shared_state {
     pthread_t *increase_tids;
     size_t increase_count;
     size_t increase_id;
+    volatile unsigned int increase_stage;
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
     size_t identity_start;
     size_t identity_end;
@@ -107,14 +109,23 @@ struct kernelsnitch_shared_state {
     int mte_enabled;
 };
 
-#define WAIT() do { for (size_t i = 0; i < 2; ++i) sched_yield(); } while (0)
-
+#ifndef KERNELSNITCH_WAITER_READY_TIMEOUT_MS
+#define KERNELSNITCH_WAITER_READY_TIMEOUT_MS 30000
+#endif
 /**
  * FUTEX syscall
  */
 static int __futex(unsigned int *uaddr, int futex_op, unsigned int val, const struct timespec *timeout, unsigned int *uaddr2, unsigned int val3)
 {
     return syscall(SYS_futex, uaddr, futex_op, val, timeout, uaddr2, val3);
+}
+
+static int __futex_cmp_requeue(unsigned int *uaddr, unsigned int wake,
+                               unsigned int requeue, unsigned int *uaddr2,
+                               unsigned int expected)
+{
+    return syscall(SYS_futex, uaddr, FUTEX_CMP_REQUEUE_PRIVATE, wake,
+                   requeue, uaddr2, expected);
 }
 
 /**
@@ -130,9 +141,19 @@ static void *__do_increase(void *arg)
 {
     struct inc_arg *inc_arg = (struct inc_arg *)arg;
     struct kernelsnitch_shared_state *ks = inc_arg->ks;
-    size_t id = inc_arg->id;
-    SYSCHK(__futex((unsigned int *)&ks->inc_futex[id], FUTEX_WAIT_PRIVATE, 0, NULL, NULL, 0));
+    (void)inc_arg->id;
     free(inc_arg);
+    sigset_t blocked;
+    sigfillset(&blocked);
+    int mask_ret = pthread_sigmask(SIG_BLOCK, &blocked, NULL);
+    if (mask_ret != 0) {
+        errno = mask_ret;
+        pr_error("failed to block futex waiter signals: %m\n");
+    }
+    int ret = __futex((unsigned int *)&ks->increase_stage,
+                      FUTEX_WAIT_PRIVATE, 0, NULL, NULL, 0);
+    if (ret == -1 && errno != EAGAIN && errno != EINTR)
+        pr_error("futex waiter failed: %m\n");
     return 0;
 }
 
@@ -144,28 +165,83 @@ static void *__do_increase(void *arg)
  */
 static void __increase(struct kernelsnitch_shared_state *ks, size_t id, size_t amount)
 {
+    unsigned int *target = (unsigned int *)&ks->inc_futex[id];
+    if (((uintptr_t)target % sizeof(*target)) != 0 ||
+        ((uintptr_t)&ks->increase_stage % sizeof(ks->increase_stage)) != 0 ||
+        target == &ks->increase_stage || amount > INT_MAX)
+        pr_error("invalid futex waiter barrier target or count\n");
+    __atomic_store_n(target, 0, __ATOMIC_RELEASE);
+    __atomic_store_n(&ks->increase_stage, 0, __ATOMIC_RELEASE);
     ks->increase_tids = calloc(amount, sizeof(*ks->increase_tids));
-    ASSERT_pr((ks->increase_tids != NULL), "failed to allocate futex waiter ids\n");
+    if (!ks->increase_tids)
+        pr_error("failed to allocate futex waiter ids\n");
     ks->increase_count = amount;
     ks->increase_id = id;
     for (size_t i = 0; i < amount; ++i) {
         struct inc_arg *inc_arg = calloc(1, sizeof(struct inc_arg));
+        if (!inc_arg)
+            pr_error("failed to allocate futex waiter %zu/%zu\n",
+                     i + 1, amount);
         inc_arg->id = id;
         inc_arg->ks = ks;
-        SYSCHK(pthread_create(&ks->increase_tids[i], 0, __do_increase,
-                              (void *)inc_arg));
+        int ret = pthread_create(&ks->increase_tids[i], 0, __do_increase,
+                                 (void *)inc_arg);
+        if (ret != 0) {
+            errno = ret;
+            pr_error("pthread_create waiter %zu/%zu failed: %m\n",
+                     i + 1, amount);
+        }
     }
-    WAIT();
+
+    size_t requeued = 0;
+    size_t deadline = gettime_ns() +
+        (size_t)KERNELSNITCH_WAITER_READY_TIMEOUT_MS * 1000000ULL;
+    while (requeued != amount) {
+        int moved = __futex_cmp_requeue(
+            (unsigned int *)&ks->increase_stage, 0,
+            (unsigned int)(amount - requeued), target, 0);
+        if (moved < 0 && errno != EINTR && errno != EAGAIN)
+            pr_error("KernelSnitch waiter requeue failed: %m\n");
+        if (moved > 0)
+            requeued += (size_t)moved;
+        if (gettime_ns() >= deadline) {
+            pr_error("KernelSnitch waiter readiness timeout queued=%zu/%zu\n",
+                     requeued, amount);
+        }
+        if (requeued != amount) {
+            struct timespec delay = {.tv_sec = 0, .tv_nsec = 1000000L};
+            nanosleep(&delay, NULL);
+        }
+    }
+    if (amount >= 1024)
+        pr_info("KernelSnitch waiters queued=%zu/%zu barrier=requeue\n",
+                requeued, amount);
 }
 
 static void __decrease(struct kernelsnitch_shared_state *ks)
 {
     if (!ks->increase_tids)
         return;
-    SYSCHK(__futex((unsigned int *)&ks->inc_futex[ks->increase_id],
+    unsigned int *target =
+        (unsigned int *)&ks->inc_futex[ks->increase_id];
+    /* Changing the futex value before FUTEX_WAKE closes the lost-wake race:
+     * a late waiter observes 1 and returns EAGAIN instead of sleeping after
+     * the one wake operation has already completed. */
+    __atomic_store_n(&ks->increase_stage, 1, __ATOMIC_RELEASE);
+    SYSCHK(__futex((unsigned int *)&ks->increase_stage,
                    FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0));
-    for (size_t i = 0; i < ks->increase_count; ++i)
-        SYSCHK(pthread_join(ks->increase_tids[i], NULL));
+    __atomic_store_n(target, 1, __ATOMIC_RELEASE);
+    SYSCHK(__futex(target, FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0));
+    for (size_t i = 0; i < ks->increase_count; ++i) {
+        int ret = pthread_join(ks->increase_tids[i], NULL);
+        if (ret != 0) {
+            errno = ret;
+            pr_error("pthread_join waiter %zu/%zu failed: %m\n",
+                     i + 1, ks->increase_count);
+        }
+    }
+    __atomic_store_n(&ks->increase_stage, 0, __ATOMIC_RELEASE);
+    __atomic_store_n(target, 0, __ATOMIC_RELEASE);
     free(ks->increase_tids);
     ks->increase_tids = NULL;
     ks->increase_count = 0;
@@ -325,6 +401,7 @@ struct kernelsnitch_shared_state *kernelsnitch_setup(size_t __mm_struct_sz, size
     ks->appended_futexes = APPENDED_FUTEXES;
     ks->repeat_measurement = REPEAT_MEASUREMENT;
     ks->average = AVERAGE;
+    __atomic_store_n(&ks->increase_stage, 0, __ATOMIC_RELAXED);
 
     // unfortunately I have to use a the kernelsnitch_shared_state and mmap(shared) as find collisions and bruteforce might be in different processes!!!
     ks->futex_hash_table_size = 256*ks->cpu_cnt;

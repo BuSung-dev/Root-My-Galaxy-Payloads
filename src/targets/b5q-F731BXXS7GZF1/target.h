@@ -29,7 +29,7 @@
 #define SLIDE_KERNEL_PAGE_SETUP_ATTEMPTS 8
 #define FOPS_KERNEL_PAGE_SETUP_ATTEMPTS 8
 #define BUILD_VARIANT_LABEL \
-  "b5q-F731BXXS7GZF1-mcast-adaptive-p0-configfs-pipe-root"
+  "b5q-F731BXXS7GZF1-mcast-adaptive-p0-bounded-pipe-root"
 #define APP_PHYS_P0_ORACLE 1
 #define APP_REQUIRE_FRESH_P0_SESSION 1
 #define APP_TRACEFS_SLIDE 1
@@ -211,6 +211,9 @@
 #define SKB_RECLAIM_SENDS 64
 #define APP_SLIDE_RECLAIM_SENDS 64
 #define PIPE_MAX_ATTEMPTS 12
+#define PIPE_PREPARE_TIMEOUT_MS 30000
+#define PIPE_PREPARE_REAP_TIMEOUT_MS 1000
+#define KERNELSNITCH_WAITER_READY_TIMEOUT_MS 30000
 
 /*
  * BLOCKER: the pselect fake-lock route cannot work on this kernel as-is.

