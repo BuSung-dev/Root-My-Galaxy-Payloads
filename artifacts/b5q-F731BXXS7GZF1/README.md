@@ -10,26 +10,25 @@ and the official Manager connected. It uses fresh P0 discovery with 4K
 slide-fingerprint coverage. See the
 [validation record](../../docs/SM-F731B-F731BXXS7GZF1.md).
 
-The current app library is a page-reuse reliability candidate. The experimental
+The current app library is an adaptive reliability candidate. The experimental
 `256/32/4` KernelSnitch profile produced no successful controlled-mm leaks on
 the Flip5 and is now opt-in, avoiding its failed setup before every working
 `256/128/8` measurement. The target's collision counts, confirmations,
-exact-address search, and page grouping are unchanged. Clean P0 reclaim
-misses now get a second fresh page in the same child. The
-idempotent gate, probe, and both restore writes each get three independent
-MCAST race windows before readback. After slide discovery, the retained P0
-page is rewritten with a compact FOPS payload and verified byte-for-byte
-through the retained gate view. A verified rewrite skips the second 32-object
-collection. Failure or a clean FOPS miss falls back to the original FOPS page
-collection with three attempts and its fine timing sweep. The prior P0
-reliability build is retained as `cve-2026-43499-app-p0-reliable.so`, and the
-known-good pre-optimization build remains `cve-2026-43499-app-baseline.so`.
+exact-address search, and page grouping are unchanged. Gate, probe, and restore
+now perform one MCAST operation at a time. Gate state is always read back, and
+probe misses use non-destructive `tee` snapshots: only an exact unchanged
+marker permits another attempt, using a different fake waiter bank. Changed,
+ambiguous, and I/O-error states fail closed. FOPS retries now use the observed
+`misc_fops` value rather than the race child's status, and recoverable pipe/root
+errors execute their rollback paths instead of exiting from the logger.
+Compact P0-page reuse remains compiled behind `RMG_P0_PAGE_REUSE=1`, but is
+disabled by default and no enabled reuse binary is published in the feed.
 
 ## Files and provenance
 
 | File | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `cve-2026-43499-app.so` | 177800 | `323abf9881b5fb6aa45b657181808ec03634d42c4c748a99b52a97bb3dffadce` |
+| `cve-2026-43499-app.so` | 180416 | `e9be460596c7052529e089bba7a5342f9c1335db36f09698cd3f7254545f9789` |
 | `cve-2026-43499-app-p0-reliable.so` | 171680 | `3c4e6fbfe68baac56b4994963f7492963554a51c51433d504e774aec04c854d8` |
 | `cve-2026-43499-app-baseline.so` | 170136 | `508af8ecdf09e33f06a9b532c6e3a9f187d3053ac5eb9cc5ef63eee17a0fe8fa` |
 | `cve-2026-43499-root` | 27072 | `6a397067c4ac3841de01527d1f75219baa5ca6c4a6bc4b52c4408474e2456c82` |
@@ -87,10 +86,11 @@ expanded 4K fingerprint table.
   at slide `0x178000`; the baseline completed end-to-end app-domain root.
 - The app defaults directly to the working conservative KernelSnitch profile.
   Set `RMG_CONTROLLED_FAST=1` only for shell-driven experiments with the
-  unsuccessful `256/32/4` profile. Use
-  `cve-2026-43499-app-p0-reliable.so` to disable page reuse while retaining
-  the P0 reliability fixes, or `cve-2026-43499-app-baseline.so` for the
-  hardware-validated binary rollback.
+  unsuccessful `256/32/4` profile. Page reuse is also opt-in with
+  `RMG_P0_PAGE_REUSE=1`; keep it disabled for reliability testing. The
+  `cve-2026-43499-app-p0-reliable.so` file is the historical repeated-write
+  candidate; use `cve-2026-43499-app-baseline.so` for the hardware-validated
+  binary rollback.
 - Kernel `su_compat` supplies the conventional `su` path for authorized UIDs
   without a real `/system/bin/su` file or `/system/bin` overlay. Use a fresh
   boot when upgrading from the old overlay-based build and do not restore

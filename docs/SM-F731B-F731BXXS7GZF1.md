@@ -133,14 +133,20 @@ can bypass this policy. The firmware also enables E0PD/KPTI, so the A536 PRFM
 slide oracle remains opt-in (`SLIDE_SOURCE=prefetch`) and is disabled in auto
 mode.
 
-The optimization candidate instead reuses the page already proven by the P0
-gate. A fifth MCAST slot redirects a dedicated merge buffer to that page after
-the slide probe and both page-metadata restores. The payload preserves the
-`RMG-P0-ORACLE-GATE` prefix, writes a compact FOPS layout into the remaining
-bytes, and verifies the complete suffix through the retained gate reference.
-Only an exact readback skips the second controlled 32-object collection. A
-failed rewrite or clean reused-page FOPS miss resets the parent state and uses
-the original hardware-validated FOPS layout for up to three fresh attempts.
+The reliability candidate performs one PI/MCAST operation per slot. It always
+checks the gate even when the trigger child reports failure. Probe readback is
+non-destructive and may retry on three separate fake waiter banks only when
+every byte still matches the original marker; a changed-invalid or uncertain
+snapshot is terminal. Restore operations are limited to page parents that may
+actually have been touched. The FOPS stage always checks `misc_fops`, restores
+it as soon as the fake table is proven, and never frees/resprays a page after
+an uncertain write. Recoverable pipe and root-stage log sites no longer call
+the fatal `pr_error` macro before their cleanup code.
+
+Compact P0-page reuse remains compiled for explicit
+`RMG_P0_PAGE_REUSE=1` diagnostics, but auto mode keeps it disabled until it is
+validated repeatedly on hardware. The previous enabled build is not published
+as a selectable feed artifact.
 
 ## Build
 
@@ -236,6 +242,6 @@ official Manager may replace `/data/adb/ksud` with its stock daemon.
 
 ## Open items
 
-1. Device timing and repeated-run validation of verified P0-page reuse
+1. Device repeated-run validation of adaptive P0 probe/readback handling
 2. Upstream Root My Galaxy support-feed integration
 3. A persistent boot integration, if the bootloader is later unlocked

