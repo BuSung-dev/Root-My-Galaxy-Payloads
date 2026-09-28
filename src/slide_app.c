@@ -1025,6 +1025,9 @@ RMG_RACE_INLINE void prepare_slide_pselect_fdsets(
 RMG_RACE_INLINE void open_slide_selected_fds(
     fd_set *in, fd_set *out, fd_set *ex, int read_fd) {
   for (int fd = 0; fd < slide_route_nfds; fd++) {
+    if (fd <= STDERR_FILENO) {
+      continue;
+    }
     if (FD_ISSET(fd, in) || FD_ISSET(fd, out) || FD_ISSET(fd, ex)) {
       dup2(read_fd, fd);
     }

@@ -144,6 +144,9 @@ void open_selected_fds(
     return;
   }
   for (int fd = 0; fd < PSELECT_ROUTE_NFDS; fd++) {
+    if (fd <= STDERR_FILENO) {
+      continue;
+    }
     if (FD_ISSET(fd, in) || FD_ISSET(fd, out) || FD_ISSET(fd, ex)) {
       dup2(high_write, fd);
     }

@@ -9,6 +9,9 @@ endif
 ifeq ($(TARGET),dm3q-S918BXXSAFZF5)
 APP_TARGET_CFLAGS := -DSLIDE_STACK_WRITER=1
 endif
+ifeq ($(TARGET),dm3q-S9180ZHS8FZG1)
+APP_TARGET_CFLAGS := -DSLIDE_STACK_WRITER=1
+endif
 ifeq ($(TARGET),gts9u-X916BXXS6EZG3)
 APP_TARGET_CFLAGS := -DSLIDE_STACK_WRITER=1
 endif
@@ -117,7 +120,7 @@ $(APP_RELEASE): $(APP_PRELOAD_SRCS) $(TARGET_HEADER) src/offset.h src/common.h s
 	truncate -s $(APP_RELEASE_SIZE) $@
 
 $(APP_STABLE): $(APP_PRELOAD_SRCS) $(TARGET_HEADER) src/offset.h src/common.h src/kernelsnitch/*.h | $(OUTDIR)
-	$(TARGET_CC) -DAPP_PAYLOAD=1 -DAPP_S928_STABLE_RACE=1 \
+	$(TARGET_CC) -DAPP_PAYLOAD=1 -DAPP_S928_STABLE_RACE=1 $(APP_TARGET_CFLAGS) \
 	  -fPIC -Oz -g0 -fvisibility=hidden -fno-semantic-interposition \
 	  -fstack-protector-strong \
 	  -fno-unwind-tables -fno-asynchronous-unwind-tables \

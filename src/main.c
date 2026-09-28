@@ -105,6 +105,19 @@ void *consumer_thread(void *arg __attribute__((unused))) {
     seen = seq;
     int tid = atomic_load(&waiter_tid);
     int calls_this_seq = 0;
+    {
+      /* Per-attempt one-shot delay for manual timing tuning. */
+      const char *delay_text = getenv("CONSUMER_START_DELAY_USEC");
+      if (delay_text && *delay_text) {
+        char *end = NULL;
+        errno = 0;
+        long delay_value = strtol(delay_text, &end, 0);
+        if (errno == 0 && end != delay_text && *end == '\0' &&
+            delay_value > 0 && delay_value <= 10000000L) {
+          usleep((useconds_t)delay_value);
+        }
+      }
+    }
     while (!atomic_load(&punch_consume_stop) &&
            atomic_load(&punch_consume_go) == seq) {
       if (atomic_load(&punch_consume_stop) ||
@@ -120,6 +133,7 @@ void *consumer_thread(void *arg __attribute__((unused))) {
             atomic_load(&punch_consume_go) != seq) {
           break;
         }
+#if CONSUMER_MAX_CALLS > 0
         atomic_fetch_add(&consumer_calls, 1);
         int consumer_nice = PSELECT_CONSUMER_NICE;
         errno = 0;
@@ -136,6 +150,13 @@ void *consumer_thread(void *arg __attribute__((unused))) {
           atomic_store(&punch_consume_go, 0);
           break;
         }
+#else
+        /* CONSUMER_MAX_CALLS == 0 disables the consumer: route will miss
+         * until do_pselect_fake_lock_route() times out on pselect and
+         * clears punch_consume_go. */
+        (void)calls_this_seq;
+        (void)tid;
+#endif
       }
     }
   }
