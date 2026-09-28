@@ -1712,7 +1712,14 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
   fake_fops = payload_base + FOPS_TABLE_OFF;
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
   if (payload_mode == PAGE_PAYLOAD_FOPS) {
-#if !defined(APP_CLOSED_FOPS_ROUTE) || !APP_CLOSED_FOPS_ROUTE
+#if (!defined(APP_CLOSED_FOPS_ROUTE) || !APP_CLOSED_FOPS_ROUTE) || \
+    (defined(APP_FOPS_DATA_ALIAS_DIAG_ONLY) && \
+     APP_FOPS_DATA_ALIAS_DIAG_ONLY)
+    /* CLOSED targets normally skip bank init (production uses direct
+     * fake_* globals), but the alias verifier drives gate/probe/restore
+     * slots through the bank, so CLOSED+DIAG_ONLY initializes it too.
+     * Production geometry is untouched: with probe inactive the slot-0
+     * entry below carries the same fake_fops/misc pair. */
     slide_bank_payload_base = payload_base;
 #if defined(APP_FOPS_ORACLE_DIAG_ONLY) && APP_FOPS_ORACLE_DIAG_ONLY
     p0_gate_page_struct = direct_to_page(base);

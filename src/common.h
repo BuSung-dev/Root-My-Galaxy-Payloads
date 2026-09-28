@@ -441,7 +441,7 @@ void put_fake_waiter(unsigned char *payload, size_t waiter_off,
 
 
 void init_ctx(struct mm_ctx *ctx, size_t cnt);
-void resize_pipe_slots(int pipefd[2], size_t slots);
+int resize_pipe_slots(int pipefd[2], size_t slots);
 void make_pipe_object(int pipefd[2]);
 void alloc_pipe_object(int pipefd[2]);
 void free_pipe_object(int pipefd[2]);
