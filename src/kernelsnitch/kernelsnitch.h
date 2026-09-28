@@ -131,7 +131,10 @@ static void *__do_increase(void *arg)
     struct inc_arg *inc_arg = (struct inc_arg *)arg;
     struct kernelsnitch_shared_state *ks = inc_arg->ks;
     size_t id = inc_arg->id;
-    SYSCHK(__futex((unsigned int *)&ks->inc_futex[id], FUTEX_WAIT_PRIVATE, 0, NULL, NULL, 0));
+    int ret = __futex((unsigned int *)&ks->inc_futex[id],
+                      FUTEX_WAIT_PRIVATE, 0, NULL, NULL, 0);
+    if (ret == -1 && errno != EAGAIN && errno != EINTR)
+        pr_error("futex waiter failed: %m\n");
     free(inc_arg);
     return 0;
 }
@@ -144,16 +147,29 @@ static void *__do_increase(void *arg)
  */
 static void __increase(struct kernelsnitch_shared_state *ks, size_t id, size_t amount)
 {
+    unsigned int *target = (unsigned int *)&ks->inc_futex[id];
+    if (((uintptr_t)target % sizeof(*target)) != 0 || amount > INT_MAX)
+        pr_error("invalid futex waiter target or count\n");
+    __atomic_store_n(target, 0, __ATOMIC_RELEASE);
     ks->increase_tids = calloc(amount, sizeof(*ks->increase_tids));
-    ASSERT_pr((ks->increase_tids != NULL), "failed to allocate futex waiter ids\n");
+    if (!ks->increase_tids)
+        pr_error("failed to allocate futex waiter ids\n");
     ks->increase_count = amount;
     ks->increase_id = id;
     for (size_t i = 0; i < amount; ++i) {
         struct inc_arg *inc_arg = calloc(1, sizeof(struct inc_arg));
+        if (!inc_arg)
+            pr_error("failed to allocate futex waiter %zu/%zu\n",
+                     i + 1, amount);
         inc_arg->id = id;
         inc_arg->ks = ks;
-        SYSCHK(pthread_create(&ks->increase_tids[i], 0, __do_increase,
-                              (void *)inc_arg));
+        int ret = pthread_create(&ks->increase_tids[i], 0, __do_increase,
+                                 (void *)inc_arg);
+        if (ret != 0) {
+            errno = ret;
+            pr_error("pthread_create waiter %zu/%zu failed: %m\n",
+                     i + 1, amount);
+        }
     }
     WAIT();
 }
@@ -162,10 +178,22 @@ static void __decrease(struct kernelsnitch_shared_state *ks)
 {
     if (!ks->increase_tids)
         return;
-    SYSCHK(__futex((unsigned int *)&ks->inc_futex[ks->increase_id],
-                   FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0));
-    for (size_t i = 0; i < ks->increase_count; ++i)
-        SYSCHK(pthread_join(ks->increase_tids[i], NULL));
+    unsigned int *target =
+        (unsigned int *)&ks->inc_futex[ks->increase_id];
+    /* Changing the futex value before FUTEX_WAKE closes the lost-wake race:
+     * a late waiter observes 1 and returns EAGAIN instead of sleeping after
+     * the one wake operation has already completed. */
+    __atomic_store_n(target, 1, __ATOMIC_RELEASE);
+    SYSCHK(__futex(target, FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0));
+    for (size_t i = 0; i < ks->increase_count; ++i) {
+        int ret = pthread_join(ks->increase_tids[i], NULL);
+        if (ret != 0) {
+            errno = ret;
+            pr_error("pthread_join waiter %zu/%zu failed: %m\n",
+                     i + 1, ks->increase_count);
+        }
+    }
+    __atomic_store_n(target, 0, __ATOMIC_RELEASE);
     free(ks->increase_tids);
     ks->increase_tids = NULL;
     ks->increase_count = 0;

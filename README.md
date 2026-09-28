@@ -26,10 +26,23 @@ It intentionally does not contain Android application source code.
 | `q4q-F9360ZCSAIZF1` | Galaxy Z Fold4 `SM-F9360` | `5.10.236` | Device-tested |
 | `dm2q-S916BXXSAFZG1` | Galaxy S23+ `SM-S916B` | `5.15.189` | Experimental: hardware root from ADB shell; not in app feed |
 | `dm3q-S918BXXSAFZF5` | Galaxy S23 Ultra `SM-S918B` | `5.15.189` | Confirmed working: full chain through the app (Shizuku mode) incl. KernelSU late-load and granted `su` |
+| `b5q-F731BXXS7GZF1` | Galaxy Z Flip5 `SM-F731B` | `5.15.189` | Hardware verified through ADB and the Shizuku-free app; three-page/holder candidate pending repeat validation |
 
 The S916B FZG1 profile is shell-only today. Its exact tracefs route works from `adb shell`, but direct app-domain execution is not supported. Root My Galaxy would need to delegate the native runner through an authorized shell bridge such as Shizuku. See [`artifacts/dm2q-S916BXXSAFZG1/README.md`](artifacts/dm2q-S916BXXSAFZG1/README.md).
 
 The S918B FZF5 profile is hardware-verified through the app's Shizuku mode (exploit, KernelSU late-load, granted `su` under enforcing). Its physical-P0 fallback also engages in unprivileged app-domain execution, but rooting without Shizuku is not yet hardware-confirmed. See [`docs/SM-S918B-S918BXXSAFZF5.md`](docs/SM-S918B-S918BXXSAFZF5.md).
+
+The Flip5 GZF1 profile is hardware-verified on the exact SM-F731B firmware
+from ADB shell through the complete exploit and KernelSU v3.2.5 late-load.
+SELinux returned to Enforcing, the trusted Manager opened the live LKM, and
+the initial `--allow-shell` load granted root to UID 2000. The current
+KernelSU pair includes hardware-verified SELinux hiding and kernel
+`su_compat` fixes, so `adb shell su -c id` works without a real `su` file or
+a `/system/bin` overlay. The fresh-P0 fallback also completed through the app
+without a PC or Shizuku. This PR adds the 4K slide table and the current
+three-page/holder candidate; repeated device validation and upstream
+app-feed integration remain pending. See
+[`docs/SM-F731B-F731BXXS7GZF1.md`](docs/SM-F731B-F731BXXS7GZF1.md).
 
 Schema version 3 keeps each exploit and KernelSU artifact once. Its flat
 `models` and `kernelVersions` arrays define runtime compatibility. See
@@ -60,6 +73,7 @@ make TARGET=a53x-A536EXXSNGZG3 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=dm3q-S9180ZHS8FZF5 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=q4q-F9360ZCSAIZF1 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=dm2q-S916BXXSAFZG1 ANDROID_NDK_HOME=/path/to/android-ndk
+make TARGET=b5q-F731BXXS7GZF1 ANDROID_NDK_HOME=/path/to/android-ndk
 ```
 
 Outputs:

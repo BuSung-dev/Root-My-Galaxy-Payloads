@@ -1,0 +1,12 @@
+uid=10000 expected_hidden=1
+/sys/fs/selinux/context request=u:r:shell:s0 result=12 errno=0 response=u:r:shell:s0
+/sys/fs/selinux/context request=u:r:ksu:s0 result=-1 errno=22 response=
+/sys/fs/selinux/context request=u:object_r:ksu_file:s0 result=-1 errno=22 response=
+/sys/fs/selinux/context request=u:r:ksu_nonexistent_test_type:s0 result=-1 errno=22 response=
+/sys/fs/selinux/access request=u:r:shell:s0 u:r:shell:s0 2 result=27 errno=0 response=2217ffd ffffffff 0 ffffffff 1 0
+/sys/fs/selinux/access request=u:r:shell:s0 u:r:ksu:s0 2 result=-1 errno=22 response=
+/sys/fs/selinux/access request=malformed result=-1 errno=22 response=
+status version=1 sequence=0 enforcing=1 policyload=0 deny_unknown=1
+procattr context=u:r:ksu:s0 result=-1 errno=22
+procattr context=u:r:shell:s0 result=12 errno=0
+failures=0

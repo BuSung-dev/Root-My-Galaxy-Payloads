@@ -1,25 +1,34 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
+use Digest::SHA qw(sha256_hex);
 
-@ARGV == 3 or die
-    "usage: $0 RAW_IMAGE PROBE_OFFSET OUTPUT_HEADER\n";
-my ($image_path, $probe_text, $output_path) = @ARGV;
+(@ARGV == 3 || @ARGV == 4) or die
+    "usage: $0 RAW_IMAGE PROBE_OFFSET OUTPUT_HEADER [SLIDE_STEP]\n";
+my ($image_path, $probe_text, $output_path, $step_text) = @ARGV;
 
 $probe_text =~ /\A(?:0x)?[0-9a-fA-F]+\z/
     or die "invalid probe offset: $probe_text\n";
 my $probe_offset = hex($probe_text);
+my $slide_step = defined($step_text) ? hex($step_text) : 0x10000;
+my $max_slide = 0x1f0000;
+$slide_step >= 0x1000 && $slide_step % 0x1000 == 0
+    or die "slide step must be a positive multiple of 0x1000\n";
+$max_slide % $slide_step == 0
+    or die sprintf("slide step 0x%x does not divide max slide 0x%x\n",
+                   $slide_step, $max_slide);
 
 open my $image_fh, '<:raw', $image_path
     or die "open $image_path: $!\n";
 local $/;
 my $image = <$image_fh>;
 close $image_fh or die "close $image_path: $!\n";
+my $image_sha = sha256_hex($image);
 
 my @page_offsets = (0x000, 0x200, 0x400, 0x600,
                     0x800, 0xa00, 0xc00, 0xe00);
 my @rows;
-for my $slide (map { $_ * 0x10000 } 0 .. 31) {
+for (my $slide = 0; $slide <= $max_slide; $slide += $slide_step) {
     my $page_source = $probe_offset - $slide;
     $page_source >= 0
         or die sprintf("slide 0x%x exceeds probe offset 0x%x\n",
@@ -39,8 +48,9 @@ for my $slide (map { $_ * 0x10000 } 0 .. 31) {
 open my $out, '>', $output_path
     or die "open $output_path: $!\n";
 print {$out} <<"HEADER";
-// Generated from the exact raw Image.
-// Each row maps actual slide to Image[0x@{[sprintf '%x', $probe_offset]} - slide].
+// Generated from the exact raw Image (SHA-256 $image_sha).
+// Each row maps slide to Image[0x@{[sprintf '%x', $probe_offset]} - slide].
+// Slide step: 0x@{[sprintf '%x', $slide_step]} through 0x@{[sprintf '%x', $max_slide]}.
 #ifndef P0_FINGERPRINT_H
 #define P0_FINGERPRINT_H
 
@@ -91,5 +101,6 @@ for my $row (@rows) {
     }
 }
 close $verify_fh or die "close verification input: $!\n";
-printf "verified 32 rows and 256 source qwords at probe 0x%x\n",
-       $probe_offset;
+printf "verified %d rows and %d source qwords at probe 0x%x (step 0x%x)\n",
+       scalar(@rows), scalar(@rows) * scalar(@page_offsets),
+       $probe_offset, $slide_step;

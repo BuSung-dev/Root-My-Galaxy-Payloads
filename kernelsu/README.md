@@ -31,6 +31,8 @@ between KMIs.
 | `android12-5.10_kernelsu-F9360ZCSAIZF1-c12-nolto.ko` | `SM-F9360` `F9360ZCSAIZF1` | `android12-5.10` | Exact Z Fold4 module for auditing; no-LTO clang-12 (stock THIN-LTO function-sections layout panics on load for this kernel), 201-symbol manual relocation, loaded via `init_module` outside `ksud`; device-tested 2026-08-12 and 2026-09-01. A matching `ksud-F9360ZCSAIZF1-kdp` embedding this module is pending |
 | `android13-5.15.189_kernelsu-dm2q-S916BXXSAFZG1.ko` | `SM-S916B`, `S916BXXSAFZG1` | `android13-5.15` | Exact-source FZG1 module; RKP syscall-table and live text patching disabled; hardware load untested |
 | `ksud-dm2q-S916BXXSAFZG1-kdp` | Same exact S916B build | `android13-5.15` | Kallsyms-aware late-load binary embedding the exact-source FZG1 module; hardware load untested |
+| `android13-5.15.189_kernelsu-b5q-F731BXXS7GZF1-kdp.ko` | `SM-F731B`, `F731BXXS7GZF1` | `android13-5.15` | Exact Flip5 module; direct text/table patching disabled; hardware-validated SELinux hiding and su compatibility probes; all 205 imports audited against the recovered target |
+| `ksud-b5q-F731BXXS7GZF1-kdp` | Same exact Flip5 build | `android13-5.15` | Device-tested loader embedding both fixes; no `/system/bin` overlay needed; accepts the legacy helper's ignored `--ephemeral` compatibility flag |
 | `android13-5.15.189_kernelsu-gts9-X710XXS6EZF1.ko` | `SM-X710`, `X710XXS6EZF1` | `android13-5.15` | Exact-source module with target `vermagic`; RKP syscall-table and live text patching disabled; audited against the recovered X710 vmlinux (200 undefined imports, zero missing, zero CRC mismatches) |
 | `ksud-gts9-X710XXS6EZF1-kdp` | Same exact X710 build | `android13-5.15` | Device-tested late-load binary embedding the exact X710 no-patch-text module; KernelSU Manager reports `Working <LKM> [Jailbreak mode]` |
 | `android13-5.15.153_kernelsu-dm1q-S911U1UES6DYI3-kdp.ko` | `SM-S911U1`, `S911U1UES6DYI3` | `android13-5.15.153` | Exact DYI3 module with target `vermagic`, audited for manual relocation; no-patch-text build (RKP) with kretprobe fallback hooks |
@@ -38,11 +40,49 @@ between KMIs.
 | `android12-5.10_kernelsu-A536EXXSNGZG3-kdp.ko` | `SM-A536E`, `A536EXXSNGZG3` | `android12-5.10` | Device-tested exact A53 module with Samsung KDP/RKP/DEFEX support and live text/table patching disabled |
 | `ksud-A536EXXSNGZG3-kdp` | Same exact A53 build | `android12-5.10` | Device-tested late-load binary embedding the exact A53 module |
 
+The official KernelSU v3.2.5 Manager was deployed with the Flip5 pair.
+Its v2 signing-certificate SHA-256 exactly matches KernelSU's compiled
+default Manager trust hash. The APK is not bundled here; its exact hash is
+recorded in the [Flip5 validation notes](../docs/SM-F731B-F731BXXS7GZF1.md).
+
 The standalone `.ko` files are retained for auditing. Root My Galaxy downloads
 the corresponding `ksud-*` file because `ksud late-load` loads its embedded
 `<kmi>_kernelsu.ko` asset.
 
 The S916B FZG1 pair is built from Samsung's released `SM-S916B_16_Opensource` tree with the live FZG1 config and Android clang `r450784e`. Its zero-length `__versions` section and retained symbol tables are intended for KernelSU's kallsyms-aware manual loader. Audit against the exact recovered FZG1 `vmlinux.elf` found all 200 undefined names. Plain `insmod` is not supported. The target patch [`KernelSU-v3.2.5-dm2q-fzg1.patch`](patches/KernelSU-v3.2.5-dm2q-fzg1.patch) selects the exact FZG1 `enum ucount_type` ABI and hard-stops RKP syscall-table writes; the build also sets `CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y`. Use the root helper's guarded `--late-load` operation so the loader's security-domain and stdio transition can complete safely. Module initialization is not yet confirmed on S916B hardware.
+
+The Flip5 GZF1 pair is built with the exact
+`5.15.189-android13-8-33404244-abF731BXXS7GZF1` release, Samsung's
+`enum ucount_type` ABI, KDP/RKP/DEFEX support, and
+`CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y`. The module has a zero-length
+`__versions` section with retained symbol tables for manual relocation. All
+205 undefined imports in the current module are present in the recovered
+target, with zero CRC mismatches and no forbidden direct text/table-patching
+imports. Hardware late-load completed on SM-F731B: the module remained live
+under Enforcing SELinux and the officially signed v3.2.5 Manager established
+its trusted control connection. A subsequent clean-boot run passed
+`--allow-shell` on the initial late-load and verified UID-2000 ADB shell root
+as `u:r:ksu:s0` while SELinux remained Enforcing. The
+[su compatibility fix](../docs/SM-F731B-sucompat.md) resolves the syscall
+table read-only before the RKP guard returns, enabling the existing Samsung
+probes. Authorized shell can use `su` while a denied UID receives `ENOENT`,
+with no real `/system/bin/su` file or `/system/bin` mount. The previous
+frontend and overlay are superseded and should not be restored.
+`su -c id`, `su -v`, and `su -V` are hardware-verified, and the user confirmed
+Native Root Detector reports a normal environment.
+Do not unload/reload the live LKM to change `allow_shell`;
+select it on the first load. This deployment is volatile because the boot
+image was not changed.
+
+The [SELinux hiding fix](../docs/SM-F731B-selinux-hide.md) replaces unsupported
+operation-table writes with kernel-managed probes on this 5.15 target.
+Activation publishes the enabled state only after all hooks succeed, and
+preserves the failure errno otherwise. Device tests cover UID boundaries,
+context/access queries, process attributes, status read/mmap, and feature
+disable/re-enable. The current pair includes both fixes. Once hiding is
+activated, the module is pinned until reboot to retain callback and
+status-mapping state safely. Both source patches and regression probe
+sources are included in this repository.
 
 The generic 6.1 files remain build-verified only. The E3Q pair is
 device-tested and tied to the full S928U DZF2 release string; it must not be replaced

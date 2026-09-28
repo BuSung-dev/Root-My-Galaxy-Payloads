@@ -1,0 +1,10 @@
+uid=2000 allowed=1
+faccessat result=0 errno=0
+faccessat2 result=0 errno=0
+newfstatat result=0 errno=0
+statx result=0 errno=0
+open real su result=-1 errno=2
+su directory entry=0
+system/bin mount=0
+uid=0(root) gid=0(root) groups=0(root) context=u:r:ksu:s0
+failures=0

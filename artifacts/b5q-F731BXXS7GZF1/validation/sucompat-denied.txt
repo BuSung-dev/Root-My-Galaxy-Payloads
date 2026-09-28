@@ -1,0 +1,10 @@
+uid=10390 allowed=0
+faccessat result=-1 errno=2
+faccessat2 result=-1 errno=2
+newfstatat result=-1 errno=2
+statx result=-1 errno=2
+open real su result=-1 errno=2
+su directory listing unavailable errno=13
+system/bin mount=0
+execve su errno=2
+failures=0

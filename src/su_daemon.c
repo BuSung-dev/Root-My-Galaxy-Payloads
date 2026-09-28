@@ -479,10 +479,15 @@ static int run_kernelsu_late_load(struct su_request *request, int conn) {
     }
     if (loader == 0) {
       /* Let the downloaded target-specific ksud select its embedded module
-       * from the running kernel.  Ephemeral mode avoids replacing an existing
-       * /data/adb/ksud while the app only needs the module for this boot. */
+       * from the running kernel. The Flip5 build grants shell access on the
+       * initial load; other targets retain their ephemeral loading mode. */
+#ifdef KSU_LATE_LOAD_ALLOW_SHELL
+      execl(LOGCAT_PATH, "logcat", "late-load", "--allow-shell",
+            "--package-name", "me.weishu.kernelsu", (char *)NULL);
+#else
       execl(LOGCAT_PATH, "logcat", "late-load", "--ephemeral",
             "--package-name", "me.weishu.kernelsu", (char *)NULL);
+#endif
       dprintf(STDERR_FILENO, "late-load: exec: %s\n", strerror(errno));
       _exit(12);
     }

@@ -3,6 +3,7 @@ TARGET ?= pa3q-S938NKSUACZF1
 OUTDIR ?= build/$(TARGET)
 
 APP_TARGET_CFLAGS :=
+ROOT_HELPER_CFLAGS :=
 ifeq ($(TARGET),dm2q-S916BXXSAFZG1)
 APP_TARGET_CFLAGS := -DSLIDE_STACK_WRITER=1
 endif
@@ -17,6 +18,10 @@ APP_TARGET_CFLAGS := -DSLIDE_STACK_WRITER=1
 endif
 ifeq ($(TARGET),gts9-X710XXS6EZF1)
 APP_TARGET_CFLAGS := -DSLIDE_STACK_WRITER=1
+endif
+ifeq ($(TARGET),b5q-F731BXXS7GZF1)
+APP_TARGET_CFLAGS := -DSLIDE_STACK_WRITER=1
+ROOT_HELPER_CFLAGS := -DKSU_LATE_LOAD_ALLOW_SHELL=1
 endif
 ifeq ($(TARGET),a53x-A536EXXSNGZG3)
 API := 31
@@ -98,7 +103,7 @@ $(PRELOAD): $(PRELOAD_SRCS) $(TARGET_HEADER) src/offset.h src/common.h src/kerne
 	  -shared -pthread -o $@
 
 $(ROOT_HELPER): src/su_daemon.c | $(OUTDIR)
-	$(TARGET_CC) -fPIE -pie -O2 -g0 -Wall -Wextra $< -ldl -o $@
+	$(TARGET_CC) $(ROOT_HELPER_CFLAGS) -fPIE -pie -O2 -g0 -Wall -Wextra $< -ldl -o $@
 
 $(APP_PRELOAD): $(APP_PRELOAD_SRCS) $(TARGET_HEADER) src/offset.h src/common.h src/kernelsnitch/*.h | $(OUTDIR)
 	$(TARGET_CC) -DAPP_PAYLOAD=1 $(APP_TARGET_CFLAGS) -fPIC $(COMMON_CFLAGS) $(APP_PRELOAD_SRCS) \
