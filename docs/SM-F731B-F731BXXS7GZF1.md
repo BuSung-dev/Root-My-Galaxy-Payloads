@@ -198,6 +198,21 @@ The unsuccessful `256/32/4` controlled-mm fast profile and compact P0-page
 reuse both remain opt-in. Repeated Flip5 hardware validation of the
 keeper-handoff correction is still pending.
 
+### Third fresh-page fallback
+
+Run `80e24dce` used the restored direct-timing/mandatory-holder build and
+failed cleanly after two complete controlled pages: both MCAST calls returned
+normally and both pipe oracles remained exactly unchanged
+(`hits=0 changed=0`). It did not reboot or panic.
+
+The target now allows a third outer P0 attempt. This is deliberately not a
+same-page retry: `reset_pipe_attempt()` discards the old oracle, a new pipe
+page and a new 32-object controlled group are collected, and exactly one
+MCAST writer runs on that fresh state. RWC157 demonstrated that a second writer
+on one reclaimed page can corrupt its page-list node, so the gate2 experiment
+is fully reverted. Recent fresh-page preparations took about 138--148 seconds;
+the added cost occurs only after the first two cleanly miss.
+
 ## Build
 
 ```sh
@@ -292,6 +307,6 @@ official Manager may replace `/data/adb/ksud` with its stock daemon.
 
 ## Open items
 
-1. Device repeated-run validation of the restored UID-0 keeper handoff
+1. Device repeated-run validation of the third fresh page and UID-0 holder
 2. Upstream Root My Galaxy support-feed integration
 3. A persistent boot integration, if the bootloader is later unlocked

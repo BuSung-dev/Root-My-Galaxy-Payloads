@@ -34,6 +34,12 @@ The preserved RWC156 crash record confirms the regression: init killed the
 successful run's P0 keeper PID 16793 and stability keeper PID 13471; 84 ms
 after the second kill the allocator found refcount -1, followed by a
 `clear_page` panic 2.50 seconds after the first kill.
+The app now permits a third *fresh-page* P0 fallback after two exact clean
+oracle misses. Each fallback discards the previous pipe oracle and controlled
+page, then rebuilds both before performing one MCAST write. It never retries a
+writer on the same reclaimed page; the gate2 experiment was reverted after
+RWC157 proved that unsafe. The third search is reached only on the two-miss
+tail and recently costs roughly 2--3 additional minutes.
 Compact P0-page reuse remains compiled behind `RMG_P0_PAGE_REUSE=1`, but is
 disabled by default and no enabled reuse binary is published in the feed.
 
@@ -41,7 +47,7 @@ disabled by default and no enabled reuse binary is published in the feed.
 
 | File | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `cve-2026-43499-app.so` | 182216 | `04b7c19f7ffc892f4c637f6f52aa412d71c68a645b75a6c6a7a814a1aa08af77` |
+| `cve-2026-43499-app.so` | 182512 | `f9db4bbdf121c30eba0cd0abf58955b2b9f022cbd9983c77bb8a1d10a88edba8` |
 | `cve-2026-43499-app-p0-reliable.so` | 171680 | `3c4e6fbfe68baac56b4994963f7492963554a51c51433d504e774aec04c854d8` |
 | `cve-2026-43499-app-baseline.so` | 170136 | `508af8ecdf09e33f06a9b532c6e3a9f187d3053ac5eb9cc5ef63eee17a0fe8fa` |
 | `cve-2026-43499-root` | 27072 | `6a397067c4ac3841de01527d1f75219baa5ca6c4a6bc4b52c4408474e2456c82` |
@@ -93,7 +99,7 @@ expanded 4K fingerprint table.
 ## Integration status
 
 - Validation covers ADB-shell and direct app-domain execution on this exact
-  firmware without Shizuku. The keeper-handoff correction is build-validated,
+  firmware without Shizuku. The three-page/holder candidate is build-validated,
   but its timing, post-root stability, and repeated-run reliability remain
   pending.
 - The exact `0xa8000000` physical alias is confirmed by the latest P0 sample

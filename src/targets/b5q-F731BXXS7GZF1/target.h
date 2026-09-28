@@ -29,7 +29,7 @@
 #define SLIDE_KERNEL_PAGE_SETUP_ATTEMPTS 8
 #define FOPS_KERNEL_PAGE_SETUP_ATTEMPTS 8
 #define BUILD_VARIANT_LABEL \
-  "b5q-F731BXXS7GZF1-mcast-adaptive-p0-handoff-pipe-root"
+  "b5q-F731BXXS7GZF1-mcast-adaptive-p0x3-handoff-root"
 #define APP_PHYS_P0_ORACLE 1
 #define APP_REQUIRE_FRESH_P0_SESSION 1
 #define APP_TRACEFS_SLIDE 1
@@ -54,7 +54,7 @@
  * time and use downstream pipe readback to decide whether another probe is
  * needed; blind repeated tree operations are deliberately disabled.
  */
-#define APP_SLIDE_FRESH_PAGE_ATTEMPTS 2
+#define APP_SLIDE_FRESH_PAGE_ATTEMPTS 3
 #define APP_P0_REFRESH_ORACLE_EACH_FRESH_PAGE 1
 #define APP_P0_REDUNDANT_SLOT_WRITES 1
 #define APP_P0_PROBE_ATTEMPTS 3
