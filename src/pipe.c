@@ -193,10 +193,6 @@ static void close_pipe_parent_objects(void) {
   pipe_objects_ready = 0;
 }
 
-#ifndef PIPE_PREPARE_REAP_TIMEOUT_MS
-#define PIPE_PREPARE_REAP_TIMEOUT_MS 3000
-#endif
-
 int stop_pipe_prepare_child(void) {
   if (pipe_prepare_child <= 0) {
     return 1;
@@ -208,29 +204,19 @@ int stop_pipe_prepare_child(void) {
                child, errno);
   }
 
-  size_t deadline = gettime_ns() +
-      (size_t)PIPE_PREPARE_REAP_TIMEOUT_MS * 1000000ULL;
-  for (;;) {
-    int status = 0;
-    pid_t waited = waitpid(child, &status, WNOHANG);
-    if (waited == child || (waited < 0 && errno == ECHILD)) {
-      pipe_prepare_child = -1;
-      return 1;
-    }
-    if (waited < 0 && errno != EINTR) {
-      pr_warning("pipe prepare child reap failed pid=%d errno=%d\n",
-                 child, errno);
-      pipe_prepare_hard_failed = 1;
-      return 0;
-    }
-    if (gettime_ns() >= deadline) {
-      pr_warning("pipe prepare child reap timeout pid=%d timeout_ms=%d\n",
-                 child, PIPE_PREPARE_REAP_TIMEOUT_MS);
-      pipe_prepare_hard_failed = 1;
-      return 0;
-    }
-    usleep(10000);
+  int status = 0;
+  pid_t waited;
+  do {
+    waited = waitpid(child, &status, 0);
+  } while (waited < 0 && errno == EINTR);
+  if (waited == child || (waited < 0 && errno == ECHILD)) {
+    pipe_prepare_child = -1;
+    return 1;
   }
+  pr_warning("pipe prepare child reap failed pid=%d errno=%d\n",
+             child, errno);
+  pipe_prepare_hard_failed = 1;
+  return 0;
 }
 
 uintptr_t prepare_pipe_buffer_page_child(void) {
@@ -1129,7 +1115,6 @@ static int pipe_duplicate_bytes(
   return duplicated == (ssize_t)size;
 }
 
-#if !defined(APP_ROOT_REF_HOLDER_REQUIRED) || APP_ROOT_REF_HOLDER_REQUIRED
 static int transfer_p0_references_to_root(int retained_pipe_index) {
   int retained_fds[] = {
     pipe_fds_reclaim[retained_pipe_index][0],
@@ -1194,7 +1179,6 @@ static int transfer_p0_references_to_root(int retained_pipe_index) {
   close(socket_fd);
   return transferred;
 }
-#endif
 
 static void spawn_p0_ref_keeper(int retained_pipe_index) {
   pid_t child = SYSCHK(fork());
@@ -1236,15 +1220,6 @@ static void spawn_p0_ref_keeper(int retained_pipe_index) {
       pause();
     }
   }
-#if defined(APP_ROOT_REF_HOLDER_REQUIRED) && \
-    !APP_ROOT_REF_HOLDER_REQUIRED
-  /* This target only needs the detached process to retain the selected pipe
-   * references.  Polling the root socket can never improve correctness and,
-   * in an untrusted-app domain, creates a denied/audited connect every 10 ms. */
-  for (;;) {
-    pause();
-  }
-#else
   useconds_t retry_delay = 10000;
   for (;;) {
     if (transfer_p0_references_to_root(retained_pipe_index)) {
@@ -1258,7 +1233,6 @@ static void spawn_p0_ref_keeper(int retained_pipe_index) {
       }
     }
   }
-#endif
 }
 
 void start_p0_ref_keeper(void) {

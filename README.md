@@ -26,7 +26,7 @@ It intentionally does not contain Android application source code.
 | `q4q-F9360ZCSAIZF1` | Galaxy Z Fold4 `SM-F9360` | `5.10.236` | Device-tested |
 | `dm2q-S916BXXSAFZG1` | Galaxy S23+ `SM-S916B` | `5.15.189` | Experimental: hardware root from ADB shell; not in app feed |
 | `dm3q-S918BXXSAFZF5` | Galaxy S23 Ultra `SM-S918B` | `5.15.189` | Confirmed working: full chain through the app (Shizuku mode) incl. KernelSU late-load and granted `su` |
-| `b5q-F731BXXS7GZF1` | Galaxy Z Flip5 `SM-F731B` | `5.15.189` | Hardware verified through ADB and the Shizuku-free app; bounded-pipe reliability revision pending repeat validation |
+| `b5q-F731BXXS7GZF1` | Galaxy Z Flip5 `SM-F731B` | `5.15.189` | Hardware verified through ADB and the Shizuku-free app; keeper-handoff correction pending repeat validation |
 
 The S916B FZG1 profile is shell-only today. Its exact tracefs route works from `adb shell`, but direct app-domain execution is not supported. Root My Galaxy would need to delegate the native runner through an authorized shell bridge such as Shizuku. See [`artifacts/dm2q-S916BXXSAFZG1/README.md`](artifacts/dm2q-S916BXXSAFZG1/README.md).
 
@@ -40,7 +40,7 @@ KernelSU pair includes hardware-verified SELinux hiding and kernel
 `su_compat` fixes, so `adb shell su -c id` works without a real `su` file or
 a `/system/bin` overlay. The fresh-P0 fallback also completed through the app
 without a PC or Shizuku. This PR adds the 4K slide table and the current
-bounded-pipe reliability revision; repeated device validation and upstream
+keeper-handoff correction; repeated device validation and upstream
 app-feed integration remain pending. See
 [`docs/SM-F731B-F731BXXS7GZF1.md`](docs/SM-F731B-F731BXXS7GZF1.md).
 

@@ -148,48 +148,54 @@ Compact P0-page reuse remains compiled for explicit
 validated repeatedly on hardware. The previous enabled build is not published
 as a selectable feed artifact.
 
-## 2026-09-27 watchdog audit and bounded pipe preparation
+## 2026-09-27/28 watchdog audit and keeper-handoff correction
 
-Eleven retained app histories measured three end-to-end successes. Seven runs
-completed the P0 gate workflow, all seven eventually acquired the gate, and
-six recovered a unique slide. Only three of those six post-slide runs reached
-root, making the FOPS/pipe half of the chain the dominant remaining failure
-source. Successful runs took 667--937 seconds; the two controlled page searches
-consumed more than 93% of that time. The adaptive clean P0 retry is retained
-because it recovered the first gate miss in the latest run.
+Eleven pre-change histories measured three end-to-end successes. The September
+27 failure passed fake-fops verification and restoration, then wedged storage
+during final pipe preparation until Samsung's 100-second software watchdog
+panicked. UFS reported no hardware error or outstanding command, and the
+system was not out of memory.
 
-The latest failure passed the fake-fops write/read proof, restored both P0
-pages, and verified restoration of `misc_fops`. It then stopped immediately
-after `cfi starting pipe physrw` and the conservative `2048/64/8`
-KernelSnitch profile. Samsung's preserved last-kmsg records a 100-second
-software-watchdog panic. Storage interrupts stopped about nine seconds after
-pipe preparation began, while more than forty tasks accumulated in F2FS/EROFS
-page waits. UFS reported no outstanding command, saved error, or failed host,
-and the system had ample free memory and swap; this was a page-cache/storage
-wedge, not an app crash, OOM, or UFS hardware error.
+The first watchdog candidate (`2b6ad85`) added a staging-futex requeue barrier,
+a 30-second pipe deadline, and a permanently paused P0 reference keeper. Six
+completed hardware runs measured one success. Every pipe preparation completed
+normally in 4.6--26.8 seconds; there were no timeout or hard-failure events.
+The failures remained two clean P0 misses, one dirty P0 oracle, two FOPS write
+misses on the same spent boot, and one abrupt controlled-mm collection. The
+new timeout and forced waiter barrier therefore provided no measured hit-rate
+benefit, and the slowest healthy preparation left only 3.2 seconds of margin.
 
-The bounded-pipe candidate addresses the concrete pressure and hang paths:
+The permanent keeper was a concrete post-root regression. It inherited the
+controlled reclaim socketpairs and roughly 285 MiB of queued payloads in
+addition to the selected P0 pipes, then remained forever as an app-UID orphan.
+Before `2b6ad85`, it transferred exactly three stabilizing descriptors to the
+UID-0 `cve43499-roothold` service and exited, closing all unrelated inherited
+descriptors. Keeping those reclaim allocations alive—or losing them abruptly
+when Android kills the orphan—can destabilize the system after a nominally
+successful exploit.
 
-- A target with `APP_ROOT_REF_HOLDER_REQUIRED=0` now leaves its detached P0
-  keeper blocked while retaining the selected descriptors. The old 10 ms root
-  socket loop generated about 93 denied audit events per second and raised
-  `audit_lost` to 46,585 before the panic.
-- KernelSnitch waiters first sleep on a staging futex and are moved with
-  `FUTEX_CMP_REQUEUE_PRIVATE`. The kernel's returned requeue count certifies
-  that every waiter is actually queued on the measured bucket; the former two
-  `sched_yield()` calls did not provide that guarantee. Teardown changes the
-  futex value before wake, closing the late-waiter lost-wake race.
-- Flip5 pipe-page preparation has a 30-second absolute deadline. Timeout or
-  poll failure is sticky for the exploit invocation: the child receives
-  `SIGKILL`, reap uses bounded `waitpid(WNOHANG)`, parent pipe descriptors are
-  closed, and all subsequent pipe retries are refused. Shared-memory stage and
-  index checkpoints identify the last allocator phase without depending on a
-  log write during a storage wedge.
+The preserved RWC156 last-kmsg confirms this mechanism directly. The successful
+run logged P0 keeper PID 16793 and stability keeper PID 13471. Init killed
+both untracked processes at uptime 30593.032 and 30593.111. Just 84 ms later
+the allocator reported a bad page with refcount -1; 2.50 seconds after the
+first kill, the kernel panicked in `clear_page`. Restoring the curated UID-0
+handoff preserves the three sensitive references when Android cleans up the
+app-domain keepers.
 
-The unsuccessful `256/32/4` controlled-mm fast profile remains opt-in; this
-change does not promote it. The bounded candidate and the shared waiter barrier
-compile for b5q plus the S918B and S926B regression targets. Repeated Flip5
-hardware validation of this new binary is still pending.
+The corrected candidate consequently:
+
+- restores the hardware-proven direct `FUTEX_WAIT_PRIVATE` enqueue timing and
+  removes the unvalidated 30-second preparation/reap cutoffs;
+- retains explicit pthread error checks and changes the target futex value
+  before wake, preventing late waiters from sleeping after cleanup;
+- exponentially backs keeper connection attempts down from 10 ms to at most
+  once per second, then restores the three-FD SCM_RIGHTS handoff and exits;
+- keeps shared pipe-stage progress checkpoints, checked result-pipe I/O,
+  `SIGPIPE` handling, and centralized descriptor cleanup.
+
+The unsuccessful `256/32/4` controlled-mm fast profile and compact P0-page
+reuse both remain opt-in. Repeated Flip5 hardware validation of the
+keeper-handoff correction is still pending.
 
 ## Build
 
@@ -285,6 +291,6 @@ official Manager may replace `/data/adb/ksud` with its stock daemon.
 
 ## Open items
 
-1. Device repeated-run validation of bounded pipe preparation and keeper quiescence
+1. Device repeated-run validation of the restored UID-0 keeper handoff
 2. Upstream Root My Galaxy support-feed integration
 3. A persistent boot integration, if the bootloader is later unlocked
