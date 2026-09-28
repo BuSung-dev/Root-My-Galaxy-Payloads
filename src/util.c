@@ -375,7 +375,11 @@ int select_slide_payload_index(size_t index) {
   return 1;
 }
 
-#if !defined(APP_CLOSED_FOPS_ROUTE) || !APP_CLOSED_FOPS_ROUTE
+#if (!defined(APP_CLOSED_FOPS_ROUTE) || !APP_CLOSED_FOPS_ROUTE) || \
+    (defined(APP_REQUIRE_FRESH_P0_SESSION) && \
+     APP_REQUIRE_FRESH_P0_SESSION && \
+     defined(APP_FOPS_DATA_ALIAS_DIAG_ONLY) && \
+     APP_FOPS_DATA_ALIAS_DIAG_ONLY)
 static void put_slide_bank_entry(unsigned char *p, uintptr_t payload_base,
                                  size_t slot, uintptr_t parent,
                                  uintptr_t target) {
@@ -1907,6 +1911,25 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
                            slide_bank_parents[0],
                            slide_bank_targets[0]);
 #endif
+#endif
+#if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE && \
+    defined(APP_CLOSED_FOPS_ROUTE) && APP_CLOSED_FOPS_ROUTE && \
+    defined(APP_REQUIRE_FRESH_P0_SESSION) && \
+    APP_REQUIRE_FRESH_P0_SESSION && \
+    defined(APP_FOPS_DATA_ALIAS_DIAG_ONLY) && \
+    APP_FOPS_DATA_ALIAS_DIAG_ONLY
+    /* CLOSED alias-verifier pages need the same gate marker + bank waiter
+     * content as the banked flow (the arrays above are now initialized
+     * for CLOSED+DIAG_ONLY too). Production (probe inactive) keeps the
+     * exact legacy CLOSED layout: nothing extra is written. */
+    if (fops_data_probe_active) {
+      memcpy(p + P0_ORACLE_GATE_PAGE_OFF, "RMG-P0-ORACLE-GATE", 18);
+      for (size_t slot = 0; slot < SLIDE_BANK_SLOTS; slot++) {
+        put_slide_bank_entry(p, payload_base, slot,
+                             slide_bank_parents[slot],
+                             slide_bank_targets[slot]);
+      }
+    }
 #endif
     }
   }

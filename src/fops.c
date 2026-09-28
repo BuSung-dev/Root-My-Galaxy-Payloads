@@ -378,6 +378,14 @@ int try_cfi_stage(void) {
                "pos0_ret=%zd pos0_first=%02x%02x pos0_errno=%d\n",
                fd, cfg_last_set_ret, cfg_last_set_errno,
                ctl_rb, ctl_buf[0], ctl_buf[1], ctl_errno);
+    /* Decisive A/B probe (read-only): fake table uses noop_llseek which
+     * always succeeds; true ashmem_llseek rejects with EINVAL. lseek
+     * SEEK_CUR with offset 0 moves nothing either way. */
+    errno = 0;
+    off_t ll_cur = lseek(fd, 0, SEEK_CUR);
+    int ll_errno = errno;
+    pr_warning("cfi misc_fops llseek fd=%d cur=%lld ll_errno=%d\n",
+               fd, (long long)ll_cur, ll_errno);
     fops_before = pre_fops;
     cfi_last_step = 4;
     cfi_last_errno = pre_errno;

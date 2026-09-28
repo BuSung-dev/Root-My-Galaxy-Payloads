@@ -1210,11 +1210,46 @@ int verify_p0_pipe_data_page(uintptr_t target, uint64_t expected) {
     if (observed == expected) {
       exact_matches++;
     }
+    /* Nearest-match forensics (logging only): scan the page for the
+     * expected word to distinguish off-by-N (fixable offset) from a
+     * wrong page. Also dump the neighborhood of the target offset. */
+    long nearest_off = -1;
+    long nearest_dist = 0;
+    {
+      /* NOTE: page is a char array (1-byte aligned); never dereference
+       * it as u64* (UB/strict-aliasing + possible SIGBUS). */
+      for (size_t wi = 0; wi + sizeof(uint64_t) <= sizeof(page); wi++) {
+        uint64_t w = 0;
+        memcpy(&w, page + wi, sizeof(w));
+        if (w == expected) {
+          long off = (long)wi;
+          long dist = off >= (long)target_offset
+                          ? off - (long)target_offset
+                          : (long)target_offset - off;
+          if (nearest_off == -1 || dist < nearest_dist) {
+            nearest_off = off;
+            nearest_dist = dist;
+          }
+        }
+      }
+    }
+    uint64_t win[4] = {0, 0, 0, 0};
+    {
+      size_t base = target_offset >= 16 ? target_offset - 16 : 0;
+      for (size_t k = 0; k < 4; k++) {
+        if (base + k * 8 + sizeof(uint64_t) <= sizeof(page)) {
+          memcpy(&win[k], page + base + k * 8, sizeof(uint64_t));
+        }
+      }
+    }
     pr_info("fops data alias pipe=%zu target=%016zx offset=%zu "
-            "observed=%016llx expected=%016llx match=%d\n",
+            "observed=%016llx expected=%016llx match=%d nearest=%ld "
+            "win=%016llx:%016llx:%016llx:%016llx\n",
             pipe_index, target, target_offset,
             (unsigned long long)observed,
-            (unsigned long long)expected, observed == expected);
+            (unsigned long long)expected, observed == expected, nearest_off,
+            (unsigned long long)win[0], (unsigned long long)win[1],
+            (unsigned long long)win[2], (unsigned long long)win[3]);
   }
   pr_info("fops data alias changed=%d exact=%d target=%016zx "
           "observed=%016llx expected=%016llx\n",
