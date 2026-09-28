@@ -1279,7 +1279,7 @@ int prepare_p0_pipe_oracle(void) {
       return 0;
     }
   }
-  pr_info("p0 pipe oracle prepared base=%016zx pipes=%d data_slots=1\n",
+  pr_info("p0 pipe oracle prepared base=%016zx pipes=%d gate_slots=1\n",
           pipebuf_page_base, PIPE_RECLAIM);
   return 1;
 }
@@ -1313,63 +1313,6 @@ static int p0_pipe_marker_matches(const unsigned char *page, size_t size) {
     }
   }
   return 1;
-}
-
-int peek_p0_pipe_oracle_gate(void) {
-  int snapshot[2] = {-1, -1};
-  unsigned char page[PAGE_SIZE];
-  int gate_hits = 0;
-  int changed_pages = 0;
-
-  if (pipe2(snapshot, O_CLOEXEC) != 0 ||
-      fcntl(snapshot[0], F_SETPIPE_SZ, PAGE_SIZE) < 0) {
-    pr_warning("p0 gate peek setup failed errno=%d\n", errno);
-    if (snapshot[0] >= 0) close(snapshot[0]);
-    if (snapshot[1] >= 0) close(snapshot[1]);
-    spawn_p0_ref_keeper(-1);
-    return -2;
-  }
-
-  for (size_t pipe_index = 0; pipe_index < PIPE_RECLAIM; pipe_index++) {
-    errno = 0;
-    ssize_t duplicated = syscall(
-        SYS_tee, pipe_fds_reclaim[pipe_index][0], snapshot[1],
-        PAGE_SIZE, SPLICE_F_NONBLOCK);
-    if (duplicated != PAGE_SIZE ||
-        !pipe_read_full(snapshot[0], page, sizeof(page))) {
-      pr_warning("p0 gate peek failed pipe=%zu tee=%zd errno=%d\n",
-                 pipe_index, duplicated, errno);
-      close(snapshot[0]);
-      close(snapshot[1]);
-      spawn_p0_ref_keeper(-1);
-      return -2;
-    }
-
-    size_t gate_offset = PAGE_SIZE;
-    for (size_t offset = 0; offset + 18 <= PAGE_SIZE; offset++) {
-      if (memcmp(page + offset, "RMG-P0-ORACLE-GATE", 18) == 0) {
-        gate_offset = offset;
-        break;
-      }
-    }
-    if (gate_offset != PAGE_SIZE) {
-      gate_hits++;
-    } else if (!p0_pipe_marker_matches(page, sizeof(page))) {
-      changed_pages++;
-    }
-  }
-
-  close(snapshot[0]);
-  close(snapshot[1]);
-  pr_info("p0 pipe gate peek hits=%d changed=%d\n",
-          gate_hits, changed_pages);
-  if (gate_hits == 1 && changed_pages == 0) {
-    return 1;
-  }
-  if (gate_hits == 0 && changed_pages == 0) {
-    return 0;
-  }
-  return -1;
 }
 
 int verify_p0_pipe_oracle_gate(void) {

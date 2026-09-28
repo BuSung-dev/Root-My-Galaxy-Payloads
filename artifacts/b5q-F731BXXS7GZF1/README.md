@@ -21,13 +21,6 @@ marker permits another attempt, using a different fake waiter bank. Changed,
 ambiguous, and I/O-error states fail closed. FOPS retries now use the observed
 `misc_fops` value rather than the race child's status, and recoverable pipe/root
 errors execute their rollback paths instead of exiting from the logger.
-Clean P0 gate misses now get one inexpensive same-page retry using independent
-waiter bank slot 6. Before that retry, a `tee` snapshot reads every oracle
-pipe without consuming slot 0; the retry is allowed only for exact
-`hits=0 changed=0`. Any hit or changed/uncertain page stops immediately and
-runs the existing consuming verifier once. Together with two fresh pages this
-provides up to four verified gate windows without another controlled-mm search.
-Slot 6 remains reserved for production when experimental page reuse is enabled.
 The retained P0 keeper now backs off from 10 ms polling to at most one root
 socket attempt per second, then transfers only the three stabilizing FDs to
 the UID-0 `cve43499-roothold` process and exits. The payload now requires that
@@ -48,7 +41,7 @@ disabled by default and no enabled reuse binary is published in the feed.
 
 | File | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `cve-2026-43499-app.so` | 183680 | `f30ebbaf736322deffdfeecc4ed2fb7d648451ffea05e4b0857e27a959967bf6` |
+| `cve-2026-43499-app.so` | 182216 | `04b7c19f7ffc892f4c637f6f52aa412d71c68a645b75a6c6a7a814a1aa08af77` |
 | `cve-2026-43499-app-p0-reliable.so` | 171680 | `3c4e6fbfe68baac56b4994963f7492963554a51c51433d504e774aec04c854d8` |
 | `cve-2026-43499-app-baseline.so` | 170136 | `508af8ecdf09e33f06a9b532c6e3a9f187d3053ac5eb9cc5ef63eee17a0fe8fa` |
 | `cve-2026-43499-root` | 27072 | `6a397067c4ac3841de01527d1f75219baa5ca6c4a6bc4b52c4408474e2456c82` |
@@ -100,7 +93,7 @@ expanded 4K fingerprint table.
 ## Integration status
 
 - Validation covers ADB-shell and direct app-domain execution on this exact
-  firmware without Shizuku. The readback-gated gate2/handoff candidate is build-validated,
+  firmware without Shizuku. The keeper-handoff correction is build-validated,
   but its timing, post-root stability, and repeated-run reliability remain
   pending.
 - The exact `0xa8000000` physical alias is confirmed by the latest P0 sample
