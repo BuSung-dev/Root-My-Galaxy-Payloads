@@ -274,6 +274,8 @@ extern int pipe_stage_attempts;
 extern int cfi_dirty_seen;
 extern int cfi_last_step;
 extern int cfi_last_errno;
+extern int cfg_last_set_ret;
+extern int cfg_last_set_errno;
 extern uint64_t kmalloc_pipe_cache;
 extern uint64_t kmalloc_normal_1k_cache;
 extern uint64_t kmalloc_normal_2k_cache;

@@ -2565,6 +2565,11 @@ uintptr_t prepare_good_kernel_page(int payload_mode) {
   return 0;
 }
 
+/* Diagnostic snapshot of the last configfs_read_once name-blob setup.
+ * Written on every call, consumed by fail-path diagnostics only. */
+int cfg_last_set_ret = 0;
+int cfg_last_set_errno = 0;
+
 ssize_t configfs_write_once(int fd, uintptr_t target, const void *data, size_t len) {
   unsigned char blob[128];
   const uintptr_t write_align = 0x01000000ULL;
@@ -2675,6 +2680,8 @@ ssize_t configfs_read_once(int fd, uintptr_t target, void *data, size_t len) {
   errno = 0;
   int set_ret = try_set_ashmem_name_blob(fd, blob, sizeof(blob));
   int set_errno = errno;
+  cfg_last_set_ret = set_ret;
+  cfg_last_set_errno = set_errno;
   if (set_ret != 0) {
     errno = set_errno;
     return -1;
