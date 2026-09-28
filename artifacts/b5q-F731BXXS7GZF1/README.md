@@ -23,7 +23,8 @@ ambiguous, and I/O-error states fail closed. FOPS retries now use the observed
 errors execute their rollback paths instead of exiting from the logger.
 The retained P0 keeper now backs off from 10 ms polling to at most one root
 socket attempt per second, then transfers only the three stabilizing FDs to
-the UID-0 `cve43499-roothold` process and exits. This avoids both the audit
+the UID-0 `cve43499-roothold` process and exits. The payload now requires that
+holder to become ready before it reports root success. This avoids both the audit
 storm and the regressed permanent app-domain keeper, which retained unrelated
 reclaim sockets and queued SKBs after a successful exploit. KernelSnitch keeps
 the hardware-proven direct futex-wait timing; cleanup changes the target value
@@ -40,7 +41,7 @@ disabled by default and no enabled reuse binary is published in the feed.
 
 | File | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `cve-2026-43499-app.so` | 181992 | `4bf62dc28ae0145154b573e566fd8a0c4f2a752a390cfbdd0167b9c1fdc0c7e2` |
+| `cve-2026-43499-app.so` | 182216 | `04b7c19f7ffc892f4c637f6f52aa412d71c68a645b75a6c6a7a814a1aa08af77` |
 | `cve-2026-43499-app-p0-reliable.so` | 171680 | `3c4e6fbfe68baac56b4994963f7492963554a51c51433d504e774aec04c854d8` |
 | `cve-2026-43499-app-baseline.so` | 170136 | `508af8ecdf09e33f06a9b532c6e3a9f187d3053ac5eb9cc5ef63eee17a0fe8fa` |
 | `cve-2026-43499-root` | 27072 | `6a397067c4ac3841de01527d1f75219baa5ca6c4a6bc4b52c4408474e2456c82` |

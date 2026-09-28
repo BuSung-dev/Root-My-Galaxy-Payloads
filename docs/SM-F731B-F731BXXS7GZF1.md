@@ -189,7 +189,8 @@ The corrected candidate consequently:
 - retains explicit pthread error checks and changes the target futex value
   before wake, preventing late waiters from sleeping after cleanup;
 - exponentially backs keeper connection attempts down from 10 ms to at most
-  once per second, then restores the three-FD SCM_RIGHTS handoff and exits;
+  once per second, restores the three-FD SCM_RIGHTS handoff, and requires the
+  UID-0 holder to become ready before reporting root success;
 - keeps shared pipe-stage progress checkpoints, checked result-pipe I/O,
   `SIGPIPE` handling, and centralized descriptor cleanup.
 
