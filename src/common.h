@@ -482,6 +482,7 @@ int install_pipe_physrw(int fd);
 int prepare_p0_pipe_oracle(void);
 int expand_p0_pipe_oracle(void);
 int rewrite_p0_payload_page(const void *data, size_t size);
+int peek_p0_pipe_oracle_gate(void);
 int verify_p0_pipe_oracle_gate(void);
 int verify_p0_pipe_data_page(uintptr_t target, uint64_t expected);
 uintptr_t scan_p0_pipe_oracle(void);

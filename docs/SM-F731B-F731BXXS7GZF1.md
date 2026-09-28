@@ -198,6 +198,33 @@ The unsuccessful `256/32/4` controlled-mm fast profile and compact P0-page
 reuse both remain opt-in. Repeated Flip5 hardware validation of the
 keeper-handoff correction is still pending.
 
+### Readback-gated same-page retry candidate
+
+The apparent miss increase came from the now-reverted forced-requeue build.
+With the hardware-proven direct futex timing, eight recorded fresh windows
+produced seven gate hits, one exact clean miss, and no dirty gate result; all
+seven runs reached a gate hit by the two-page cap, and six recovered the slide
+(the remaining run failed later fingerprint validation). The forced-requeue
+build instead recorded three hits, two clean misses, and one dirty result
+across six windows. The latest two-miss run still carried that bounded-build
+label and barrier log, so it did not test the restored timing.
+
+Gate2 adds an inexpensive fallback for the remaining clean miss rather than a
+third controlled-mm page, whose recent mean preparation time is about 206
+seconds. After slot 0 runs, a temporary pipe receives a nondestructive `tee`
+snapshot of every oracle page. Only an exact all-marker snapshot permits
+independent waiter bank slot 6 to write the same gate parent and slot-0 target.
+A hit, changed page, or snapshot error stops immediately; the original
+consuming verifier runs exactly once only after a non-clean snapshot. Thus the
+pipe ring head stays on slot 0 for the retry and mutated slot-0 PI state is
+never reused. The existing two-page fallback now permits at most four
+readback-gated windows, adding only one MCAST race per clean-miss page.
+Experimental P0-page reuse reserves slot 6 and automatically disables gate2.
+
+Independence between the two banks is not yet proven, so no success-rate claim
+is attached to this candidate. Logs report gate attempt, bank slot, trigger
+result, and peek classification for direct hardware A/B measurement.
+
 ## Build
 
 ```sh
@@ -292,6 +319,6 @@ official Manager may replace `/data/adb/ksud` with its stock daemon.
 
 ## Open items
 
-1. Device repeated-run validation of the restored UID-0 keeper handoff
+1. Device repeated-run validation of gate2 and the required UID-0 keeper handoff
 2. Upstream Root My Galaxy support-feed integration
 3. A persistent boot integration, if the bootloader is later unlocked

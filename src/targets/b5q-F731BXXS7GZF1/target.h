@@ -29,7 +29,7 @@
 #define SLIDE_KERNEL_PAGE_SETUP_ATTEMPTS 8
 #define FOPS_KERNEL_PAGE_SETUP_ATTEMPTS 8
 #define BUILD_VARIANT_LABEL \
-  "b5q-F731BXXS7GZF1-mcast-adaptive-p0-handoff-pipe-root"
+  "b5q-F731BXXS7GZF1-mcast-adaptive-p0-gate2-handoff-root"
 #define APP_PHYS_P0_ORACLE 1
 #define APP_REQUIRE_FRESH_P0_SESSION 1
 #define APP_TRACEFS_SLIDE 1
@@ -57,6 +57,10 @@
 #define APP_SLIDE_FRESH_PAGE_ATTEMPTS 2
 #define APP_P0_REFRESH_ORACLE_EACH_FRESH_PAGE 1
 #define APP_P0_REDUNDANT_SLOT_WRITES 1
+#define APP_P0_GATE_ATTEMPTS 2
+#if APP_P0_GATE_ATTEMPTS > 2
+#error b5q has only two independent P0 gate waiter banks
+#endif
 #define APP_P0_PROBE_ATTEMPTS 3
 #define APP_P0_NONDESTRUCTIVE_PROBE_SCAN 1
 #define APP_FOPS_FRESH_PAGE_ATTEMPTS 3
@@ -507,6 +511,9 @@
 #define P0_ORACLE_GATE_RESTORE_SLOT 4
 #define P0_ORACLE_PROBE_RESTORE_SLOT 5
 #define P0_ORACLE_PRODUCTION_SLOT 6
+/* Slot 6 is an independent gate writer while page reuse is disabled.  A
+ * nondestructive oracle snapshot must prove slot 0 missed before using it. */
+#define P0_ORACLE_GATE_RETRY_SLOT P0_ORACLE_PRODUCTION_SLOT
 #define P0_ORACLE_GATE_PAGE_OFF 0x0e80
 #define P0_ORACLE_GATE_OBJECT_INDEX 1
 

