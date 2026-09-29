@@ -207,8 +207,8 @@ _Static_assert(
     "mirrored FOPS table overlaps primary FOPS table");
 #endif
 
-static int configure_slide_bank_geometry(uintptr_t leaked,
-                                         int payload_mode) {
+static int __attribute__((unused)) configure_slide_bank_geometry(
+    uintptr_t leaked, int payload_mode) {
   slide_bank_lock_off = SLIDE_BANK_LOCK_OFF;
   slide_bank_task_off = SLIDE_BANK_TASK_OFF;
 #if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE && \
