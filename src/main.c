@@ -630,7 +630,7 @@ int run_exploit(int argc, char **argv) {
     int force_cfi = 0;
     {
       const char *force_env = getenv("CFI_FORCE_DIAG");
-      force_cfi = force_env && *force_env && strcmp(force_env, "0") != 0;
+      force_cfi = force_env && strcmp(force_env, "1") == 0;
     }
     if (fops_data_alias_deferred) {
       int prod_touched = -1;

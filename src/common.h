@@ -40,6 +40,9 @@
 #include "kernelsnitch/utils.h"
 
 #define KERNEL_PAGE_SETUP_ATTEMPTS 6
+/* Retry-budget defaults: per-target TARGET_HEADER (via offset.h above) wins
+ * when it defines FOPS_KERNEL_PAGE_SETUP_ATTEMPTS (e.g. FZG1: 10). This
+ * precedence flip from the old unconditional define is intentional. */
 #if defined(APP_PAYLOAD) && APP_PAYLOAD
 #ifndef SLIDE_KERNEL_PAGE_SETUP_ATTEMPTS
 #define SLIDE_KERNEL_PAGE_SETUP_ATTEMPTS 2

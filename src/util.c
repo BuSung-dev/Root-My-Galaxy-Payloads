@@ -503,7 +503,10 @@ int probe_fops_and_production_touch(
   verdict = verify_p0_probe_pairs(pairs, n);
   /* Verdict per 4K page group: a page is PROVEN mapped iff a nonzero
    * expected word on it matched; TOUCHED iff a nonzero word on a proven
-   * page did not match anywhere. Zero-expected words never vote. */
+   * page did not match anywhere. Zero-expected words never vote.
+   * NOTE: touched=0 means "all observed pages clean", not "all prod pages
+   * observed" — pages never reclaimed into a pipe contribute no pairs and
+   * cannot vote. Diagnostic-only; the fops verdict above is authoritative. */
   {
     uintptr_t pages[8];
     size_t npages = 0;

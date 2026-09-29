@@ -190,7 +190,7 @@ while work:
         i = ins[n]
         m, op = i.mnemonic, i.op_str
         pm = predec.search(op)
-        if pm and m.startswith("st") and cur is not None:
+        if pm and (m.startswith("st") or m.startswith("ld")) and cur is not None:
             cur += int(pm.group(1), 0)
         if m in ("sub", "add") and op.startswith("sp,") and cur is not None:
             imm = parse_sp_imm(op)
@@ -234,7 +234,7 @@ for b, s in enumerate(blocks):
         i = ins[n]
         m, op = i.mnemonic, i.op_str
         pm = predec.search(op)
-        if pm and m.startswith("st"):
+        if pm and (m.startswith("st") or m.startswith("ld")):
             cur += int(pm.group(1), 0)
             continue
         if m in ("sub", "add") and op.startswith("sp,"):
@@ -254,12 +254,14 @@ for n, i in enumerate(ins):
                        f"{m} {op}   [sp UNKNOWN: conflicting/indirect preds]"))
         continue
     # pre-index: stp x29,x30,[sp,#-0x60]!  -> sp -= 0x60 then access
+    # (also ldp/ldr with writeback: sp updates the same way)
     pm = predec.search(op)
-    if pm and m.startswith("st"):
+    if pm and (m.startswith("st") or m.startswith("ld")):
         imm = int(pm.group(1), 0)
         sp += imm
         tag = " [ASSUMED]" if assumed else ""
-        events.append((a, "store", sp, f"{m} {op}   [sp->{sp:+#x} after pre-index]{tag}"))
+        kind = "load" if m.startswith("ld") else "store"
+        events.append((a, kind, sp, f"{m} {op}   [sp->{sp:+#x} after pre-index]{tag}"))
         continue
     if m in ("sub", "add") and op.startswith("sp,"):
         imm = parse_sp_imm(op)

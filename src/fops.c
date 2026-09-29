@@ -405,6 +405,7 @@ int try_cfi_stage(void) {
     fops_before = pre_fops;
     cfi_last_step = 4;
     cfi_last_errno = pre_errno;
+    errno = pre_errno;
     goto fail;
   }
 

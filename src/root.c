@@ -212,8 +212,13 @@ static int install_workqueue_umh_root(int fd) {
   const char *root_umh_path = ROOT_UMH_PATH;
 #if defined(APP_PAYLOAD) && APP_PAYLOAD
   const char *app_root_umh_path = getenv("CVE43499_ROOT_HELPER");
-  if (app_root_umh_path && app_root_umh_path[0] == '/') {
-    root_umh_path = app_root_umh_path;
+  if (app_root_umh_path && app_root_umh_path[0]) {
+    if (app_root_umh_path[0] == '/') {
+      root_umh_path = app_root_umh_path;
+    } else {
+      pr_warning("root umh helper path rejected value=%s; falling back to %s\n",
+                 app_root_umh_path, ROOT_UMH_PATH);
+    }
   }
 #endif
   if (snprintf(umh_data.path, sizeof(umh_data.path), "%s", root_umh_path) >=
