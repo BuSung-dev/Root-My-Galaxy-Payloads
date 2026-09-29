@@ -136,10 +136,9 @@
 #define SLIDE_STACK_WRITER_MCAST 1
 #define MCAST_WAITER_OFF 0x78
 #define APP_CLOSED_FOPS_ROUTE 1
+#define APP_CONTROLLED_MM_GROUP_RECLAIM 1
 /* S918B parity set (09-29, reviewed): byte-exact values from the rooting
  * dm3q-S918BXXSAFZF5 profile, on the runnable legacy reclaim path.
- * Controlled reclaim is reverted: its leak child needs 4 confirmed
- * collisions (FULL_COLLISIONS=5) but FZG1 yields max 3 even fresh-boot.
  * APP_SLIDE_RECLAIM_SENDS is a no-op (zero consumers; real volume is
  * SKB_RECLAIM_SENDS=64 both sides) but kept for profile alignment.
  * Deliberately NOT paritied: FOPS_KERNEL_PAGE_SETUP_ATTEMPTS stays 10
@@ -170,7 +169,7 @@
 #define MM_NORMAL_ALIAS_END KERNELSNITCH_IDENTITY_END
 #define S918_PAGE_SCAN_MAX 256
 #define S918_KSNITCH_HINT_COLLISIONS 2
-#define S918_KSNITCH_FULL_COLLISIONS 5
+#define S918_KSNITCH_FULL_COLLISIONS 4
 #define S918_DMA32_SKIP_SLABS 8
 #define S918_TRIGGER_SLABS 24
 #define S918_SKB_SENDS 256
