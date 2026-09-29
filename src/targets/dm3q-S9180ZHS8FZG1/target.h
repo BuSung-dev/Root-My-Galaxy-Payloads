@@ -157,23 +157,11 @@
 #define APP_PRODUCTION_STACK_PI_RIGHT_ONLY 1
 #define APP_ROOT_REF_HOLDER_REQUIRED 0
 #define DEFAULT_EXPLOIT_ATTEMPTS 8
-/* Postwrite-oracle set (c): authoritative A/B ruling for the step-4 miss.
- * Deliberately WITHOUT APP_FOPS_REUSE_VERIFIED_PAGE so production stays on
- * slot 0 (current trigger path untouched; no P0_ORACLE_PRODUCTION_SLOT /
- * SLIDE_BANK_SLOTS change needed). Dual alias candidates (no
- * APP_P0_FINGERPRINT_INVERSE_SLIDE); FZG1 reclaim geometry untouched
- * (no APP_FOPS_TABLE_MIRROR_OFF). Requires auto-slide in-process:
- * forced SLIDE_P0_OFFSET is refused under REQUIRE_FRESH_P0_SESSION
- * (main.c full-route gate). */
-#define APP_REQUIRE_FRESH_P0_SESSION 1
-#define APP_FOPS_DATA_ALIAS_DIAG_ONLY 1
-#define APP_FOPS_DEFER_ALIAS_READBACK 1
-#define APP_FOPS_DURABLE_POSTWRITE_LOG 1
-#define APP_P0_REFRESH_ORACLE_EACH_FRESH_PAGE 1
-#define APP_FOPS_FRESH_PAGE_ATTEMPTS 8
-#define APP_SLIDE_FRESH_PAGE_ATTEMPTS 8
-#define APP_SLIDE_KERNEL_PAGE_SEARCH_BATCHES 16
-#define APP_FOPS_KERNEL_PAGE_SEARCH_BATCHES 16
+/* Diagnostic oracle set (c) retired: authoritative A/B ruling is completed
+ * (slide verified x5, address verified, gate verified, mcast stack writer
+ * inert, prod touch = -1). Returning FZG1 to the production execution flow
+ * of S918B (single clean attempt per run, start_p0_ref_keeper, no 8-attempt
+ * in-process requeue loop that corrupts kernel futex state). */
 #define DEFAULT_ATTEMPT_TIMEOUT_SEC 2200
 #define DEFAULT_P0_ATTEMPT_TIMEOUT_SEC 1200
 #define MM_DMA32_ALIAS_START 0xffffff8000000000ULL
