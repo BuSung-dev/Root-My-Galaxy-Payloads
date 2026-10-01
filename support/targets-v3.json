@@ -10,6 +10,7 @@
       "kernelsu": {
         "version": "v0.9.5",
         "url": "kernelsu/ksud-arm64-v8a",
+        "ksudUrl": "kernelsu/ksud-arm64-v8a",
         "architecture": "arm64-v8a"
       },
       "displayName": "Samsung Galaxy A35 (Exynos 1380)",
@@ -21,6 +22,7 @@
         "5.15.189-android13-3-33470412-abA356EXXSADZG2"
       ],
       "architecture": "arm64-v8a",
+      "url": "artifacts/SM-A356E/payload.so",
       "payloadUrl": "artifacts/SM-A356E/payload.so",
       "configUrl": "artifacts/SM-A356E/target.h"
     },
