@@ -1,0 +1,17 @@
+--- a/kernel/compat/samsung_kdp.c
++++ b/kernel/compat/samsung_kdp.c
+@@ -27,8 +27,14 @@
+ typedef unsigned int (*kdp_usecount_dec_and_test_t)(struct cred *cred);
+ #endif
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 16, 0)
+ typedef long (*inc_rlimit_ucounts_t)(struct ucounts *ucounts, enum rlimit_type type, long value);
+ typedef bool (*dec_rlimit_ucounts_t)(struct ucounts *ucounts, enum rlimit_type type, long value);
++#else
++/* Samsung android13-5.15 keeps the pre-5.16 enum name */
++typedef long (*inc_rlimit_ucounts_t)(struct ucounts *ucounts, enum ucount_type type, long value);
++typedef bool (*dec_rlimit_ucounts_t)(struct ucounts *ucounts, enum ucount_type type, long value);
++#endif
+ #endif
+ 
+ struct samsung_kdp_commit_work {
