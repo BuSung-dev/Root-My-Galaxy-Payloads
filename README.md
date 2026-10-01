@@ -26,10 +26,13 @@ It intentionally does not contain Android application source code.
 | `q4q-F9360ZCSAIZF1` | Galaxy Z Fold4 `SM-F9360` | `5.10.236` | Device-tested |
 | `dm2q-S916BXXSAFZG1` | Galaxy S23+ `SM-S916B` | `5.15.189` | Experimental: hardware root from ADB shell; not in app feed |
 | `dm3q-S918BXXSAFZF5` | Galaxy S23 Ultra `SM-S918B` | `5.15.189` | Confirmed working: full chain through the app (Shizuku mode) incl. KernelSU late-load and granted `su` |
+| `dm1q-S9110ZCS8FZI1` | Galaxy S23 `SM-S9110` (China) | `5.15.189` | Test in progress |
 
 The S916B FZG1 profile is shell-only today. Its exact tracefs route works from `adb shell`, but direct app-domain execution is not supported. Root My Galaxy would need to delegate the native runner through an authorized shell bridge such as Shizuku. See [`artifacts/dm2q-S916BXXSAFZG1/README.md`](artifacts/dm2q-S916BXXSAFZG1/README.md).
 
 The S918B FZF5 profile is hardware-verified through the app's Shizuku mode (exploit, KernelSU late-load, granted `su` under enforcing). Its physical-P0 fallback also engages in unprivileged app-domain execution, but rooting without Shizuku is not yet hardware-confirmed. See [`docs/SM-S918B-S918BXXSAFZF5.md`](docs/SM-S918B-S918BXXSAFZF5.md).
+
+The S9110 FZI1 profile is built and statically verified against this firmware's own kernel image, but has not been executed on hardware yet. Its tracefs route needs an authorized shell bridge, so it runs through the app's Shizuku mode (`adb shell` for manual testing) rather than unprivileged app-domain execution. See [`docs/SM-S9110-S9110ZCS8FZI1.md`](docs/SM-S9110-S9110ZCS8FZI1.md).
 
 Schema version 3 keeps each exploit and KernelSU artifact once. Its flat
 `models` and `kernelVersions` arrays define runtime compatibility. See
@@ -60,6 +63,7 @@ make TARGET=a53x-A536EXXSNGZG3 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=dm3q-S9180ZHS8FZF5 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=q4q-F9360ZCSAIZF1 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=dm2q-S916BXXSAFZG1 ANDROID_NDK_HOME=/path/to/android-ndk
+make TARGET=dm1q-S9110ZCS8FZI1 ANDROID_NDK_HOME=/path/to/android-ndk
 ```
 
 Outputs:
@@ -99,5 +103,7 @@ The SM-A536E GZG3 device validation is in
 [`docs/SM-A536E-A536EXXSNGZG3.md`](docs/SM-A536E-A536EXXSNGZG3.md).
 The SM-S9280 China (CHC) DZF2 port and validation record is in
 [`docs/SM-S9280-S9280ZCS6DZF2.md`](docs/SM-S9280-S9280ZCS6DZF2.md).
+The SM-S9110 China (CHC) FZI1 port and static-validation record is in
+[`docs/SM-S9110-S9110ZCS8FZI1.md`](docs/SM-S9110-S9110ZCS8FZI1.md).
 
 Use only on devices you own or are explicitly authorized to test.
