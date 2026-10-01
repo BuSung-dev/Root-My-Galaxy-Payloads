@@ -1,8 +1,9 @@
 {
   "schemaVersion": 3,
   "payloads": [
-        {
+    {
       "payloadId": "cve-2026-43499-a35",
+      "exploit": "cve-2026-43499",
       "displayName": "Samsung Galaxy A35 (Exynos 1380)",
       "models": [
         "SM-A356E",
@@ -15,6 +16,7 @@
       "payloadUrl": "artifacts/SM-A356E/payload.so",
       "configUrl": "artifacts/SM-A356E/target.h"
     },
+
 
     {
       "payloadId": "galaxy-s25-series-2026-06-07",
