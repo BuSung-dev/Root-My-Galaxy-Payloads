@@ -7,6 +7,11 @@
         "id": "cve-2026-43499",
         "name": "CVE-2026-43499"
       },
+      "kernelsu": {
+        "version": "v0.9.5",
+        "ksudUrl": "kernelsu/ksud-arm64-v8a",
+        "architecture": "arm64-v8a"
+      },
       "displayName": "Samsung Galaxy A35 (Exynos 1380)",
       "models": [
         "SM-A356E",
