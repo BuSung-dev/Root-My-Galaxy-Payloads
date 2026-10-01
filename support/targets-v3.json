@@ -153,18 +153,18 @@
       }
     },
     {
-      "payloadId": "e2s-S926BXXUEDZDR",
+      "payloadId": "e2s-S926BXXSGDZG1",
       "displayName": "Galaxy S24+ | Kernel 6.1.157",
       "models": ["SM-S926B"],
       "kernelVersions": ["6.1.157"],
       "requiresFreshP0Session": true,
       "exploit": {
-        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/e2s-S926BXXUEDZDR/cve-2026-43499-app.so",
-        "size": 104128
+        "url": "https://raw.githubusercontent.com/pascua28/Root-My-Galaxy-Payloads/main/artifacts/e2s-S926BXXSGDZG1/cve-2026-43499-app.so",
+        "size": 141304
       },
       "kernelsu": {
-        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-e2s-S926BXXUEDZDR-kdp",
-        "size": 4780056
+        "url": "https://raw.githubusercontent.com/pascua28/Root-My-Galaxy-Payloads/main/kernelsu/ksud-e2s-S926BXXSGDZG1",
+        "size": 4415552
       }
     },
     {
