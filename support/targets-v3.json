@@ -3,7 +3,10 @@
   "payloads": [
     {
       "payloadId": "cve-2026-43499-a35",
-      "exploit": "cve-2026-43499",
+      "exploit": {
+        "id": "cve-2026-43499",
+        "name": "CVE-2026-43499"
+      },
       "displayName": "Samsung Galaxy A35 (Exynos 1380)",
       "models": [
         "SM-A356E",
