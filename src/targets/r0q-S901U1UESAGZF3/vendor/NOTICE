@@ -1,0 +1,22 @@
+Vendored exp32 (32-bit compat) payload stage — for SM-S901U1 / S901U1UESAGZF3 only.
+
+Source: sarabpal-dev/IonStack-S22U (Apache-2.0), which is itself a fork of
+BuSung-dev/CVE-2026-43499-S25U (Apache-2.0) — the same upstream exploit family
+this repository builds from.
+
+Why vendored: the proven write primitive for this firmware is the 32-bit
+(armeabi-v7a) compat stage, and its page-forge depends on the `order3_hold`
+reclaim implementation which is not a parameter of the shared sources in this
+repository (SKB_RECLAIM_SENDS=4, reclaim=legacy/fops=bank). It is therefore kept
+as one coherent, isolated unit and built via `make TARGET=r0q-S901U1UESAGZF3 vendor-r0q`
+so no other target is affected.
+
+Contents:
+  *.c/*.h/kernelsnitch/exp32/  payload sources (see vendor-r0q/NOTICE)
+  target/target.h              proven target data for S901U1UESAGZF3
+  prebuilt/cve_exp32_arm32     prebuilt 32-bit stage, embedded via exp32_blob.S
+                               sha256 1b4f5171c6fdef6e22947d75734b2cef94e075e42e840bb5e363a768b818932b
+
+Device-validated on SM-S901U1 (S901U1UESAGZF3, 5.10.236): the forged-lock write
+lands (`cfi write ret=35`); the subsequent physrw/root stage is probabilistic
+(~1 attempt in 16, failed attempts can panic), so a fresh boot is required per run.

