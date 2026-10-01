@@ -31,9 +31,12 @@ the `android13-5.15.189` exact-source loader from the same kernel-build
 family (built from Samsung's SM-S916B FZG1 opensource tree with the
 kallsyms-aware manual loader; RKP syscall-table and live text patching
 disabled). Hardware-verified on this device: module `Live`, KernelSU
-Manager v3.2.5 (`32525`) reports `Working <LKM> [Jailbreak mode]`, granted
+Manager v3.2.5 (`32525`, historical version) reports `Working <LKM> [Jailbreak mode]`, granted
 `su` returns `uid=0` in `u:r:ksu:s0` with SELinux enforcing, and the
 superuser grant persists across reboots.
+v3.3.0 (32601) upgrade status: patch ready
+(`kernelsu/patches/KernelSU-v3.3.0-samsung-kdp-rkp-defex.patch`), binary
+rebuild pending (see `kernelsu/REBUILD-dm3q-v3.3.0.md`).
 
 ## How to run
 

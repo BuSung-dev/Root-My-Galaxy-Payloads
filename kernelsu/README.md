@@ -1,8 +1,17 @@
 # Samsung KernelSU late-load builds
 
-The files in this directory are built from KernelSU `v3.2.5`, commit
-`b0bc817b4e966aa6aa830834eaf6ef765d821d40`. They are not interchangeable
-between KMIs.
+The files in this directory target KernelSU `v3.3.0` (tag `v3.3.0`, commit
+`932014ab5b2c9b74a3d11e2ec4d17dd10fc9442e`, short `932014a`,
+`KSU_VERSION 32601` including the `Kbuild` fallback `KSU_VERSION ?= 32601`).
+They are not interchangeable between KMIs.
+
+> History: the currently published `.ko`/`ksud` binaries in this directory
+> remain `v3.2.5` builds (tag `v3.2.5`, commit
+> `b0bc817b4e966aa6aa830834eaf6ef765d821d40`, `KSU_VERSION 32525` including the
+> `Kbuild` fallback `KSU_VERSION ?= 32525`) until the v3.3.0 rebuilds are
+> hardware-verified and republished. Version codes `32525` / `32525-2` quoted
+> below are v3.2.5 historical device measurements; v3.3.0 (`32601`) is pending
+> verification.
 
 ## Versioned artifacts
 
@@ -51,11 +60,12 @@ uses the no-patch-text Samsung path, is statically audited, and has now been
 hardware-tested through module load: the exact `ksud` loaded `kernelsu.ko`,
 entered `u:r:ksu:s0`, and survived without a reboot. KernelSU Manager and
 Root Checker were then verified: Manager reported `Working <LKM> [Jailbreak
-mode]`, version `32525-2`, and one superuser, while Root Checker reported root
+mode]`, version `32525-2` (v3.2.5 歷史實測；v3.3.0 待驗), and one superuser, while Root Checker reported root
 access installed. The root remains per-boot because no boot image was
 modified; reboot survival is untested.
 The E2S pair is tied to the S926B DZDR release,
-static-audited, and device-tested: late-load reports version code `32525`, and
+static-audited, and device-tested: late-load reports version code `32525`
+(v3.2.5 歷史實測；v3.3.0 待驗), and
 the loader runs in `u:r:ksu:s0`. The E1S pair is tied to the S921B DZE1 release,
 static-audited against the recovered DZE1 `vmlinux` (202 undefined symbols, zero
 missing, zero CRC mismatches, no `stop_machine`), and device-tested: the
@@ -67,13 +77,13 @@ static-audited, and
 device-tested. Its first hardware late-load builds panicked in Samsung/Exynos
 EL2 while KernelSU tried live text patching; the current A56 build disables
 that path, uses the Samsung fallback hooks, loads successfully, and reports
-KernelSU version code `32525` for manager compatibility. The A36 AYG1 pair
+KernelSU version code `32525` (v3.2.5 歷史實測；v3.3.0 待驗) for manager compatibility. The A36 AYG1 pair
 uses the same fail-closed Samsung path, reports the exact A36 kernel release,
 passes the recovered-target symbol audit, and was loaded on hardware with
 KernelSU Manager reporting `Working <LKM> [Jailbreak mode]` and version
-`32525-2`. The A536E GZG3 5.10 pair was also loaded from the normal Root My
+`32525-2` (v3.2.5 歷史實測；v3.3.0 待驗). The A536E GZG3 5.10 pair was also loaded from the normal Root My
 Galaxy app flow; KernelSU Manager reported `Working <LKM> [Jailbreak mode]`
-and version `32525-2`. The older A15 5.10 pair remains device-untested. The exact F9360ZCSAIZF1 no-LTO module above is device-tested (full-chain root and KernelSU Manager recognition on hardware, 2026-08-12 and 2026-09-01).
+and version `32525-2` (v3.2.5 歷史實測；v3.3.0 待驗). The older A15 5.10 pair remains device-untested. The exact F9360ZCSAIZF1 no-LTO module above is device-tested (full-chain root and KernelSU Manager recognition on hardware, 2026-08-12 and 2026-09-01).
 
 ## Why the stock module crashes on Samsung
 
@@ -96,8 +106,11 @@ Three other Samsung-specific conflicts were confirmed during the 6.6 port:
 
 ## Patch contents
 
-[`patches/KernelSU-v3.2.5-samsung-kdp-rkp-defex.patch`](patches/KernelSU-v3.2.5-samsung-kdp-rkp-defex.patch)
-contains the complete source delta from the tagged v3.2.5 tree:
+[`patches/KernelSU-v3.3.0-samsung-kdp-rkp-defex.patch`](patches/KernelSU-v3.3.0-samsung-kdp-rkp-defex.patch)
+contains the complete source delta from the tagged v3.3.0 tree (`v3.3.0`,
+`932014a`, `KSU_VERSION 32601` including the `Kbuild` fallback
+`KSU_VERSION ?= 32601`; rebased from the v3.2.5 Samsung port which used
+`KSU_VERSION 32525` including the fallback `KSU_VERSION ?= 32525`):
 
 - resolve Samsung KDP credential helpers and release protected credentials with
   `kdp_usecount_dec_and_test()` plus `__put_cred()`;
@@ -114,6 +127,20 @@ contains the complete source delta from the tagged v3.2.5 tree:
 - stage `ksud` at `/data/local/tmp/.ksud-stage`, rename it onto the same
   `/data` filesystem before loading the module, then finish labels/assets after
   the module is active.
+
+  History: [`patches/KernelSU-v3.2.5-samsung-kdp-rkp-defex.patch`](patches/KernelSU-v3.2.5-samsung-kdp-rkp-defex.patch)
+  is the previous complete source delta from the tagged v3.2.5 tree
+  (`v3.2.5`, `b0bc817b4e966aa6aa830834eaf6ef765d821d40`,
+  `KSU_VERSION 32525`); retained for the currently published v3.2.5 binaries.
+
+  dm3q 5.15 build-fix (apply after the main patch on Samsung
+  `android13-5.15` / `5.15.189` trees which keep the pre-5.16 `enum ucount_type`
+  name): [`patches/KernelSU-v3.3.0-dm3q-5.15-build-fix.patch`](patches/KernelSU-v3.3.0-dm3q-5.15-build-fix.patch).
+  The v3.2.5 precedents `KernelSU-v3.2.5-dm1q-android13-5.15-build-fix.patch`
+  (canonical version-gated fix) and `KernelSU-v3.2.5-dm2q-fzg1.patch`
+  (FZG1 `ucount_type` ABI + RKP early-return) remain in `patches/` for history;
+  see `REBUILD-dm3q-v3.3.0.md` for the fuzz-free rebase rationale and per-profile
+  order.
 
 ## 6.1 generalization
 
@@ -151,12 +178,19 @@ separately.
 
 ## Rebuild
 
-Apply the patch to a clean v3.2.5 checkout:
+Apply the patches to a clean v3.3.0 checkout:
 
 ```sh
-git checkout v3.2.5
-git apply KernelSU-v3.2.5-samsung-kdp-rkp-defex.patch
+git checkout v3.3.0
+git apply KernelSU-v3.3.0-samsung-kdp-rkp-defex.patch
+# Samsung android13-5.15 (dm3q/dm2q/dm1q, 5.15.189) only, after the main patch:
+git apply KernelSU-v3.3.0-dm3q-5.15-build-fix.patch
 ```
+
+> History: v3.2.5 used `git checkout v3.2.5` +
+> `git apply KernelSU-v3.2.5-samsung-kdp-rkp-defex.patch` (plus
+> `KernelSU-v3.2.5-dm1q-android13-5.15-build-fix.patch` /
+> `KernelSU-v3.2.5-dm2q-fzg1.patch` where applicable).
 
 For the Samsung 6.1 module, use DDK image
 `ghcr.io/ylarod/ddk-min:android14-6.1-20260313` and set:

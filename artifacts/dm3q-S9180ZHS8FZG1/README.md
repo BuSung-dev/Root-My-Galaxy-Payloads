@@ -21,6 +21,11 @@ root usermode helper, and KernelSU late-load. The run reported
 | `cve-2026-43499-root` | `c49a655708bed646441f6a7d848c5a400e6fb444f7fcf05fcb0704e547ddcd55` |
 | `../../kernelsu/ksud-dm3q-S918BXXSAFZF5-kdp` | `5da5818d36da2d589496f91016078a43f50489e5c98b319db4eaa5ee475b86bd` |
 
+Loader note: the `ksud-dm3q-S918BXXSAFZF5-kdp` reference above is confirmed —
+FZG1 reuses the S918B 5.15 loader (no independent FZG1 ksud).
+v3.3.0 (32601) resolution: reuse carries forward; FZG1 tracks the S918B
+rebuild, no new binary (see `kernelsu/REBUILD-dm3q-v3.3.0.md` §0).
+
 `cve-2026-43499-app.so` is the exact artifact that completed the chain on
 hardware. It is built from this tree (`make TARGET=dm3q-S9180ZHS8FZG1`,
 Android NDK r29).
