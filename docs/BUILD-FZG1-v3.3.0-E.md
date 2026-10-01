@@ -103,3 +103,6 @@ repo 新增：僅本檔 `docs/BUILD-FZG1-v3.3.0-E.md`；不提交。
 - `ksu-S918B-v330/`（fresh v3.3.0＋三 patch 樹；未 strip `kernel/kernelsu.ko` 6.7M 在內）
 - `logs/kernelsu-ko-build-S918B-r25c.log`（exit 0）
 - 沿用：`out/`（已恢復 FZG1 release）、`Module.symvers.FZG1`、`check_symbol`
+
+## Review 痕跡（終審 Final-T 補記）
+- Stage 3 review：Reviewer-3A CONDITIONAL PASS（S918B-exact 限制已揭露可接受，`repo內無二進位` 改為 `本次無新增二進位進repo`）；Reviewer-3B PASS（platform 26 接受、未直跑 -V 待 Stage 4）。

@@ -109,3 +109,6 @@ repo 新增：僅本檔 `docs/BUILD-FZG1-v3.3.0-F.md`；不提交；repo 內二�
 - 資產：**正式資產**（3A 新 S918B `.ko`，`7ee01a06…49ac7b`），**非 smoke**。
 - 限制：平台 24→26（上游要求，`file` 為 Android 26）；`-V` 未直接執行（無 qemu）；
   未硬體驗證、未進 repo/feed、不可發布。
+
+## Review 痕跡（終審 Final-T 補記）
+- Stage 3 review：Reviewer-3B PASS（mirror 同 rev 可換 URL、降級不放行、Stage 4 以實測閉環）；cargo check 無持久 log 已記為缺口。

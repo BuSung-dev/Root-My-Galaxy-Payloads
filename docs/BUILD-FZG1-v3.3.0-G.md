@@ -84,3 +84,6 @@
 - 限制：v3.3.0 掉 `--ephemeral`，helper ephemeral 探針必 fallback plain（本次 plain 成）；`features 0x6`、`refcount 0` 見 §4；
   Manager 配對仍 v3.2.5（mismatch 預期）；發布/配對由協調者定案。
 - 無回滾，手機當前即 v3.3.0 root 態。
+
+## Review 痕跡（終審 Final-T 補記）
+- Stage 4 review：Reviewer-4A PASS（5/5 證據成立，單次接管≠發布，需 4b）；在機舊 ksud 基線污染已揭露（4556352B -mm 件，非 S918B canonical）。
