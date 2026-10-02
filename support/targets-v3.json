@@ -331,6 +331,21 @@
         "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-e3q-S9280ZCS6DZF2-kdp",
         "size": 4879856
       }
+    },
+    {
+      "payloadId": "e1q-S9210ZHS6DZG1",
+      "displayName": "Galaxy S24 China | Kernel 6.1.145 (S9210ZHS6DZG1)",
+      "models": ["SM-S9210"],
+      "kernelVersions": ["6.1.145"],
+      "requiresFreshP0Session": true,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/e1q-S9210ZHS6DZG1/cve-2026-43499-app.so",
+        "size": 104128
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-e1q-S9210ZHS6DZG1-kdp",
+        "size": 4895088
+      }
     }
   ]
 }

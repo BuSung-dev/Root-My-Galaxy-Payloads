@@ -1,2 +1,15 @@
 /build/
 /diagnostics/
+__pycache__/
+*.pyc
+*.pyo
+.ruff_cache/
+*.o
+*.d
+*.log
+*.bin
+*.zip
+boot.img*
+vmlinux*
+*.btf
+live-FZG1-config.gz

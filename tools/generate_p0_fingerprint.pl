@@ -2,13 +2,35 @@
 use strict;
 use warnings;
 
-@ARGV == 3 or die
-    "usage: $0 RAW_IMAGE PROBE_OFFSET OUTPUT_HEADER\n";
-my ($image_path, $probe_text, $output_path) = @ARGV;
+@ARGV >= 3 && @ARGV <= 5 or die
+    "usage: $0 RAW_IMAGE PROBE_OFFSET OUTPUT_HEADER [STRIDE [COUNT]]\n";
+my ($image_path, $probe_text, $output_path, $stride_text, $count_text) = @ARGV;
 
 $probe_text =~ /\A(?:0x)?[0-9a-fA-F]+\z/
     or die "invalid probe offset: $probe_text\n";
 my $probe_offset = hex($probe_text);
+
+my $stride = 0x10000;
+if (defined $stride_text) {
+    $stride_text =~ /\A(?:0x)?[0-9a-fA-F]+\z/
+        or die "invalid stride: $stride_text\n";
+    $stride = hex($stride_text);
+    $stride > 0 or die "stride must be positive\n";
+}
+
+my $count;
+if (defined $count_text) {
+    if ($count_text =~ /\A0x[0-9a-fA-F]+\z/) {
+        $count = hex($count_text);
+    } elsif ($count_text =~ /\A\d+\z/) {
+        $count = int($count_text);
+    } else {
+        die "invalid count: $count_text\n";
+    }
+    $count > 0 or die "count must be positive\n";
+} else {
+    $count = int(($probe_offset / $stride) + 1);
+}
 
 open my $image_fh, '<:raw', $image_path
     or die "open $image_path: $!\n";
@@ -19,7 +41,7 @@ close $image_fh or die "close $image_path: $!\n";
 my @page_offsets = (0x000, 0x200, 0x400, 0x600,
                     0x800, 0xa00, 0xc00, 0xe00);
 my @rows;
-for my $slide (map { $_ * 0x10000 } 0 .. 31) {
+for my $slide (map { $_ * $stride } 0 .. ($count - 1)) {
     my $page_source = $probe_offset - $slide;
     $page_source >= 0
         or die sprintf("slide 0x%x exceeds probe offset 0x%x\n",
@@ -43,6 +65,8 @@ print {$out} <<"HEADER";
 // Each row maps actual slide to Image[0x@{[sprintf '%x', $probe_offset]} - slide].
 #ifndef P0_FINGERPRINT_H
 #define P0_FINGERPRINT_H
+
+#include <stdint.h>
 
 #define P0_FINGERPRINT_WORDS 8
 
@@ -82,8 +106,9 @@ for my $row (@rows) {
         my $source_offset = $page_source + $page_offsets[$index];
         seek($verify_fh, $source_offset, 0)
             or die sprintf("seek 0x%x: %s\n", $source_offset, $!);
-        read($verify_fh, my $bytes, 8) == 8
-            or die sprintf("short read at 0x%x\n", $source_offset);
+        my $bytes;
+        defined(read($verify_fh, $bytes, 8)) && length($bytes) == 8
+            or die sprintf("short read at 0x%x: %s\n", $source_offset, $!);
         my $actual = unpack('Q<', $bytes);
         $actual == $words->[$index]
             or die sprintf("mismatch for slide 0x%x at source 0x%x\n",
@@ -91,5 +116,5 @@ for my $row (@rows) {
     }
 }
 close $verify_fh or die "close verification input: $!\n";
-printf "verified 32 rows and 256 source qwords at probe 0x%x\n",
-       $probe_offset;
+printf "verified %d rows and %d source qwords at probe 0x%x (stride 0x%x)\n",
+       scalar(@rows), scalar(@rows) * scalar(@page_offsets), $probe_offset, $stride;
