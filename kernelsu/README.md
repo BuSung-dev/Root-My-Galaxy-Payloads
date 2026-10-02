@@ -8,10 +8,11 @@ They are not interchangeable between KMIs.
 > History: the currently published `.ko`/`ksud` binaries in this directory
 > remain `v3.2.5` builds (tag `v3.2.5`, commit
 > `b0bc817b4e966aa6aa830834eaf6ef765d821d40`, `KSU_VERSION 32525` including the
-> `Kbuild` fallback `KSU_VERSION ?= 32525`) until the v3.3.0 rebuilds are
-> hardware-verified and republished. Version codes `32525` / `32525-2` quoted
-> below are v3.2.5 historical device measurements; v3.3.0 (`32601`) is pending
-> verification.
+> `Kbuild` fallback `KSU_VERSION ?= 32525`). The e1q v3.3.0 Phase-D candidate
+> now has one successful full-chain Shizuku app run on SM-S9210 (2026-10-03),
+> but Manager UI and resetprop acceptance checks are pending, so it has not
+> replaced the published pair/feed. Version codes `32525` / `32525-2` below
+> are v3.2.5 historical measurements; e1q v3.3.0 reports `32601`.
 
 ## Versioned artifacts
 
@@ -46,6 +47,34 @@ They are not interchangeable between KMIs.
 | `ksud-dm1q-S911U1UES6DYI3-kdp` | Same exact DYI3 build | `android13-5.15.153` | Device-tested late-load binary embedding the exact DYI3 no-patch-text module |
 | `android12-5.10_kernelsu-A536EXXSNGZG3-kdp.ko` | `SM-A536E`, `A536EXXSNGZG3` | `android12-5.10` | Device-tested exact A53 module with Samsung KDP/RKP/DEFEX support and live text/table patching disabled |
 | `ksud-A536EXXSNGZG3-kdp` | Same exact A53 build | `android12-5.10` | Device-tested late-load binary embedding the exact A53 module |
+
+## e1q v3.3.0 candidate status
+
+The e1q Phase-D candidate pair from commit
+`8236c84301282b5415412d867ab71d4a739e0809` has now completed one full-chain
+hardware run through Root My Galaxy S24 `0.3.2-s24.1` in Shizuku mode on
+`SM-S9210` / `S9210ZHS6DZG1`:
+
+- `ksud`: 4,995,304 bytes, SHA-256
+  `8874894560e46dd3ab711386f07c3d89635bdaae0e02a806878555bdbdc15049`;
+- embedded exact-release `.ko`: 406,160 bytes, SHA-256
+  `d64647a118b91833ad0580076d06c946f1b5e4f34a52ae8a13aeeeebeb646687`;
+- `CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y`; the exact-release vermagic and
+  target-symbol audit are documented in the
+  [historical Phase-D rebuild record](https://github.com/samson910022/Root-My-Galaxy-Payloads/blob/8236c84301282b5415412d867ab71d4a739e0809/kernelsu/REBUILD-e1q-v3.3.0.md);
+- app history shows exploit success on attempt 1/24 (`done=1 root=1`),
+  successful KernelSU control verification, then the module `Live` with SELinux
+  Enforcing.
+
+The first `late-load --ephemeral` invocation was rejected as an unexpected
+argument and reported that the driver fd was unavailable. The app helper then
+retried plain `late-load`, which succeeded. This proves one app-mediated
+full-chain run with the helper fallback, not direct `--ephemeral` support.
+Manager package version `32601` was installed, but its `Working <LKM>` UI
+status was not captured; resetprop regressions, repeatability, and reboot
+persistence remain unverified. Keep the published e1q binaries and support
+feed on v3.2.5 until those checks pass. Detailed evidence:
+[`docs/SM-S9210-S9210ZHS6DZG1.md`](../docs/SM-S9210-S9210ZHS6DZG1.md#kernelsu-v330-candidate-hardware-validation-2026-10-03).
 
 The standalone `.ko` files are retained for auditing. Root My Galaxy downloads
 the corresponding `ksud-*` file because `ksud late-load` loads its embedded

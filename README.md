@@ -33,6 +33,13 @@ The S916B FZG1 profile is shell-only today. Its exact tracefs route works from `
 
 The S918B FZF5 profile is hardware-verified through the app's Shizuku mode (exploit, KernelSU late-load, granted `su` under enforcing). Its physical-P0 fallback also engages in unprivileged app-domain execution, but rooting without Shizuku is not yet hardware-confirmed. See [`docs/SM-S918B-S918BXXSAFZF5.md`](docs/SM-S918B-S918BXXSAFZF5.md).
 
+The e1q profile's published feed still selects the v3.2.5 KernelSU pair. The
+historical v3.3.0 no-patch-text Phase-D candidate has one successful full-chain
+Shizuku app run on SM-S9210 (2026-10-03); Manager UI recognition, resetprop
+regressions, repeatability, and reboot persistence remain pending before
+changing the feed. See the
+[candidate hardware record](docs/SM-S9210-S9210ZHS6DZG1.md#kernelsu-v330-candidate-hardware-validation-2026-10-03).
+
 Schema version 3 keeps each exploit and KernelSU artifact once. Its flat
 `models` and `kernelVersions` arrays define runtime compatibility. See
 [`support/README.md`](support/README.md) for the matching rules.
