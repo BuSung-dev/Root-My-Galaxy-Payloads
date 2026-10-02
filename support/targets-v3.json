@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "payloads": [
-    {
+{
       "payloadId": "cve-2026-43499-a35",
       "exploit": {
         "id": "cve-2026-43499",
@@ -19,10 +19,17 @@
       "displayName": "Samsung Galaxy A35 (Exynos 1380)",
       "models": [
         "SM-A356E",
-        "SM-A356E/DS"
+        "SM-A356E/DS",
+        "sm-a356e",
+        "sm-a356e/ds",
+        "a35",
+        "A35"
       ],
       "kernelVersions": [
-        "5.15.189-android13-3-33470412-abA356EXXSADZG2"
+        "5.15.189-android13-3-33470412-abA356EXXSADZG2",
+        "5.15.189-android13-3-33470412-abA356EXXSBDZG2",
+        "5.15.189",
+        "5.15"
       ],
       "architecture": "arm64-v8a",
       "url": "artifacts/SM-A356E/payload.so",
