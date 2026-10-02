@@ -1,12 +1,12 @@
-{
+  {
   "schemaVersion": 3,
   "payloads": [
-{
+    {
       "payloadId": "cve-2026-43499-a35",
       "exploit": {
         "id": "cve-2026-43499",
         "name": "CVE-2026-43499",
-        "url": "artifacts/SM-A356E/payload.so",
+        "url": "artifacts/a35x-A356EXXSBDZG2/payload.so",
         "size": 69848
       },
       "kernelsu": {
@@ -32,23 +32,24 @@
         "5.15"
       ],
       "architecture": "arm64-v8a",
-      "url": "artifacts/SM-A356E/payload.so",
-      "payloadUrl": "artifacts/SM-A356E/payload.so",
-      "configUrl": "artifacts/SM-A356E/target.h",
+      "url": "artifacts/a35x-A356EXXSBDZG2/payload.so",
+      "payloadUrl": "artifacts/a35x-A356EXXSBDZG2/payload.so",
+      "configUrl": "artifacts/a35x-A356EXXSBDZG2/target.h",
       "size": 69848,
       "artifact": {
-        "url": "artifacts/SM-A356E/payload.so",
-        "payloadUrl": "artifacts/SM-A356E/payload.so",
-        "configUrl": "artifacts/SM-A356E/target.h",
+        "url": "artifacts/a35x-A356EXXSBDZG2/payload.so",
+        "payloadUrl": "artifacts/a35x-A356EXXSBDZG2/payload.so",
+        "configUrl": "artifacts/a35x-A356EXXSBDZG2/target.h",
         "size": 69848
       },
       "artifacts": {
-        "url": "artifacts/SM-A356E/payload.so",
-        "payloadUrl": "artifacts/SM-A356E/payload.so",
-        "configUrl": "artifacts/SM-A356E/target.h",
+        "url": "artifacts/a35x-A356EXXSBDZG2/payload.so",
+        "payloadUrl": "artifacts/a35x-A356EXXSBDZG2/payload.so",
+        "configUrl": "artifacts/a35x-A356EXXSBDZG2/target.h",
         "size": 69848
       }
     },
+
 
     {
       "payloadId": "galaxy-s25-series-2026-06-07",
