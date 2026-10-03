@@ -26,6 +26,7 @@ It intentionally does not contain Android application source code.
 | `q4q-F9360ZCSAIZF1` | Galaxy Z Fold4 `SM-F9360` | `5.10.236` | Device-tested |
 | `dm2q-S916BXXSAFZG1` | Galaxy S23+ `SM-S916B` | `5.15.189` | Experimental: hardware root from ADB shell; not in app feed |
 | `r13s-S731U1UES7BZF3` | Galaxy S25 FE `SM-S731U1` | `6.1.157` | Device-tested: full chain incl. KernelSU late-load (ephemeral) and `su` via control channel |
+| `r13s-S731BXXS9BZH1` | Galaxy S25 FE International `SM-S731B` | `6.1.157` | Device-tested: full chain on first attempt (identical `r13s` kernel to `S731U1UES7BZF3`) |
 | `dm3q-S918BXXSAFZF5` | Galaxy S23 Ultra `SM-S918B` | `5.15.189` | Confirmed working: full chain through the app (Shizuku mode) incl. KernelSU late-load and granted `su` |
 
 The S916B FZG1 profile is shell-only today. Its exact tracefs route works from `adb shell`, but direct app-domain execution is not supported. Root My Galaxy would need to delegate the native runner through an authorized shell bridge such as Shizuku. See [`artifacts/dm2q-S916BXXSAFZG1/README.md`](artifacts/dm2q-S916BXXSAFZG1/README.md).
@@ -61,6 +62,7 @@ make TARGET=a53x-A536EXXSNGZG3 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=dm3q-S9180ZHS8FZF5 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=q4q-F9360ZCSAIZF1 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=r13s-S731U1UES7BZF3 ANDROID_NDK_HOME=/path/to/android-ndk
+make TARGET=r13s-S731BXXS9BZH1 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=dm2q-S916BXXSAFZG1 ANDROID_NDK_HOME=/path/to/android-ndk
 ```
 
@@ -103,5 +105,9 @@ The SM-S9280 China (CHC) DZF2 port and validation record is in
 [`docs/SM-S9280-S9280ZCS6DZF2.md`](docs/SM-S9280-S9280ZCS6DZF2.md).
 The SM-S731U1 BZF3 (Galaxy S25 FE) port record is in
 [`docs/SM-S731U1-S731U1UES7BZF3.md`](docs/SM-S731U1-S731U1UES7BZF3.md).
+The SM-S731B BZH1 (Galaxy S25 FE International) port record is in
+[`docs/SM-S731B-S731BXXS9BZH1.md`](docs/SM-S731B-S731BXXS9BZH1.md); its kernel
+is byte-identical to the U1 BZF3 build, so the profile differs only in identity
+strings.
 
 Use only on devices you own or are explicitly authorized to test.
