@@ -331,6 +331,36 @@
         "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-e3q-S9280ZCS6DZF2-kdp",
         "size": 4879856
       }
+    },
+    {
+      "payloadId": "q6q-F956BXXS4DZI1",
+      "displayName": "Galaxy Z Fold6 SM-F956B | Kernel 6.1.145 (F956BXXS4DZI1)",
+      "models": ["SM-F956B"],
+      "kernelVersions": ["6.1.145"],
+      "requiresFreshP0Session": true,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/unreliablecode/Root-My-Galaxy-Payloads/main/artifacts/q6q-F956BXXS4DZI1/cve-2026-43499-app.so",
+        "size": 180760
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/unreliablecode/Root-My-Galaxy-Payloads/main/kernelsu/ksud-q6q-F956BXXS4DZH5-kdp-next",
+        "size": 4259304
+      }
+    },
+    {
+      "payloadId": "q6q-F956BXXS4DZH5",
+      "displayName": "Galaxy Z Fold6 SM-F956B | Kernel 6.1.145 (F956BXXS4DZH5)",
+      "models": ["SM-F956B"],
+      "kernelVersions": ["6.1.145"],
+      "requiresFreshP0Session": true,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/q6q-F956BXXS4DZH5/cve-2026-43499-app.so",
+        "size": 142832
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-q6q-F956BXXS4DZH5-kdp-next",
+        "size": 4259304
+      }
     }
   ]
 }
