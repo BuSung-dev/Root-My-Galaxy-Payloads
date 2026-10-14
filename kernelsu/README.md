@@ -1,8 +1,14 @@
 # Samsung KernelSU late-load builds
 
-The files in this directory are built from KernelSU `v3.2.5`, commit
-`b0bc817b4e966aa6aa830834eaf6ef765d821d40`. They are not interchangeable
-between KMIs.
+Most files in this directory are built from KernelSU `v3.2.5`, commit
+`b0bc817b4e966aa6aa830834eaf6ef765d821d40`. The Fold6 EZIH runtime uses
+KernelSU Next 3.4.0 and the exact kernel release recorded in its
+[firmware notes](../docs/SM-F956B-F956BXXU4EZIH.md).
+
+The corresponding EZIH driver and daemon source, build instructions and
+licenses are in [source/F956BXXU4EZIH-runtime.tar.gz](source/F956BXXU4EZIH-runtime.tar.gz).
+That runtime belongs to the experimental shell profile and is excluded from
+the Root My Galaxy app feed.
 
 ## Versioned artifacts
 

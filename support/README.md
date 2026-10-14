@@ -23,3 +23,8 @@ participate in matching.
 
 `targets-v2.json` remains unchanged for released 0.2.3 clients. New clients
 read only schema version 3.
+
+`experimental.json` is a separate catalog of shell contributions and firmware
+evidence. The app does not read it. The Fold6 DZH5, DZI1 and EZIH files are
+standalone PIE executables, so they are excluded from the app feed. See each
+entry's documentation for its validation status and artifact hashes.

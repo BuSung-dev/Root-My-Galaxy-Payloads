@@ -1,0 +1,29 @@
+{
+  "profileId": "q6q-F956BXXU4EZIH",
+  "model": "SM-F956B",
+  "device": "q6q",
+  "firmware": "F956BXXU4EZIH",
+  "kernelRelease": "6.1.162-android14-11-34343818-abF956BXXU4EZIH",
+  "executionContext": "Android shell (UID 2000), through ADB or Shizuku",
+  "payloadFormat": "ELF64 AArch64 PIE executable",
+  "status": "offline-validated; hardware root untested",
+  "rootMyGalaxyAppCompatible": false,
+  "includedInSupportFeed": false,
+  "artifacts": [
+    {
+      "path": "artifacts/q6q-F956BXXU4EZIH/payload",
+      "size": 181792,
+      "sha256": "453bf870a8cf9305e97ea0a2efa6c7ccbf513816b9ee96a69d3ba0f204ebf6e7"
+    },
+    {
+      "path": "artifacts/q6q-F956BXXU4EZIH/pompomsu-helper",
+      "size": 33856,
+      "sha256": "b634d6f6fb6eb1b2451738b6ffba23a019fcd86f8d93655bdf71770ece966f46"
+    },
+    {
+      "path": "kernelsu/ksud-q6q-F956BXXU4EZIH-kdp-next",
+      "size": 4253800,
+      "sha256": "e9b3677a24c203670ef21b7d4f531d746f8f2fe04603c155628536f2f91a7dce"
+    }
+  ]
+}
