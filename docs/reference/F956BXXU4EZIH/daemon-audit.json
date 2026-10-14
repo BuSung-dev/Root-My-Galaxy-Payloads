@@ -1,0 +1,17 @@
+{
+  "daemon_sha256": "e9b3677a24c203670ef21b7d4f531d746f8f2fe04603c155628536f2f91a7dce",
+  "daemon_size": 4253800,
+  "exact_module_embedded": true,
+  "embedded_module_sha256": "d35af25c46a5a90597338f29c2b98e2613d6190db241dba5c5e671610b082b27",
+  "embedded_module_size": 456288,
+  "embedded_deflate_offset": "0x59faa",
+  "embedded_deflate_length": 140897,
+  "module_key": "samsung-F956BXXU4EZIH-6.1.162",
+  "exact_release": "6.1.162-android14-11-34343818-abF956BXXU4EZIH",
+  "dedicated_late_load_guard": true,
+  "manager_package": "com.pomni.unreliablecode",
+  "installer_lf_only": true,
+  "installer_sha256": "073408cb738880cd285c0155658663b17bd317c2a0504b17941bc56d3ad8d361",
+  "elf": "ELF64 little-endian AArch64 PIE",
+  "interpreter": "/system/bin/linker64"
+}

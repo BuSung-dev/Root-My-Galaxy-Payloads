@@ -1,0 +1,24 @@
+MATCH cred size 176/176
+MATCH task_struct size 4800/4800
+MATCH security_hook_heads size 1736/1736
+MATCH security_hook_list size 40/40
+MATCH file size 264/264
+MATCH inode size 704/704
+MATCH path size 16/16
+MATCH linux_binprm size 416/416
+MATCH pt_regs size 336/336
+MATCH ucounts size 144/144
+MATCH kprobe size 128/128
+MATCH kretprobe size 176/176
+MATCH module size 1088/1088
+MATCH kernel_param size 40/40 (signedness metadata anomaly verified from target code)
+MATCH selinux_state size 136/136
+MATCH av_decision size 20/20
+TARGET_FUNCTION prepare_ro_creds ["func", "prepare_ro_creds", ["prototype", ["ptr", ["struct", "cred"]], [["ptr", ["struct", "cred"]], [1, "int", 4, [16777248]], [8, "u64", [8, "__u64", [1, "unsigned long long", 8, [64]]]]]]]
+TARGET_FUNCTION kdp_assign_pgd ["func", "kdp_assign_pgd", ["prototype", ["void"], [["ptr", ["struct", "task_struct"]]]]]
+TARGET_FUNCTION kdp_usecount_dec_and_test ["func", "kdp_usecount_dec_and_test", ["prototype", [1, "unsigned int", 4, [32]], [["ptr", ["struct", "cred"]]]]]
+TARGET_FUNCTION inc_rlimit_ucounts ["func", "inc_rlimit_ucounts", ["prototype", [1, "long", 8, [16777280]], [["ptr", ["struct", "ucounts"]], [6, "rlimit_type", 4, [["UCOUNT_RLIMIT_NPROC", 0], ["UCOUNT_RLIMIT_MSGQUEUE", 1], ["UCOUNT_RLIMIT_SIGPENDING", 2], ["UCOUNT_RLIMIT_MEMLOCK", 3], ["UCOUNT_RLIMIT_COUNTS", 4]]], [1, "long", 8, [16777280]]]]]
+TARGET_FUNCTION dec_rlimit_ucounts ["func", "dec_rlimit_ucounts", ["prototype", [8, "bool", [1, "_Bool", 1, [67108872]]], [["ptr", ["struct", "ucounts"]], [6, "rlimit_type", 4, [["UCOUNT_RLIMIT_NPROC", 0], ["UCOUNT_RLIMIT_MSGQUEUE", 1], ["UCOUNT_RLIMIT_SIGPENDING", 2], ["UCOUNT_RLIMIT_MEMLOCK", 3], ["UCOUNT_RLIMIT_COUNTS", 4]]], [1, "long", 8, [16777280]]]]]
+TARGET_FUNCTION get_task_creds ["func", "get_task_creds", ["prototype", ["void"], [["ptr", ["struct", "task_struct"]], ["ptr", [1, "unsigned int", 4, [32]]], ["ptr", [1, "unsigned int", 4, [32]]], ["ptr", [1, "unsigned int", 4, [32]]], ["ptr", [1, "unsigned short", 2, [16]]]]]]
+TARGET_FUNCTION set_task_creds ["func", "set_task_creds", ["prototype", [1, "int", 4, [16777248]], [["ptr", ["struct", "task_struct"]], [1, "unsigned int", 4, [32]], [1, "unsigned int", 4, [32]], [1, "unsigned int", 4, [32]], [1, "unsigned short", 2, [16]]]]]
+TARGET_FUNCTION task_defex_enforce ["func", "task_defex_enforce", ["prototype", [1, "int", 4, [16777248]], [["ptr", ["struct", "task_struct"]], ["ptr", ["struct", "file"]], [1, "int", 4, [16777248]], ["void"]]]]

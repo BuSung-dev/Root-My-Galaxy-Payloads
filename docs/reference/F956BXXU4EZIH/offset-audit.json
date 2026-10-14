@@ -1,0 +1,8 @@
+{
+  "Firmware": "F956BXXU4EZIH",
+  "KernelRelease": "6.1.162-android14-11-34343818-abF956BXXU4EZIH",
+  "VerifiedFieldCount": 61,
+  "Result": "PASS",
+  "PhysicalLoad": "Inherited Fold6 0xa8000000, no XBL supplied",
+  "Timing": "Inherited current Fold6 route, not tested on EZIH hardware"
+}

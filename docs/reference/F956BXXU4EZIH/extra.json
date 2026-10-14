@@ -1,0 +1,108 @@
+{
+  "call_usermodehelper_exec_work": "0xd3be0",
+  "system_unbound_wq": "0x225ac60",
+  "worker_thread": "0xdb2fc",
+  "schedule": "0x11234e8",
+  "__event_sched_blocked_reason": "0x221f160",
+  "__start_ftrace_events": "0x221eeb0",
+  "__stop_ftrace_events": "0x22211f0",
+  "random_table": "0x2396990",
+  "sysctl_bootid": "0x2625768",
+  "loggers": "0x2262770",
+  "nfulnl_logger": "0x2262828",
+  "ashmem_miscs": "0x23dc1f0",
+  "__start___ksymtab": "0x17c8c10",
+  "__stop___ksymtab": "0x17d2828",
+  "__start___kcrctab": "0x17e1348",
+  "__stop___kcrctab": "0x17e4750",
+  "random_boot_id_data_ptr": "0x2396a98",
+  "nfulnl_logger_name": "0x16ba421",
+  "nfulnl_logger_name_string": "nfnetlink_log",
+  "trace_last_type": 20,
+  "trace_event_index": 86,
+  "trace_event_id": 106,
+  "btf_extra": {
+    "workqueue_struct": {
+      "size": 320,
+      "fields": {
+        "dfl_pwq": 176
+      }
+    },
+    "pool_workqueue": {
+      "size": 256,
+      "fields": {
+        "pool": 0,
+        "wq": 8,
+        "work_color": 16,
+        "refcnt": 24,
+        "nr_in_flight": 28,
+        "nr_active": 92,
+        "max_active": 96
+      }
+    },
+    "worker_pool": {
+      "size": 800,
+      "fields": {
+        "worklist": 40,
+        "nr_idle": 60
+      }
+    },
+    "work_struct": {
+      "size": 48,
+      "fields": {
+        "data": 0,
+        "entry": 8,
+        "func": 24
+      }
+    },
+    "subprocess_info": {
+      "size": 112,
+      "fields": {
+        "work": 0,
+        "complete": 48,
+        "path": 56,
+        "argv": 64,
+        "envp": 72,
+        "wait": 80,
+        "retval": 84,
+        "init": 88,
+        "cleanup": 96,
+        "data": 104
+      }
+    },
+    "task_struct": {
+      "size": 4800,
+      "fields": {
+        "usage": 64
+      }
+    },
+    "ctl_table": {
+      "size": 64,
+      "fields": {
+        "procname": 0,
+        "data": 8,
+        "maxlen": 16,
+        "mode": 20
+      }
+    },
+    "miscdevice": {
+      "size": 80,
+      "fields": {
+        "fops": 16
+      }
+    },
+    "rt_mutex_waiter": {
+      "size": 88,
+      "fields": {
+        "tree_entry": 0,
+        "pi_tree_entry": 24,
+        "task": 48,
+        "lock": 56,
+        "wake_state": 64,
+        "prio": 68,
+        "deadline": 72,
+        "ww_ctx": 80
+      }
+    }
+  }
+}

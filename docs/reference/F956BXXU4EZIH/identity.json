@@ -1,0 +1,18 @@
+{
+  "boot_size": 100663296,
+  "boot_sha256": "3e7e2aa4eabd56bbd6d97367beeb7c5c3573872066efb9052d1b2efa60072827",
+  "boot_header_version": 4,
+  "kernel_size": 38140416,
+  "kernel_sha256": "8a777690a06afcda55f89308778689f06f244224b7c566f49e114234f0744d9b",
+  "image_text_offset": "0x0",
+  "image_size": "0x2710000",
+  "image_flags": "0xa",
+  "linux_banners": [
+    "Linux version 6.1.162-android14-11-34343818-abF956BXXU4EZIH (build-user@build-host) (Android (10087095, +pgo, +bolt, +lto, -mlgo, based on r487747c) clang version 17.0.2 (https://android.googlesource.com/toolchain/llvm-project d9f89f4d16663d5012e5c09495f3b30ece3d2362), LLD 17.0.2) #1 SMP PREEMPT Sat Sep 19 11:18:23 UTC 2026",
+    "Linux version 6.1.162-android14-11-34343818-abF956BXXU4EZIH (build-user@build-host) (Android (10087095, +pgo, +bolt, +lto, -mlgo, based on r487747c) clang version 17.0.2 (https://android.googlesource.com/toolchain/llvm-project d9f89f4d16663d5012e5c09495f3b30ece3d2362), LLD 17.0.2) #1 SMP PREEMPT Sat Sep 19 11:18:23 UTC 2026"
+  ],
+  "btf_start": "0x1820e90",
+  "btf_end": "0x1dd7cb8",
+  "btf_size": 5991976,
+  "config_start": "0x12060a8"
+}
