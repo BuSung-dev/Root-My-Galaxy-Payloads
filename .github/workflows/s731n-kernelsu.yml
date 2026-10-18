@@ -67,6 +67,20 @@ jobs:
           git apply --verbose ../kernelsu/patches/KernelSU-v3.2.5-samsung-kdp-rkp-defex.patch
           git diff --stat
 
+      - name: Redirect the deleted upstream dependencies to verified mirrors
+        run: |
+          set -euxo pipefail
+          cd ksu
+          for f in userspace/ksud/Cargo.toml Cargo.lock; do
+            sed -i \
+              -e 's|https://github.com/Kernel-SU/adb_client|https://github.com/5ec1cff/adb_client|g' \
+              -e 's|https://github.com/Kernel-SU/java-properties.git|https://github.com/Baka-SU/java-properties.git|g' \
+              -e 's|https://github.com/Kernel-SU/ksu_props|https://github.com/5ec1cff/resetprop-rs|g' \
+              "$f"
+          done
+          grep -n "git = " userspace/ksud/Cargo.toml
+          grep -n 'source = "git' Cargo.lock
+
       - name: Build the KernelSU module in the DDK image
         run: |
           set -uo pipefail
