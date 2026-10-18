@@ -106,6 +106,7 @@ jobs:
                 CONFIG_KSU_SAMSUNG_KDP=y \
                 CONFIG_KSU_SAMSUNG_RKP=y \
                 CONFIG_KSU_SAMSUNG_DEFEX=y \
+                CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y \
                 CC=clang make -j"$(nproc)"
                 ls -la
                 modinfo ./kernelsu.ko
