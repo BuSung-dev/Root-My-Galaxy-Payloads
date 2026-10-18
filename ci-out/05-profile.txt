@@ -41,6 +41,11 @@ sizeof(struct sk_buff) = 0xf8
   sk_buff.tail = 0xd0
   sk_buff.end = 0xd4
   sk_buff.len = 0x70
+  page member flags type void bit offset 0
+  page member <anon> type q bit offset 64
+  page member <anon> type rog bit offset 384
+  page member _refcount type void bit offset 416
+  page member memcg_data type void bit offset 448
 page.compound_head: NOT FOUND in BTF
 page.slab_cache: NOT FOUND in BTF
 page.page_type: NOT FOUND in BTF
