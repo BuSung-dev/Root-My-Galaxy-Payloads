@@ -229,31 +229,36 @@ def main() -> int:
         print(f"sk_buff not in BTF: {exc}")
 
     # ------------------------------------------------------- nested members
-    def nested_member_offset(struct_name, member, depth=0):
+    def nested_member_offset(tid, member, depth=0):
         """Byte offset of a member nested inside unions of a struct."""
-        if depth > 6:
-            return None
-        tid = btf.find(struct_name, 4)  # BTF_KIND_STRUCT
-        if tid is None:
+        if depth > 8:
             return None
         for m_name, m_type, bit_off in btf.members[tid]:
             if m_name == member:
                 if bit_off % 8:
                     raise ValueError("member is not byte aligned")
                 return bit_off // 8
-        for m_name, m_type, bit_off in btf.members[tid]:
+        for _m_name, m_type, bit_off in btf.members[tid]:
             if btf.kind[m_type] in (4, 5):  # struct or union
-                sub = btf.type_name(m_type)
-                found = nested_member_offset(sub, member, depth + 1)
+                found = nested_member_offset(m_type, member, depth + 1)
                 if found is not None:
                     return (bit_off // 8) + found
         return None
 
+    page_id = btf.find("page", 4)
+    if page_id is not None:
+        for m_name, m_type, bit_off in btf.members[page_id]:
+            print(
+                f"  page member {m_name or '<anon>'} "
+                f"type {btf.type_name(m_type)} bit offset {bit_off}"
+            )
     for member in ("compound_head", "slab_cache", "page_type"):
-        try:
-            off = nested_member_offset("page", member)
-        except ValueError:
-            off = None
+        off = None
+        if page_id is not None:
+            try:
+                off = nested_member_offset(page_id, member)
+            except ValueError:
+                off = None
         if off is None:
             print(f"page.{member}: NOT FOUND in BTF")
         else:
