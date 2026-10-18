@@ -32,25 +32,28 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Restore the recovered vmlinux
+      - name: Restore the kernel image
         uses: actions/cache/restore@v4
         with:
-          path: fw/ap/vmlinux.elf
-          key: s731n-vmlinux-v1
+          path: fw/ap/kernel
+          key: s731n-kernel-v1
 
-      - name: Check the recovered vmlinux
+      - name: Recover the vmlinux ELF
         run: |
           set -uo pipefail
-          mkdir -p ci-out
+          mkdir -p ci-out fw/ap
           {
-            echo "=== vmlinux ==="
-            ls -la fw/ap/ 2>&1 || echo "NO vmlinux"
-            if [ -f fw/ap/vmlinux.elf ]; then
-              sha256sum fw/ap/vmlinux.elf
-            else
-              echo "VMLINUX MISSING FROM CACHE"
-            fi
-          } | tee ci-out/ksu-00-cache.txt
+            echo "=== kernel ==="
+            ls -la fw/ap/
+            echo "=== python deps ==="
+            pip install --quiet pyelftools lz4 zstandard peewee
+            pip install --quiet --no-deps vmlinux-to-elf
+            echo "=== vmlinux-to-elf ==="
+            vmlinux-to-elf fw/ap/kernel fw/ap/vmlinux.elf
+            ls -la fw/ap/vmlinux.elf
+            sha256sum fw/ap/vmlinux.elf
+          } 2>&1 | tee ci-out/ksu-00-cache.txt
+          test -f fw/ap/vmlinux.elf
 
       - name: Checkout KernelSU v3.2.5
         run: |
@@ -71,11 +74,12 @@ jobs:
         run: |
           set -euxo pipefail
           cd ksu
-          for f in userspace/ksud/Cargo.toml Cargo.lock; do
+          for f in userspace/ksud/Cargo.toml userspace/ksuinit/Cargo.toml Cargo.lock; do
             sed -i \
               -e 's|https://github.com/Kernel-SU/adb_client|https://github.com/5ec1cff/adb_client|g' \
               -e 's|https://github.com/Kernel-SU/java-properties.git|https://github.com/Baka-SU/java-properties.git|g' \
               -e 's|https://github.com/Kernel-SU/ksu_props|https://github.com/5ec1cff/resetprop-rs|g' \
+              -e 's|https://github.com/Kernel-SU/rustix.git|https://github.com/Baka-SU/rustix.git|g' \
               "$f"
           done
           grep -n "git = " userspace/ksud/Cargo.toml
