@@ -1,0 +1,11 @@
+=== pip install ===
+py deps rc=0
+vmlinux-to-elf rc=0
+lz4                4.4.5
+peewee             4.5.3
+pyelftools         0.33
+vmlinux-to-elf     1.3.6
+zstandard          0.22.0
+elftools ok
+vmlinux_to_elf ok
+/home/runner/.local/bin/vmlinux-to-elf
