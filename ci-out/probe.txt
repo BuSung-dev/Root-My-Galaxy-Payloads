@@ -3,8 +3,7 @@ https://static.crates.io/crates/serde/serde-1.0.200.crate -> 200
 https://index.crates.io/config.json -> 200
 https://github.com/topjohnwu/samloader-rs/releases/latest -> 200
 --- neofuss ---
-157.185.160.88  neofussvr.sslcs.cdngc.net
-157.185.170.164 neofussvr.sslcs.cdngc.net
+157.185.179.240 neofussvr.sslcs.cdngc.net
 history endpoint -> 405
 --- apt ---
 bpftool:
