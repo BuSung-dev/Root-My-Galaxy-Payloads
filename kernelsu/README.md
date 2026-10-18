@@ -24,6 +24,8 @@ between KMIs.
 | `ksud-e1s-S921NKSSFDZF3-kdp` | Same exact S921N build | `android14-6.1` | Device-tested late-load binary embedding the S921N no-patch-text module |
 | `android14-6.1_kernelsu-e1s-S921BXXSFDZE1-kdp.ko` | `SM-S921B`, `S921BXXSFDZE1` | `android14-6.1` | Exact E1S no-patch-text module with target `vermagic`, audited for manual relocation |
 | `ksud-e1s-S921BXXSFDZE1-kdp` | Same exact E1S build | `android14-6.1` | Device-tested late-load binary embedding the E1S no-patch-text module |
+| `android14-6.1_kernelsu-essi-S731NKSS7BZF1-kdp.ko` | `SM-S731N`, `S731NKSS7BZF1` | `android14-6.1` | Exact Korean Galaxy S25 FE no-patch-text module with target `vermagic`, audited for manual relocation |
+| `ksud-essi-S731NKSS7BZF1-kdp` | Same exact S731N build | `android14-6.1` | Late-load binary embedding the S731N module; hardware load untested |
 | `android14-6.1_kernelsu-samsung-kdp.ko` | `SM-S721N` `S721NKSSCDZF3`; `SM-S921B` `S921BXXSFDZF2` | `android14-6.1` | Standalone Samsung KDP/RKP/DEFEX module with target `vermagic` |
 | `ksud-samsung-android14-6.1-kdp` | Same verified 6.1 targets | `android14-6.1` | Late-load binary embedding the 6.1 module |
 | `android12-5.10_kernelsu-samsung-kdp.ko` | `SM-A155N` `A155NKSS6BYH1` | `android12-5.10` | Standalone Samsung KDP/RKP/DEFEX module built against the exact A15 kernel |
@@ -244,6 +246,52 @@ SHA-256: a6c521a2f660f595f4ea359c243e27b85142cbcd832c84340dac0994f8d12135
 ksud-e2s-S926BXXUEDZDR-kdp
 size: 4780056
 SHA-256: dc3eb02640492a8d6f78f8515c6ae5c75ddbfa593f53cd0f3efdfc82a29c4219
+```
+
+The Korean Galaxy S25 FE module for `S731NKSS7BZF1` uses the same
+no-patch-text source and the same `6.1.157-android14-11` target release. Its
+manual-relocation audit against the recovered `S731NKSS7BZF1` `vmlinux.elf`
+reports 202 undefined imports, zero missing target symbols, an empty
+`__versions` section, zero target CRC mismatches, and 47 imports that are
+resolved through kallsyms instead of conventional exports.
+`kernel/check_symbol` reports no missing symbol. The published artifacts are:
+
+```text
+android14-6.1_kernelsu-essi-S731NKSS7BZF1-kdp.ko
+size: 398336
+SHA-256: 2cbd56cf503a4f8ff83ae43c2fd9aef16131f77305c193420a3ef34b161de86c
+
+ksud-essi-S731NKSS7BZF1-kdp
+size: 4765944
+SHA-256: ce773693273e79e341321bdf1fc1fda41d667b4c2b14635f4ed61d76079ca6ae
+```
+
+### Deleted upstream dependencies
+
+The `Kernel-SU` organization repositories that KernelSU v3.2.5 pins as Cargo
+git dependencies have been deleted, so `cargo build` can no longer resolve
+them. Mirror repositories that still contain the exact pinned commits are used
+instead. The commit identifiers are unchanged, so the dependency sources are
+bit-identical to the deleted upstream ones.
+
+| Dependency | Deleted upstream | Mirror | Pinned commit |
+| --- | --- | --- | --- |
+| `adb_client` | `https://github.com/Kernel-SU/adb_client` | `https://github.com/5ec1cff/adb_client` | `d97a966435bebaa55017834869dec08150826aa7` |
+| `java-properties` | `https://github.com/Kernel-SU/java-properties.git` | `https://github.com/Baka-SU/java-properties.git` | `42a4aa941b70ded2dd3be9e9f892471023e70229` |
+| `prop-rs-android` | `https://github.com/Kernel-SU/ksu_props` | `https://github.com/5ec1cff/resetprop-rs` | `699849f3e4db47b622bcb7fae8e76c728b1b65a6` |
+| `rustix` | `https://github.com/Kernel-SU/rustix.git` | `https://github.com/Baka-SU/rustix.git` | `4a53fbc7cb7a07cabe87125cc21dbc27db316259` |
+
+`android-bootimg` still resolves to `https://github.com/5ec1cff/android_bootimg`
+and `kernlog` to `https://github.com/kstep/kernlog.rs`.
+
+The `ksud` build additionally needs the Rust Android target, the NDK linker,
+and `libclang` for `bindgen`:
+
+```sh
+rustup target add aarch64-linux-android
+export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ndkBin/aarch64-linux-android35-clang"
+export LIBCLANG_PATH="$(dirname "$(ls /usr/lib/llvm-*/lib/libclang.so* | head -1)")"
+cargo build --release --target aarch64-linux-android -p ksud
 ```
 
 Copy the stripped module to:

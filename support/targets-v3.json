@@ -299,6 +299,21 @@
       }
     },
     {
+      "payloadId": "essi-S731NKSS7BZF1",
+      "displayName": "Galaxy S25 FE | Kernel 6.1.157",
+      "models": ["SM-S731N"],
+      "kernelVersions": ["6.1.157"],
+      "requiresFreshP0Session": true,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/essi-S731NKSS7BZF1/cve-2026-43499-app.so",
+        "size": 104128
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-essi-S731NKSS7BZF1-kdp",
+        "size": 4765944
+      }
+    },
+    {
       "payloadId": "gts9-X710XXS6EZF1",
       "displayName": "Galaxy Tab S9 SM-X710 | Kernel 5.15.189 (X710XXS6EZF1)",
       "models": [

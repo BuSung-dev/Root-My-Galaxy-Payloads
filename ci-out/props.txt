@@ -1,7 +1,0 @@
-=== build_fingerprint.txt ===
-samsung/r13sksx/essi:16/BP4A.251205.006/S731NKSS7BZF1:user/test-keys
-
-=== build.prop (selected) ===
-ro.product.name_for_attestation=
-ro.product.model_for_attestation=
-ro.product.brand_for_attestation=

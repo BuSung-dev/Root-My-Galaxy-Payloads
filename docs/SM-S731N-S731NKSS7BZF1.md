@@ -203,9 +203,61 @@ The release payload is produced with:
 make TARGET=essi-S731NKSS7BZF1 ANDROID_NDK_HOME=/path/to/android-ndk-r29 release
 ```
 
+## KernelSU module
+
+The module is built from KernelSU `v3.2.5`, commit
+`b0bc817b4e966aa6aa830834eaf6ef765d821d40`, with
+`kernelsu/patches/KernelSU-v3.2.5-samsung-kdp-rkp-defex.patch` and the
+fail-closed Exynos path:
+
+```sh
+CONFIG_KSU=m
+CONFIG_KSU_SAMSUNG_KDP=y
+CONFIG_KSU_SAMSUNG_RKP=y
+CONFIG_KSU_SAMSUNG_DEFEX=y
+CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y
+```
+
+The DDK image `ghcr.io/ylarod/ddk-min:android14-6.1-20260313` ships
+`6.1.166-dirty`; its generated `UTS_RELEASE` and `include/config/kernel.release`
+are replaced with this target's release before the build, because the target
+has `CONFIG_MODULE_FORCE_LOAD=n`. The resulting module reports:
+
+```text
+vermagic: 6.1.157-android14-11 SMP preempt mod_unload modversions aarch64
+```
+
+`kernel/check_symbol` reports no missing symbol against the recovered
+`S731NKSS7BZF1` `vmlinux.elf`. The manual-relocation audit against the
+target-derived `Module.symvers` reports 202 undefined imports, zero missing
+target symbols, an empty `__versions` section, zero target CRC mismatches,
+and 47 imports resolved through kallsyms. The published pair is:
+
+```text
+kernelsu/android14-6.1_kernelsu-essi-S731NKSS7BZF1-kdp.ko
+size: 398336
+SHA-256: 2cbd56cf503a4f8ff83ae43c2fd9aef16131f77305c193420a3ef34b161de86c
+
+kernelsu/ksud-essi-S731NKSS7BZF1-kdp
+size: 4765944
+SHA-256: ce773693273e79e341321bdf1fc1fda41d667b4c2b14635f4ed61d76079ca6ae
+```
+
+The four `Kernel-SU` Cargo git dependencies that KernelSU v3.2.5 pins were
+deleted upstream, so the `ksud` build uses commit-identical mirrors. The
+mapping is recorded in [`../kernelsu/README.md`](../kernelsu/README.md).
+
+## Support feed
+
+`support/targets-v3.json` registers the pair for `SM-S731N` on kernel
+`6.1.157` with `requiresFreshP0Session`, because the slide discovery and the
+exploitation must run inside the same payload process.
+
 ## Validation status
 
 - The profile, the P0 fingerprint and the release payload are statically
   verified against the recovered `vmlinux.elf` and BTF of this firmware.
+- The KernelSU module is build-verified and audited against the recovered
+  target, but no late load has been executed on an `SM-S731N` device.
 - The exploit chain and the KernelSU late load have not been executed on an
   `SM-S731N` device.

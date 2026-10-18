@@ -1,2 +1,0 @@
-=== check_symbol against the S731NKSS7BZF1 vmlinux ===
-check_symbol rc=0
