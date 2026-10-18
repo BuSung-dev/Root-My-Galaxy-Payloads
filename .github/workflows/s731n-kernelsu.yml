@@ -114,6 +114,21 @@ jobs:
           } 2>&1 | tee ci-out/ksu-01-build.txt
           test -f ksu/kernel/kernelsu.ko
 
+      - name: Commit the module build diagnostics
+        if: always()
+        run: |
+          set -uo pipefail
+          git config user.name "arena-agent"
+          git config user.email "agent@arena.ai"
+          git add -A ci-out || true
+          git commit -q -m "ci: s731n KernelSU module build diagnostics" || true
+          for i in 1 2 3; do
+            git pull --rebase origin arena/b8ef920e-root-my-galaxy-payloads >/dev/null 2>&1 || true
+            if git push origin HEAD:arena/b8ef920e-root-my-galaxy-payloads; then exit 0; fi
+            sleep 10
+          done
+          echo "push failed"
+
       - name: Audit the module against the recovered target
         run: |
           set -uo pipefail
@@ -142,17 +157,6 @@ jobs:
               --manual-relocation
           } 2>&1 | tee ci-out/ksu-03-audit.txt || true
 
-      - name: Strip the module and embed it into ksud
-        run: |
-          set -euxo pipefail
-          cp ksu/kernel/kernelsu.ko ksu/kernel/kernelsu.unstripped.ko
-          llvm-strip -d ksu/kernel/kernelsu.ko
-          ls -la ksu/kernel/kernelsu*.ko
-          modinfo ksu/kernel/kernelsu.ko | head -20
-          mkdir -p ksu/userspace/ksud/bin/aarch64
-          cp ksu/kernel/kernelsu.ko \
-            ksu/userspace/ksud/bin/aarch64/android14-6.1_kernelsu.ko
-
       - name: Install the Rust and NDK toolchains
         run: |
           set -euxo pipefail
@@ -165,6 +169,25 @@ jobs:
             "https://dl.google.com/android/repository/android-ndk-r29-linux.zip"
           unzip -q ndk.zip
           ls -d /opt/android-ndk-*
+
+      - name: Strip the module and embed it into ksud
+        run: |
+          set -euxo pipefail
+          NDK=/opt/android-ndk-r29
+          NDKBIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          "$NDKBIN/llvm-strip" --version | head -2
+          cp ksu/kernel/kernelsu.ko ksu/kernel/kernelsu.unstripped.ko
+          "$NDKBIN/llvm-strip" -d ksu/kernel/kernelsu.ko
+          ls -la ksu/kernel/kernelsu*.ko
+          if command -v modinfo >/dev/null 2>&1; then
+            modinfo ksu/kernel/kernelsu.ko | head -20
+          else
+            echo "modinfo is not available on this runner"
+          fi
+          mkdir -p ksu/userspace/ksud/bin/aarch64
+          cp ksu/kernel/kernelsu.ko \
+            ksu/userspace/ksud/bin/aarch64/android14-6.1_kernelsu.ko
+          ls -la ksu/userspace/ksud/bin/aarch64/
 
       - name: Build ksud for aarch64-linux-android
         run: |
@@ -200,7 +223,7 @@ jobs:
               kernelsu/android14-6.1_kernelsu-essi-S731NKSS7BZF1-kdp.ko
             sha256sum kernelsu/ksud-essi-S731NKSS7BZF1-kdp \
               kernelsu/android14-6.1_kernelsu-essi-S731NKSS7BZF1-kdp.ko
-            modinfo kernelsu/android14-6.1_kernelsu-essi-S731NKSS7BZF1-kdp.ko | head -20
+            echo "modinfo skipped"
           } | tee ci-out/ksu-05-artifacts.txt
           git add -A kernelsu ci-out
           git commit -q -m "build: S731NKSS7BZF1 KernelSU module and ksud" || echo "nothing to commit"

