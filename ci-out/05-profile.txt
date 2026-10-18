@@ -41,6 +41,17 @@ sizeof(struct sk_buff) = 0xf8
   sk_buff.tail = 0xd0
   sk_buff.end = 0xd4
   sk_buff.len = 0x70
+page.compound_head: NOT FOUND in BTF
+page.slab_cache: NOT FOUND in BTF
+page.page_type: NOT FOUND in BTF
+rt_mutex_waiter.tree_entry = 0x0
+rt_mutex_waiter.pi_tree_entry = 0x18
+rt_mutex_waiter.task = 0x30
+rt_mutex_waiter.lock = 0x38
+rt_mutex_waiter.wake_state = 0x40
+rt_mutex_waiter.prio = 0x44
+rt_mutex_waiter.deadline = 0x48
+rt_mutex_waiter.ww_ctx = 0x50
 core_sys_select: offset 0x3c2908 size 0x26c sha256 32f7311dbd0ede23
 do_select: offset 0x3c2d04 size 0x670 sha256 41198f125aaed52f
 rt_mutex_slowlock: offset 0x11217dc size 0x248 sha256 77f635651727cf3c
@@ -57,6 +68,14 @@ sizeof(struct rt_mutex_waiter) = 0x58
   "MISCDEVICE_FOPS_OFF": 16,
   "MISCDEVICE_NAME_OFF": 8,
   "MM_STRUCT_SZ": 960,
+  "RT_MUTEX_WAITER_DEADLINE": 72,
+  "RT_MUTEX_WAITER_LOCK": 56,
+  "RT_MUTEX_WAITER_PI_TREE_ENTRY": 24,
+  "RT_MUTEX_WAITER_PRIO": 68,
+  "RT_MUTEX_WAITER_TASK": 48,
+  "RT_MUTEX_WAITER_TREE_ENTRY": 0,
+  "RT_MUTEX_WAITER_WAKE_STATE": 64,
+  "RT_MUTEX_WAITER_WW_CTX": 80,
   "SIZEOF_MISCDEVICE": 80,
   "SIZEOF_MM_STRUCT": 960,
   "SIZEOF_RT_MUTEX_WAITER": 88,
