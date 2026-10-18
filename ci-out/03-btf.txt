@@ -1,3 +1,3 @@
 === raw BTF ===
 raw BTF: [0x188c248, 0x1e4497e) (5998390 bytes) -> ap/vmlinux.btf
--rw-r--r-- 1 runner runner 5998390 Oct 18 23:27 ap/vmlinux.btf
+-rw-r--r-- 1 runner runner 5998390 Oct 18 23:31 ap/vmlinux.btf
