@@ -331,6 +331,21 @@
         "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-e3q-S9280ZCS6DZF2-kdp",
         "size": 4879856
       }
+    },
+    {
+      "payloadId": "r13s-S731U1UES7BZF3",
+      "displayName": "Galaxy S25 FE | Kernel 6.1.157",
+      "models": ["SM-S731U1"],
+      "kernelVersions": ["6.1.157"],
+      "requiresFreshP0Session": true,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/r13s-S731U1UES7BZF3/cve-2026-43499-app.so",
+        "size": 141232
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-r13s-S731U1UES7BZF3-kdp",
+        "size": 3607184
+      }
     }
   ]
 }
