@@ -1,0 +1,212 @@
+name: s731n-kernelsu
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/b8ef920e-root-my-galaxy-payloads
+    paths:
+      - ".github/workflows/s731n-kernelsu.yml"
+      - "kernelsu/**"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: s731n-kernelsu
+  cancel-in-progress: false
+
+env:
+  KMI: android14-6.1
+  DDK_IMAGE: ghcr.io/ylarod/ddk-min:android14-6.1-20260313
+  KERNELSU_REPO: https://github.com/5ec1cff/KernelSU.git
+  KERNELSU_COMMIT: b0bc817b4e966aa6aa830834eaf6ef765d821d40
+  TARGET_RELEASE: 6.1.157-android14-11
+
+jobs:
+  kernelsu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Restore the recovered vmlinux
+        uses: actions/cache/restore@v4
+        with:
+          path: fw/ap/vmlinux.elf
+          key: s731n-vmlinux-v1
+
+      - name: Check the recovered vmlinux
+        run: |
+          set -uo pipefail
+          mkdir -p ci-out
+          {
+            echo "=== vmlinux ==="
+            ls -la fw/ap/ 2>&1 || echo "NO vmlinux"
+            if [ -f fw/ap/vmlinux.elf ]; then
+              sha256sum fw/ap/vmlinux.elf
+            else
+              echo "VMLINUX MISSING FROM CACHE"
+            fi
+          } | tee ci-out/ksu-00-cache.txt
+
+      - name: Checkout KernelSU v3.2.5
+        run: |
+          set -euxo pipefail
+          git clone "$KERNELSU_REPO" ksu
+          cd ksu
+          git checkout "$KERNELSU_COMMIT"
+          git log -1 --oneline
+
+      - name: Apply the Samsung KDP/RKP/DEFEX patch
+        run: |
+          set -euxo pipefail
+          cd ksu
+          git apply --verbose ../kernelsu/patches/KernelSU-v3.2.5-samsung-kdp-rkp-defex.patch
+          git diff --stat
+
+      - name: Build the KernelSU module in the DDK image
+        run: |
+          set -uo pipefail
+          {
+            echo "=== ddk pull ==="
+            docker pull "$DDK_IMAGE" 2>&1
+            echo "rc=$?"
+            echo
+            echo "=== ddk build ==="
+            docker run --rm --platform linux/amd64 \
+              -e TARGET_RELEASE="$TARGET_RELEASE" \
+              -v "$PWD:/work" -w /work/ksu/kernel \
+              "$DDK_IMAGE" \
+              bash -lc '
+                set -eux
+                echo "KDIR=$KDIR"
+                ls -la "$KDIR" | head -40
+                echo "--- utsrelease ---"
+                cat "$KDIR/include/generated/utsrelease.h" 2>&1 || true
+                echo "--- kernel.release ---"
+                cat "$KDIR/include/config/kernel.release" 2>&1 || true
+                echo "--- vmlinux ---"
+                ls -la "$KDIR/vmlinux" 2>&1 || true
+                echo "--- clang ---"
+                which clang; clang --version | head -3
+                echo "--- gcc ---"
+                which gcc; gcc --version | head -2
+                echo "--- set the target release ---"
+                sed -i -E "s/^#define UTS_RELEASE .*$/#define UTS_RELEASE \"$TARGET_RELEASE\"/" \
+                  "$KDIR/include/generated/utsrelease.h"
+                echo "$TARGET_RELEASE" > "$KDIR/include/config/kernel.release"
+                cat "$KDIR/include/generated/utsrelease.h"
+                cat "$KDIR/include/config/kernel.release"
+                echo "--- build ---"
+                make clean || true
+                CONFIG_KSU=m \
+                CONFIG_KSU_SAMSUNG_KDP=y \
+                CONFIG_KSU_SAMSUNG_RKP=y \
+                CONFIG_KSU_SAMSUNG_DEFEX=y \
+                CC=clang make -j"$(nproc)"
+                ls -la
+                modinfo ./kernelsu.ko
+              '
+            echo "rc=$?"
+          } 2>&1 | tee ci-out/ksu-01-build.txt
+          test -f ksu/kernel/kernelsu.ko
+
+      - name: Audit the module against the recovered target
+        run: |
+          set -uo pipefail
+          {
+            echo "=== check_symbol against the S731NKSS7BZF1 vmlinux ==="
+            cd ksu/kernel
+            if [ -x ./check_symbol ]; then
+              ./check_symbol ./kernelsu.ko /work/fw/ap/vmlinux.elf
+              echo "check_symbol rc=$?"
+            else
+              echo "check_symbol was not built"
+            fi
+          } 2>&1 | tee ../ci-out/ksu-02-checksymbol.txt || true
+          cd ../..
+          {
+            echo "=== target Module.symvers ==="
+            python3 kernelsu/tools/extract_target_symvers.py \
+              fw/ap/vmlinux.elf fw/ap/Module.symvers
+            wc -l fw/ap/Module.symvers
+            echo
+            echo "=== manual relocation audit ==="
+            python3 kernelsu/tools/audit_module_against_target.py \
+              ksu/kernel/kernelsu.ko \
+              fw/ap/vmlinux.elf \
+              fw/ap/Module.symvers \
+              --manual-relocation
+          } 2>&1 | tee ci-out/ksu-03-audit.txt || true
+
+      - name: Strip the module and embed it into ksud
+        run: |
+          set -euxo pipefail
+          cp ksu/kernel/kernelsu.ko ksu/kernel/kernelsu.unstripped.ko
+          llvm-strip -d ksu/kernel/kernelsu.ko
+          ls -la ksu/kernel/kernelsu*.ko
+          modinfo ksu/kernel/kernelsu.ko | head -20
+          mkdir -p ksu/userspace/ksud/bin/aarch64
+          cp ksu/kernel/kernelsu.ko \
+            ksu/userspace/ksud/bin/aarch64/android14-6.1_kernelsu.ko
+
+      - name: Install the Rust and NDK toolchains
+        run: |
+          set -euxo pipefail
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustc --version
+          cargo --version
+          cd /opt
+          curl -fsSL --retry 3 -o ndk.zip \
+            "https://dl.google.com/android/repository/android-ndk-r29-linux.zip"
+          unzip -q ndk.zip
+          ls -d /opt/android-ndk-*
+
+      - name: Build ksud for aarch64-linux-android
+        run: |
+          set -uo pipefail
+          {
+            NDK=/opt/android-ndk-r29
+            NDKBIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+            export PATH="$NDKBIN:$PATH"
+            export LIBCLANG_PATH="$NDKBIN"
+            export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$NDKBIN/aarch64-linux-android35-clang"
+            export CC_aarch64_linux_android="$NDKBIN/aarch64-linux-android35-clang"
+            export AR_aarch64_linux_android="$NDKBIN/llvm-ar"
+            export RANLIB_aarch64_linux_android="$NDKBIN/llvm-ranlib"
+            cd ksu
+            cargo build --release --target aarch64-linux-android -p ksud
+            ls -la target/aarch64-linux-android/release/ksud
+            file target/aarch64-linux-android/release/ksud
+          } 2>&1 | tee ../ci-out/ksu-04-ksud.txt
+          test -f ksu/target/aarch64-linux-android/release/ksud
+
+      - name: Commit the KernelSU pair
+        run: |
+          set -uo pipefail
+          git config user.name "arena-agent"
+          git config user.email "agent@arena.ai"
+          cp ksu/target/aarch64-linux-android/release/ksud \
+            kernelsu/ksud-essi-S731NKSS7BZF1-kdp
+          cp ksu/kernel/kernelsu.ko \
+            kernelsu/android14-6.1_kernelsu-essi-S731NKSS7BZF1-kdp.ko
+          {
+            echo "=== published artifacts ==="
+            ls -la kernelsu/ksud-essi-S731NKSS7BZF1-kdp \
+              kernelsu/android14-6.1_kernelsu-essi-S731NKSS7BZF1-kdp.ko
+            sha256sum kernelsu/ksud-essi-S731NKSS7BZF1-kdp \
+              kernelsu/android14-6.1_kernelsu-essi-S731NKSS7BZF1-kdp.ko
+            modinfo kernelsu/android14-6.1_kernelsu-essi-S731NKSS7BZF1-kdp.ko | head -20
+          } | tee ci-out/ksu-05-artifacts.txt
+          git add -A kernelsu ci-out
+          git commit -q -m "build: S731NKSS7BZF1 KernelSU module and ksud" || echo "nothing to commit"
+          for i in 1 2 3; do
+            git pull --rebase origin arena/b8ef920e-root-my-galaxy-payloads >/dev/null 2>&1 || true
+            if git push origin HEAD:arena/b8ef920e-root-my-galaxy-payloads; then exit 0; fi
+            sleep 10
+          done
+          echo "push failed"
