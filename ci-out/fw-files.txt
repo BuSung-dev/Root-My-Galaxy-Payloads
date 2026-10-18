@@ -1,12 +1,12 @@
 total 12345488
-drwxr-xr-x  2 runner runner        4096 Oct 18 22:43 .
-drwxr-xr-x 13 runner runner        4096 Oct 18 22:41 ..
--rw-r--r--  1 runner runner 12641765822 Oct 18 22:43 fw_KOO.zip
+drwxr-xr-x  2 runner runner        4096 Oct 18 23:03 .
+drwxr-xr-x 13 runner runner        4096 Oct 18 23:02 ..
+-rw-r--r--  1 runner runner 12641765822 Oct 18 23:03 fw_KOO.zip
 Filesystem      Size  Used Avail Use% Mounted on
 /dev/root       145G   71G   74G  49% /
 total 14299184
-drwxr-xr-x 2 runner runner        4096 Oct 18 22:45 .
-drwxr-xr-x 3 runner runner        4096 Oct 18 22:43 ..
+drwxr-xr-x 2 runner runner        4096 Oct 18 23:05 .
+drwxr-xr-x 3 runner runner        4096 Oct 18 23:03 ..
 -rw-r--r-- 1 runner runner 14370109563 Jun  1 19:52 AP_S731NKSS7BZF1_S731NKSS7BZF1_MQB110306726_REV00_user_low_ship_MULTI_CERT_meta_OS16.tar.md5
 -rw-r--r-- 1 runner runner    11243633 Jun  1 19:52 BL_S731NKSS7BZF1_S731NKSS7BZF1_MQB110306726_REV00_user_low_ship_MULTI_CERT.tar.md5
 -rw-r--r-- 1 runner runner    38369390 Jun  1 20:09 CP_S731NKSS7BZE1_CP34278746_MQB109595701_REV00_user_low_ship_MULTI_CERT.tar.md5
@@ -14,7 +14,7 @@ drwxr-xr-x 3 runner runner        4096 Oct 18 22:43 ..
 -rw-r--r-- 1 runner runner   111298669 Jun  1 20:09 HOME_CSC_OKR_S731NOKR7BZF1_MQB110306726_REV00_user_low_ship_MULTI_CERT.tar.md5
 AP_TAR=extracted/AP_S731NKSS7BZF1_S731NKSS7BZF1_MQB110306726_REV00_user_low_ship_MULTI_CERT_meta_OS16.tar.md5
 total 21900
-drwxr-xr-x 3 runner runner     4096 Oct 18 22:45 .
-drwxr-xr-x 4 runner runner     4096 Oct 18 22:45 ..
+drwxr-xr-x 3 runner runner     4096 Oct 18 23:05 .
+drwxr-xr-x 4 runner runner     4096 Oct 18 23:05 ..
 -rw-r--r-- 1 runner runner 22411432 May 29 06:22 boot.img.lz4
-drwxr-xr-x 2 runner runner     4096 Oct 18 22:45 meta-data
+drwxr-xr-x 2 runner runner     4096 Oct 18 23:05 meta-data
