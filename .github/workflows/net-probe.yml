@@ -14,45 +14,25 @@ jobs:
           ref: arena/b8ef920e-root-my-galaxy-payloads
       - name: probe
         run: |
-          {
-            echo "runner: $(uname -a)"
-            echo "--- dns ---"
-            getent hosts fuss.samsungmnox.com samfuss.samsung.com || true
-            echo "--- http ---"
-            for u in \
-              "https://fuss.samsungmnox.com/samsung/fuse" \
-              "https://samfuss.samsung.com/samsung/fuse" \
-              "https://dl.google.com/android/repository/android-ndk-r29-linux.zip" \
-              "https://dl.google.com/android/repository/repository2-3.xml" \
-              "https://ghcr.io/v2/" \
-              "https://crates.io" \
-              "https://static.crates.io" ; do
-              code=$(curl -sS -m 30 -o /dev/null -w "%{http_code}" "$u" 2>&1 || echo "ERR")
-              echo "$u -> $code"
-            done
-            echo "--- tools ---"
-            command -v cargo rustc python3 lz4 unzip llvm-nm aarch64-linux-gnu-gcc || true
-            cargo --version 2>&1 || true
-            python3 --version
-            echo "--- disk ---"
-            df -h / | tail -2
-          } > ci-out/probe.txt 2>&1 || true
           mkdir -p ci-out
           {
-            echo "runner: $(uname -a)"
-            getent hosts fuss.samsungmnox.com samfuss.samsung.com || true
             for u in \
+              "http://fota-cloud-dn.ospserver.net/firmware" \
+              "https://fota-cloud-dn.ospserver.net/firmware" \
               "https://fuss.samsungmnox.com/samsung/fuse" \
               "https://samfuss.samsung.com/samsung/fuse" \
-              "https://dl.google.com/android/repository/android-ndk-r29-linux.zip" \
-              "https://ghcr.io/v2/" \
-              "https://crates.io" ; do
-              code=$(curl -sS -m 30 -o /dev/null -w "%{http_code}" "$u" 2>&1 || echo "ERR")
+              "https://samfrew.com" \
+              "https://api.github.com" ; do
+              code=$(curl -sS -m 25 -o /dev/null -w "%{http_code}" "$u" 2>&1 || echo ERR)
               echo "$u -> $code"
             done
-            command -v cargo rustc python3 lz4 unzip llvm-nm || true
-            cargo --version 2>&1 || true
-            df -h / | tail -2
+            echo "--- dns names ---"
+            for h in fuss.samsungmnox.com samfuss.samsung.com fota-cloud-dn.ospserver.net samsungmobile.net; do
+              echo "$h: $(getent hosts $h || echo NODNS)"
+            done
+            echo "--- ospserver probe ---"
+            curl -sS -m 25 "http://fota-cloud-dn.ospserver.net/firmware/KOO/SM-S731N/version.xml" 2>&1 | head -c 1200
+            echo
           } > ci-out/probe.txt 2>&1
       - name: commit
         run: |
