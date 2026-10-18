@@ -246,6 +246,16 @@ def main() -> int:
     parser.add_argument("vmlinux", type=Path)
     parser.add_argument("btf", type=Path)
     parser.add_argument("--json", type=Path)
+    parser.add_argument(
+        "--trace-last-type",
+        type=int,
+        default=20,
+        help=(
+            "__TRACE_LAST_TYPE of the target kernel: the first dynamically "
+            "assigned trace event id. This is a compile-time constant of "
+            "kernel/trace/trace.h, not a symbol."
+        ),
+    )
     args = parser.parse_args()
 
     symbols = read_elf_symbols(args.vmlinux)
@@ -286,8 +296,16 @@ def main() -> int:
         "SYSTEM_UNBOUND_WQ_OFF": "system_unbound_wq",
         "INIT_TASK_OFF": "init_task",
         "ROOT_TASK_GROUP_OFF": "root_task_group",
-        "ASHMEM_MISC_OFF": "ashmem_misc",
         "SYSCTL_BOOTID_OFF": "sysctl_bootid",
+        # nfulnl_logger is the complete struct nf_logger object; its first
+        # qword is the "name" pointer.
+        "SLIDE_NFULNL_LOGGER_OBJECT_OFF": "nfulnl_logger",
+        # random_table[] holds the per-entry sysctl table of random.c.
+        "RANDOM_TABLE_OFF": "random_table",
+        # Trace event registration bookkeeping.
+        "START_FTRACE_EVENTS_OFF": "__start_ftrace_events",
+        "EVENT_SCHED_BLOCKED_REASON_OFF": "__event_sched_blocked_reason",
+        "WORKER_THREAD_OFF": "worker_thread",
     }
     print("\n== symbol offsets ==")
     for macro, symbol in symbol_map.items():
@@ -299,14 +317,12 @@ def main() -> int:
         report[macro] = value
         print(f"{macro}: 0x{value:08x}  ({symbol})")
 
-    # ASHMEM_MISC_FOPS_OFF is ashmem_misc + offsetof(struct miscdevice, fops).
+    # ASHMEM_MISC_FOPS_OFF is the miscdevice fops pointer slot of the ashmem
+    # misc device. The device is a static object and may be absent from
+    # kallsyms, so it is resolved from the target's own data when possible.
     misc_fops = btf.struct_member_offset("miscdevice", "fops")
     report["MISCDEVICE_FOPS_OFF"] = misc_fops
-    report["ASHMEM_MISC_FOPS_OFF"] = report["ASHMEM_MISC_OFF"] + misc_fops
-    print(
-        f"\nASHMEM_MISC_FOPS_OFF: 0x{report['ASHMEM_MISC_FOPS_OFF']:08x}  "
-        f"(ashmem_misc + 0x{misc_fops:x} offsetof(miscdevice,fops))"
-    )
+    print(f"\noffsetof(struct miscdevice, fops) = 0x{misc_fops:x}")
 
     # selinux_state.enforcing
     enforcing = btf.struct_member_offset("selinux_state", "enforcing")
@@ -414,6 +430,10 @@ def main() -> int:
     # Trace event id: __TRACE_LAST_TYPE + (__event_sched_blocked_reason -
     # __start_ftrace_events) / 8
     print("\n== tracefs event id ==")
+    # __TRACE_LAST_TYPE is the first dynamically assigned event id. It is a
+    # compile-time constant of the target's kernel/trace/trace.h, not a
+    # symbol, so it is supplied on the command line.
+    trace_last_type = args.trace_last_type
     try:
         start = symbols["__start_ftrace_events"]
         event = symbols["__event_sched_blocked_reason"]
@@ -421,7 +441,9 @@ def main() -> int:
         print(f"__start_ftrace_events: 0x{start - base:x}")
         print(f"__event_sched_blocked_reason: 0x{event - base:x}")
         print(f"event_index (zero based): {event_index}")
+        print(f"event id = {trace_last_type} + {event_index} = {trace_last_type + event_index}")
         report["TRACE_EVENT_INDEX"] = event_index
+        report["SLIDE_TRACEFS_EVENT_ID"] = trace_last_type + event_index
     except KeyError as exc:
         print(f"tracefs symbols missing: {exc}")
 

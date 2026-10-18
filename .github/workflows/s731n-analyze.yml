@@ -6,6 +6,10 @@ on:
     branches:
       - arena/b8ef920e-root-my-galaxy-payloads
 
+concurrency:
+  group: s731n-${{ github.workflow }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -123,6 +127,14 @@ jobs:
             ls -la ap/vmlinux.btf 2>&1
           } | tee ../ci-out/03-btf.txt
 
+      - name: Cache recovered vmlinux and BTF
+        uses: actions/cache@v4
+        with:
+          path: |
+            fw/ap/vmlinux.elf
+            fw/ap/vmlinux.btf
+          key: s731n-vmlinux-v1
+
       - name: Derive target offsets
         run: |
           set -uo pipefail
@@ -131,6 +143,10 @@ jobs:
             echo "=== offsets ==="
             python3 ../ci/derive_offsets.py ap/vmlinux.elf ap/vmlinux.btf \
               --json ../ci-out/offsets.json 2>&1
+            echo
+            echo "=== data pointers ==="
+            python3 ../ci/derive_data_pointers.py ap/kernel ap/vmlinux.elf ap/vmlinux.btf \
+              --json ../ci-out/data-pointers.json 2>&1
           } | tee ../ci-out/04-offsets.txt
 
       - name: Dump symbol reference data

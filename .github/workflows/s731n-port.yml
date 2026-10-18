@@ -6,6 +6,10 @@ on:
     branches:
       - arena/b8ef920e-root-my-galaxy-payloads
 
+concurrency:
+  group: s731n-${{ github.workflow }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
