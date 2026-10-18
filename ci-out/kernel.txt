@@ -1,0 +1,12 @@
+boot.img size: 67108864
+boot.img sha256: 368BD934AFBC3F7842EA95B38BED0A1658F3E8F4A82C02988B59B4BABA6B954F
+kernel size: 38832640
+kernel sha256: D7ECD07095C0704DD32E252C9E48605FD7DA54916D576E321C50FFB33DC642F7
+image magic: 41524d64 (expect 41524d64)
+ARM64 Image text_offset: 0x0
+ARM64 Image size: 0x27b0000
+ARM64 Image flags: 0x0
+banner: Linux version 6.1.157-android14-11 (build-user@build-host) (Android (10087095, +pgo, +bolt, +lto, -mlgo, based on r487747c) clang version 17.0.2 (https://android.googlesource.com/toolchain/llvm-project d9f89f4d16663
+kernel release: 6.1.157-android14-11
+raw BTF candidates: [('0x188c248', '0x1e4497e')]
+raw BTF: [0x188c248, 0x1e4497e) (5998390 bytes)
