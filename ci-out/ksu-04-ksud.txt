@@ -1,0 +1,28 @@
+LIBCLANG_PATH=/usr/lib/llvm-16/lib
+    Updating git repository `https://github.com/5ec1cff/android_bootimg`
+    Updating crates.io index
+    Updating git repository `https://github.com/Kernel-SU/adb_client`
+error: failed to get `adb_client` as a dependency of package `ksud v0.1.0 (/home/runner/work/Root-My-Galaxy-Payloads/Root-My-Galaxy-Payloads/ksu/userspace/ksud)`
+
+Caused by:
+  failed to load source for dependency `adb_client`
+
+Caused by:
+  unable to update https://github.com/Kernel-SU/adb_client#d97a9664
+
+Caused by:
+  failed to clone into: /home/runner/.cargo/git/db/adb_client-41f2ebb5414a86d5
+
+Caused by:
+  revision d97a966435bebaa55017834869dec08150826aa7 not found
+
+Caused by:
+  failed to authenticate when downloading repository
+
+  * attempted to find username/password via git's `credential.helper` support, but failed
+
+  if the git CLI succeeds then `net.git-fetch-with-cli` may help here
+  https://doc.rust-lang.org/cargo/reference/config.html#netgit-fetch-with-cli
+
+Caused by:
+  failed to acquire username/password from local configuration
