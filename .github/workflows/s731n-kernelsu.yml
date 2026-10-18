@@ -135,15 +135,13 @@ jobs:
           set -uo pipefail
           {
             echo "=== check_symbol against the S731NKSS7BZF1 vmlinux ==="
-            cd ksu/kernel
-            if [ -x ./check_symbol ]; then
-              ./check_symbol ./kernelsu.ko /work/fw/ap/vmlinux.elf
+            if [ -x ksu/kernel/check_symbol ]; then
+              (cd ksu/kernel && ./check_symbol ./kernelsu.ko "$GITHUB_WORKSPACE/fw/ap/vmlinux.elf")
               echo "check_symbol rc=$?"
             else
               echo "check_symbol was not built"
             fi
-          } 2>&1 | tee ../ci-out/ksu-02-checksymbol.txt || true
-          cd ../..
+          } 2>&1 | tee "$GITHUB_WORKSPACE/ci-out/ksu-02-checksymbol.txt" || true
           {
             echo "=== target Module.symvers ==="
             python3 kernelsu/tools/extract_target_symvers.py \
@@ -156,15 +154,17 @@ jobs:
               fw/ap/vmlinux.elf \
               fw/ap/Module.symvers \
               --manual-relocation
-          } 2>&1 | tee ci-out/ksu-03-audit.txt || true
+          } 2>&1 | tee "$GITHUB_WORKSPACE/ci-out/ksu-03-audit.txt" || true
 
       - name: Install the Rust and NDK toolchains
         run: |
           set -euxo pipefail
           rustup toolchain install stable --profile minimal
           rustup default stable
+          rustup target add aarch64-linux-android
           rustc --version
           cargo --version
+          rustup target list --installed
           sudo apt-get update -qq
           sudo apt-get install -y -qq libclang-dev
           ls /usr/lib/llvm-*/lib/libclang.so* | head -3
@@ -206,12 +206,12 @@ jobs:
             export AR_aarch64_linux_android="$NDKBIN/llvm-ar"
             export RANLIB_aarch64_linux_android="$NDKBIN/llvm-ranlib"
             echo "LIBCLANG_PATH=$LIBCLANG_PATH"
-            cd ksu
+            cd "$GITHUB_WORKSPACE/ksu"
             cargo build --release --target aarch64-linux-android -p ksud
             echo "cargo rc=$?"
             ls -la target/aarch64-linux-android/release/ksud
             file target/aarch64-linux-android/release/ksud
-          } 2>&1 | tee ../ci-out/ksu-04-ksud.txt
+          } 2>&1 | tee "$GITHUB_WORKSPACE/ci-out/ksu-04-ksud.txt"
           test -f ksu/target/aarch64-linux-android/release/ksud
 
       - name: Commit the ksud build log
