@@ -1,7 +1,7 @@
 === cache restore ===
 total 37932
-drwxr-xr-x 2 runner runner     4096 Oct 18 23:13 .
-drwxr-xr-x 3 runner runner     4096 Oct 18 23:13 ..
+drwxr-xr-x 2 runner runner     4096 Oct 18 23:14 .
+drwxr-xr-x 3 runner runner     4096 Oct 18 23:14 ..
 -rw-r--r-- 1 runner runner 38832640 Oct 18 22:45 kernel
 d7ecd07095c0704dd32e252c9e48605fd7da54916d576e321c50ffb33dc642f7  fw/ap/kernel
 kernel present
