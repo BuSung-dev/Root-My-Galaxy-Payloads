@@ -118,9 +118,18 @@ class Btf:
             elif kind == BTF_KIND_FUNC_PROTO:
                 offset += 8 * vlen
             elif kind == BTF_KIND_VAR:
+                # struct btf_var { __u32 linkage; }
                 offset += 4
             elif kind == BTF_KIND_DATASEC:
                 offset += 12 * vlen
+            elif kind == BTF_KIND_DECL_TAG:
+                # struct btf_decl_tag { __s32 component_idx; }
+                offset += 4
+
+        if offset != len(types):
+            raise ValueError(
+                f"BTF type section parse mismatch: consumed {offset} of {len(types)} bytes"
+            )
 
     def _str(self, offset: int) -> str:
         end = self.strings.find(b"\0", offset)
