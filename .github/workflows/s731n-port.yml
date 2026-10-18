@@ -71,6 +71,14 @@ jobs:
           ls -la > ../ci-out/fw-files.txt
           df -h . >> ../ci-out/fw-files.txt
 
+      - name: Restore cached identity and bootloader artifacts
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            fw/ap/meta-data
+            fw/bl
+          key: s731n-identity-v1
+
       - name: Extract AP boot image and kernel
         run: |
           set -uo pipefail

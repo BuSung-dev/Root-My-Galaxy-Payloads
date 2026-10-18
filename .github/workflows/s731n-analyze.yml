@@ -26,55 +26,91 @@ jobs:
 
       - name: Check kernel availability
         run: |
-          set -euxo pipefail
-          ls -la fw/ap/kernel
-          sha256sum fw/ap/kernel
+          set -uo pipefail
+          mkdir -p ci-out
+          {
+            echo "=== cache restore ==="
+            ls -la fw/ap/ 2>&1 || echo "NO fw/ap DIRECTORY"
+            if [ -f fw/ap/kernel ]; then
+              sha256sum fw/ap/kernel
+              echo "kernel present"
+            else
+              echo "KERNEL MISSING FROM CACHE"
+            fi
+          } | tee ci-out/00-cache.txt
 
       - name: Install python tooling
         run: |
-          set -euxo pipefail
-          pip install --quiet pyelftools lz4 zstandard peewee
-          # minilzo has no wheel; vmlinux-to-elf only needs it for LZO images.
-          pip install --quiet --no-deps vmlinux-to-elf
-          python3 -c "import elftools, lz4.frame, zstandard, peewee; print('deps ok')"
+          set -uo pipefail
+          {
+            echo "=== pip install ==="
+            pip install --quiet pyelftools lz4 zstandard peewee 2>&1
+            echo "py deps rc=$?"
+            # minilzo has no wheel and is only needed for LZO images, which a
+            # raw ARM64 Image is not. Install vmlinux-to-elf without it.
+            pip install --quiet --no-deps vmlinux-to-elf 2>&1
+            echo "vmlinux-to-elf rc=$?"
+            pip list 2>/dev/null | grep -Ei "vmlinux|elftools|lz4|zstandard|peewee"
+            python3 -c "import elftools; print('elftools ok')" 2>&1
+            python3 -c "import vmlinux_to_elf; print('vmlinux_to_elf ok', vmlinux_to_elf.__file__)" 2>&1
+            which vmlinux-to-elf 2>&1
+          } | tee ci-out/01-deps.txt
 
       - name: Recover vmlinux ELF
         run: |
-          set -euxo pipefail
+          set -uo pipefail
           cd fw
-          # vmlinux-to-elf recovers the kallsyms symbol table from the raw
-          # ARM64 Image and emits an analyzable ELF.
-          python3 -m vmlinux_to_elf.scripts.vmlinux_to_elf ap/kernel ap/vmlinux.elf \
-            || vmlinux-to-elf ap/kernel ap/vmlinux.elf
-          ls -la ap/vmlinux.elf
-          python3 - <<'PY'
+          {
+            echo "=== vmlinux-to-elf ==="
+            # vmlinux_to_elf/scripts has no __init__.py, so the module form
+            # is not importable; use the installed console script.
+            vmlinux-to-elf ap/kernel ap/vmlinux.elf 2>&1
+            echo "rc=$?"
+            ls -la ap/vmlinux.elf 2>&1
+            python3 - <<'PY' 2>&1
           from elftools.elf.elffile import ELFFile
           with open("ap/vmlinux.elf", "rb") as f:
               elf = ELFFile(f)
-              print("elfclass:", elf.elfclass, "machine:", elf["e_machine"])
-              syms = [s for s in elf.get_section_by_name(".symtab").iter_symbols() if s.name]
-              print("symbols:", len(syms))
+              print("elfclass:", elf.elfclass, "machine:", elf["e_machine"],
+                    "endian:", elf.little_endian)
+              symtab = elf.get_section_by_name(".symtab")
+              print("symtab:", symtab)
+              if symtab is not None:
+                  syms = [s for s in symtab.iter_symbols() if s.name]
+                  print("symbols:", len(syms))
+                  for s in syms[:5]:
+                      print("  sample:", hex(s["st_value"]), s.name)
           PY
+          } | tee ../ci-out/02-vmlinux.txt
+          test -f ap/vmlinux.elf
 
       - name: Extract raw BTF blob
         run: |
-          set -euxo pipefail
-          python3 ../ci/extract_btf.py ap/kernel ap/vmlinux.btf
-          ls -la ap/vmlinux.btf
+          set -uo pipefail
+          cd fw
+          {
+            echo "=== raw BTF ==="
+            python3 ../ci/extract_btf.py ap/kernel ap/vmlinux.btf 2>&1
+            ls -la ap/vmlinux.btf 2>&1
+          } | tee ../ci-out/03-btf.txt
+          test -f ap/vmlinux.btf
 
       - name: Derive target offsets
         run: |
-          set -euxo pipefail
+          set -uo pipefail
           cd fw
-          python3 ../ci/derive_offsets.py ap/vmlinux.elf ap/vmlinux.btf \
-            --json ../ci-out/offsets.json | tee ../ci-out/offsets.txt
+          {
+            echo "=== offsets ==="
+            python3 ../ci/derive_offsets.py ap/vmlinux.elf ap/vmlinux.btf \
+              --json ../ci-out/offsets.json 2>&1
+          } | tee ../ci-out/04-offsets.txt
+          test -f ../ci-out/offsets.json
 
-      - name: Dump BTF and symbol reference data
+      - name: Dump symbol reference data
         run: |
-          set -euxo pipefail
+          set -uo pipefail
           cd fw
-          # Full symbol listing for later verification.
-          python3 - <<'PY' > ../ci-out/symbols.txt
+          python3 - <<'PY' > ../ci-out/symbols.txt 2>&1
           from elftools.elf.elffile import ELFFile
           with open("ap/vmlinux.elf", "rb") as f:
               elf = ELFFile(f)
@@ -90,6 +126,7 @@ jobs:
           wc -l ../ci-out/symbols.txt
 
       - name: Commit analysis results
+        if: always()
         run: |
           set -euxo pipefail
           git config user.name "arena-agent"
