@@ -1,0 +1,39 @@
+{
+  "ASHMEM_MISC_FOPS_OFF": 38292528,
+  "ASHMEM_MISC_FOPS_VERIFIED": true,
+  "ASHMEM_MISC_NAME": "ashmem",
+  "ASHMEM_MISC_OFF": 38292512,
+  "ASHMEM_MISC_SYMBOL": "ashmem_miscs",
+  "ELF_BASE": 18446743798965862400,
+  "IMAGE_SIZE": 38832640,
+  "MISCDEVICE_FOPS_OFF": 16,
+  "MISCDEVICE_NAME_OFF": 8,
+  "MM_STRUCT_SZ": 960,
+  "SIZEOF_MISCDEVICE": 80,
+  "SIZEOF_MM_STRUCT": 960,
+  "SIZEOF_RT_MUTEX_WAITER": 88,
+  "SIZEOF_SKB": 248,
+  "SKB_DATA_OFF": 224,
+  "SKB_END_OFF": 212,
+  "SKB_HEAD_OFF": 216,
+  "SKB_LEN_OFF": 112,
+  "SKB_TAIL_OFF": 208,
+  "SLIDE_TRACEFS_WORKER_CALLER_OFF": 900508,
+  "STACK_LAYOUT_FUNCTIONS": {
+    "core_sys_select": {
+      "offset": 3942664,
+      "sha256": "32f7311dbd0ede23d5bd383aefd1538fb070a267ab420c541b2c592cdf73b332",
+      "size": 620
+    },
+    "do_select": {
+      "offset": 3943684,
+      "sha256": "41198f125aaed52fc376e8388e59881e57a862a9a5fe65f61ca3672a1684ee93",
+      "size": 1648
+    },
+    "rt_mutex_slowlock": {
+      "offset": 17962972,
+      "sha256": "77f635651727cf3c5f3a7f0a79c2034742c933b205848f2bbe2e331631aee7c4",
+      "size": 584
+    }
+  }
+}

@@ -1,0 +1,88 @@
+=== profile constants ===
+worker_thread: 0xffffffc0080dbcfc (offset 0xdbcfc)
+schedule:      0xffffffc009117c70 (offset 0x1117c70)
+  bl 0xffffffc009118ec0 at 0xffffffc0080dbd34 (offset 0xdbd34)
+  bl 0xffffffc009118fd0 at 0xffffffc0080dbd4c (offset 0xdbd4c)
+  bl 0xffffffc009122f04 at 0xffffffc0080dbd54 (offset 0xdbd54)
+  bl 0xffffffc0080dc12c at 0xffffffc0080dbd88 (offset 0xdbd88)
+  bl 0xffffffc0091230d4 at 0xffffffc0080dbd94 (offset 0xdbd94)
+  bl 0xffffffc009117c70 at 0xffffffc0080dbd98 (offset 0xdbd98)  <- schedule
+  bl 0xffffffc009122f04 at 0xffffffc0080dbda0 (offset 0xdbda0)
+  bl 0xffffffc0087e5e9c at 0xffffffc0080dbdd4 (offset 0xdbdd4)
+  bl 0xffffffc0091230d4 at 0xffffffc0080dbe30 (offset 0xdbe30)
+  bl 0xffffffc008186640 at 0xffffffc0080dbe40 (offset 0xdbe40)
+  bl 0xffffffc0080d91ec at 0xffffffc0080dbe48 (offset 0xdbe48)
+  bl 0xffffffc009121df4 at 0xffffffc0080dbe70 (offset 0xdbe70)
+  bl 0xffffffc008186bb8 at 0xffffffc0080dbe94 (offset 0xdbe94)
+  bl 0xffffffc009122f04 at 0xffffffc0080dbe9c (offset 0xdbe9c)
+  bl 0xffffffc0080b4390 at 0xffffffc0080dbed4 (offset 0xdbed4)
+  bl 0xffffffc0080db864 at 0xffffffc0080dbf54 (offset 0xdbf54)
+  bl 0xffffffc0087e5e9c at 0xffffffc0080dbf98 (offset 0xdbf98)
+  bl 0xffffffc0087e5de0 at 0xffffffc0080dbfc4 (offset 0xdbfc4)
+  bl 0xffffffc0080db864 at 0xffffffc0080dbff8 (offset 0xdbff8)
+  bl 0xffffffc0080db864 at 0xffffffc0080dc020 (offset 0xdc020)
+  bl 0xffffffc0091230d4 at 0xffffffc0080dc098 (offset 0xdc098)
+  bl 0xffffffc009118ec0 at 0xffffffc0080dc0b4 (offset 0xdc0b4)
+  bl 0xffffffc009118fd0 at 0xffffffc0080dc0c8 (offset 0xdc0c8)
+  bl 0xffffffc0083ad3c8 at 0xffffffc0080dc0dc (offset 0xdc0dc)
+  bl 0xffffffc0090e4cc0 at 0xffffffc0080dc0e8 (offset 0xdc0e8)
+  bl 0xffffffc0080db7b0 at 0xffffffc0080dc0f0 (offset 0xdc0f0)
+  bl 0xffffffc0082fc7f0 at 0xffffffc0080dc0f8 (offset 0xdc0f8)
+SLIDE_TRACEFS_WORKER_CALLER_OFF = 0xdbd9c
+ashmem_miscs: 0x2484c20 (+0x10 -> fops)
+  stored fops pointer: 0xffffffc0093d9108
+  ashmem_fops:         0xffffffc0093d9108
+  stored name pointer: 0xffffffc0097a4ed0
+  name string: ashmem
+sizeof(struct mm_struct) = 0x3c0
+sizeof(struct sk_buff) = 0xf8
+  sk_buff.head = 0xd8
+  sk_buff.data = 0xe0
+  sk_buff.tail = 0xd0
+  sk_buff.end = 0xd4
+  sk_buff.len = 0x70
+core_sys_select: offset 0x3c2908 size 0x26c sha256 32f7311dbd0ede23
+do_select: offset 0x3c2d04 size 0x670 sha256 41198f125aaed52f
+rt_mutex_slowlock: offset 0x11217dc size 0x248 sha256 77f635651727cf3c
+sizeof(struct rt_mutex_waiter) = 0x58
+
+{
+  "ASHMEM_MISC_FOPS_OFF": 38292528,
+  "ASHMEM_MISC_FOPS_VERIFIED": true,
+  "ASHMEM_MISC_NAME": "ashmem",
+  "ASHMEM_MISC_OFF": 38292512,
+  "ASHMEM_MISC_SYMBOL": "ashmem_miscs",
+  "ELF_BASE": 18446743798965862400,
+  "IMAGE_SIZE": 38832640,
+  "MISCDEVICE_FOPS_OFF": 16,
+  "MISCDEVICE_NAME_OFF": 8,
+  "MM_STRUCT_SZ": 960,
+  "SIZEOF_MISCDEVICE": 80,
+  "SIZEOF_MM_STRUCT": 960,
+  "SIZEOF_RT_MUTEX_WAITER": 88,
+  "SIZEOF_SKB": 248,
+  "SKB_DATA_OFF": 224,
+  "SKB_END_OFF": 212,
+  "SKB_HEAD_OFF": 216,
+  "SKB_LEN_OFF": 112,
+  "SKB_TAIL_OFF": 208,
+  "SLIDE_TRACEFS_WORKER_CALLER_OFF": 900508,
+  "STACK_LAYOUT_FUNCTIONS": {
+    "core_sys_select": {
+      "offset": 3942664,
+      "sha256": "32f7311dbd0ede23d5bd383aefd1538fb070a267ab420c541b2c592cdf73b332",
+      "size": 620
+    },
+    "do_select": {
+      "offset": 3943684,
+      "sha256": "41198f125aaed52fc376e8388e59881e57a862a9a5fe65f61ca3672a1684ee93",
+      "size": 1648
+    },
+    "rt_mutex_slowlock": {
+      "offset": 17962972,
+      "sha256": "77f635651727cf3c5f3a7f0a79c2034742c933b205848f2bbe2e331631aee7c4",
+      "size": 584
+    }
+  }
+}
+rc=0
