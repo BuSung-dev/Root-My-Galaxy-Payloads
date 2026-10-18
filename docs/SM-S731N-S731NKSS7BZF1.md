@@ -194,7 +194,7 @@ from a sibling build.
 ```text
 artifacts/essi-S731NKSS7BZF1/cve-2026-43499-app.so
 size: 104128
-SHA-256: 00ecaa02c168cf7d2c70f2edba7f6e8dc15740257a911825d275a09e02ae5c14
+SHA-256: 72cc5af325856ec4d3859a27e0482ef13cc35a3a74cc76229bedf8fa3650c6cb
 ```
 
 The release payload is produced with:
