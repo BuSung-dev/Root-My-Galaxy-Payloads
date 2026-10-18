@@ -165,6 +165,9 @@ jobs:
           rustup default stable
           rustc --version
           cargo --version
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libclang-dev
+          ls /usr/lib/llvm-*/lib/libclang.so* | head -3
           cd /opt
           curl -fsSL --retry 3 -o ndk.zip \
             "https://dl.google.com/android/repository/android-ndk-r29-linux.zip"
@@ -197,17 +200,34 @@ jobs:
             NDK=/opt/android-ndk-r29
             NDKBIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
             export PATH="$NDKBIN:$PATH"
-            export LIBCLANG_PATH="$NDKBIN"
+            export LIBCLANG_PATH="$(dirname "$(ls /usr/lib/llvm-*/lib/libclang.so* | head -1)")"
             export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$NDKBIN/aarch64-linux-android35-clang"
             export CC_aarch64_linux_android="$NDKBIN/aarch64-linux-android35-clang"
             export AR_aarch64_linux_android="$NDKBIN/llvm-ar"
             export RANLIB_aarch64_linux_android="$NDKBIN/llvm-ranlib"
+            echo "LIBCLANG_PATH=$LIBCLANG_PATH"
             cd ksu
             cargo build --release --target aarch64-linux-android -p ksud
+            echo "cargo rc=$?"
             ls -la target/aarch64-linux-android/release/ksud
             file target/aarch64-linux-android/release/ksud
           } 2>&1 | tee ../ci-out/ksu-04-ksud.txt
           test -f ksu/target/aarch64-linux-android/release/ksud
+
+      - name: Commit the ksud build log
+        if: always()
+        run: |
+          set -uo pipefail
+          git config user.name "arena-agent"
+          git config user.email "agent@arena.ai"
+          git add -A ci-out || true
+          git commit -q -m "ci: s731n ksud build log" || true
+          for i in 1 2 3; do
+            git pull --rebase origin arena/b8ef920e-root-my-galaxy-payloads >/dev/null 2>&1 || true
+            if git push origin HEAD:arena/b8ef920e-root-my-galaxy-payloads; then exit 0; fi
+            sleep 10
+          done
+          echo "push failed"
 
       - name: Commit the KernelSU pair
         run: |
