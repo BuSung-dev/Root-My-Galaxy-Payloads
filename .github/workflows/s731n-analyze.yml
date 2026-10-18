@@ -149,6 +149,17 @@ jobs:
               --json ../ci-out/data-pointers.json 2>&1
           } | tee ../ci-out/04-offsets.txt
 
+      - name: Derive remaining profile constants
+        run: |
+          set -uo pipefail
+          cd fw
+          {
+            echo "=== profile constants ==="
+            python3 ../ci/derive_profile.py ap/vmlinux.elf ap/vmlinux.btf \
+              --json ../ci-out/profile.json 2>&1
+            echo "rc=$?"
+          } | tee ../ci-out/05-profile.txt
+
       - name: Dump symbol reference data
         run: |
           set -uo pipefail
