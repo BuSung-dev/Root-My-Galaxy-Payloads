@@ -1,0 +1,4 @@
+=== vmlinux ===
+ls: cannot access 'fw/ap/': No such file or directory
+NO vmlinux
+VMLINUX MISSING FROM CACHE
