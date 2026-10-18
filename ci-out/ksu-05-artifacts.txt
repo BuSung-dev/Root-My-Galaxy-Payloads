@@ -1,0 +1,6 @@
+=== published artifacts ===
+-rw-r--r-- 1 runner runner  398336 Oct 18 23:48 kernelsu/android14-6.1_kernelsu-essi-S731NKSS7BZF1-kdp.ko
+-rwxr-xr-x 1 runner runner 4765944 Oct 18 23:48 kernelsu/ksud-essi-S731NKSS7BZF1-kdp
+ce773693273e79e341321bdf1fc1fda41d667b4c2b14635f4ed61d76079ca6ae  kernelsu/ksud-essi-S731NKSS7BZF1-kdp
+2cbd56cf503a4f8ff83ae43c2fd9aef16131f77305c193420a3ef34b161de86c  kernelsu/android14-6.1_kernelsu-essi-S731NKSS7BZF1-kdp.ko
+modinfo skipped
