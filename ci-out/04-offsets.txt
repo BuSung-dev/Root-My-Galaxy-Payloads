@@ -1,0 +1,31 @@
+=== offsets ===
+ELF base: 0xffffffc008000000
+
+== symbol offsets ==
+CALL_USERMODEHELPER_EXEC_WORK_OFF: 0x000d4468  (call_usermodehelper_exec_work)
+NOOP_LLSEEK_OFF: 0x003a1414  (noop_llseek)
+COPY_SPLICE_READ_OFF: 0x003ef02c  (generic_file_splice_read)
+CONFIGFS_READ_ITER_OFF: 0x00470d44  (configfs_read_iter)
+CONFIGFS_BIN_WRITE_ITER_OFF: 0x00471274  (configfs_bin_write_iter)
+ASHMEM_IOCTL_OFF: 0x00d3a19c  (ashmem_ioctl)
+ASHMEM_COMPAT_IOCTL_OFF: 0x00d3aad4  (compat_ashmem_ioctl)
+ASHMEM_MMAP_OFF: 0x00d3ab2c  (ashmem_mmap)
+ASHMEM_OPEN_OFF: 0x00d3ad58  (ashmem_open)
+ASHMEM_RELEASE_OFF: 0x00d3ade0  (ashmem_release)
+ASHMEM_SHOW_FDINFO_OFF: 0x00d3af00  (ashmem_show_fdinfo)
+ANON_PIPE_BUF_OPS_OFF: 0x0121cf10  (anon_pipe_buf_ops)
+ASHMEM_FOPS_OFF: 0x013d9108  (ashmem_fops)
+KMALLOC_CACHES_OFF: 0x017a7a98  (kmalloc_caches)
+SYSTEM_UNBOUND_WQ_OFF: 0x022eae58  (system_unbound_wq)
+INIT_TASK_OFF: 0x022ff840  (init_task)
+ROOT_TASK_GROUP_OFF: 0x02515cc0  (root_task_group)
+ASHMEM_MISC_OFF: MISSING ('symbol ashmem_misc not found in target vmlinux')
+SYSCTL_BOOTID_OFF: 0x026cd5e0  (sysctl_bootid)
+Traceback (most recent call last):
+  File "/home/runner/work/Root-My-Galaxy-Payloads/Root-My-Galaxy-Payloads/fw/../ci/derive_offsets.py", line 452, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/runner/work/Root-My-Galaxy-Payloads/Root-My-Galaxy-Payloads/fw/../ci/derive_offsets.py", line 305, in main
+    report["ASHMEM_MISC_FOPS_OFF"] = report["ASHMEM_MISC_OFF"] + misc_fops
+                                     ~~~~~~^^^^^^^^^^^^^^^^^^^
+KeyError: 'ASHMEM_MISC_OFF'
