@@ -8,17 +8,19 @@ e4bc3fa828ee: Pulling fs layer
 183e9ab4ad8c: Pulling fs layer
 4f4fb700ef54: Pulling fs layer
 1104bc7e70cf: Pulling fs layer
-4f4fb700ef54: Waiting
-e4bc3fa828ee: Waiting
 0d0f9e3ce3da: Waiting
+e4bc3fa828ee: Waiting
 183e9ab4ad8c: Waiting
 1104bc7e70cf: Waiting
+4f4fb700ef54: Waiting
+0b01eca8ce1b: Verifying Checksum
 0b01eca8ce1b: Download complete
+0d0f9e3ce3da: Verifying Checksum
 0d0f9e3ce3da: Download complete
-e4bc3fa828ee: Verifying Checksum
-e4bc3fa828ee: Download complete
 632da0c5760a: Verifying Checksum
 632da0c5760a: Download complete
+e4bc3fa828ee: Verifying Checksum
+e4bc3fa828ee: Download complete
 4f4fb700ef54: Verifying Checksum
 4f4fb700ef54: Download complete
 632da0c5760a: Pull complete
@@ -26,11 +28,12 @@ e4bc3fa828ee: Download complete
 73ac98863289: Download complete
 1104bc7e70cf: Verifying Checksum
 1104bc7e70cf: Download complete
-183e9ab4ad8c: Download complete
 73ac98863289: Pull complete
 0b01eca8ce1b: Pull complete
 0d0f9e3ce3da: Pull complete
 e4bc3fa828ee: Pull complete
+183e9ab4ad8c: Verifying Checksum
+183e9ab4ad8c: Download complete
 183e9ab4ad8c: Pull complete
 4f4fb700ef54: Pull complete
 1104bc7e70cf: Pull complete
@@ -40,10 +43,10 @@ ghcr.io/ylarod/ddk-min:android14-6.1-20260313
 rc=0
 
 === ddk build ===
+KDIR=/opt/ddk/kdir/android14-6.1
 + echo KDIR=/opt/ddk/kdir/android14-6.1
 + ls -la /opt/ddk/kdir/android14-6.1
 + head -40
-KDIR=/opt/ddk/kdir/android14-6.1
 total 362564
 drwxr-xr-x 12 root root      4096 Jan  1  2026 .
 drwxr-xr-x  3 root root      4096 Mar 12  2026 ..
@@ -75,19 +78,19 @@ drwxr-xr-x  3 root root      4096 Jan  1  2026 usr
 -rwxr-xr-x  1 root root 363970640 Jan  1  2026 vmlinux
 -rw-r--r--  1 root root    921516 Jan  1  2026 vmlinux.symvers
 + echo '--- utsrelease ---'
---- utsrelease ---
 + cat /opt/ddk/kdir/android14-6.1/include/generated/utsrelease.h
+--- utsrelease ---
 #define UTS_RELEASE "6.1.166-dirty"
+--- kernel.release ---
 + echo '--- kernel.release ---'
 + cat /opt/ddk/kdir/android14-6.1/include/config/kernel.release
---- kernel.release ---
 6.1.166-dirty
 + echo '--- vmlinux ---'
 --- vmlinux ---
 + ls -la /opt/ddk/kdir/android14-6.1/vmlinux
 -rwxr-xr-x 1 root root 363970640 Jan  1  2026 /opt/ddk/kdir/android14-6.1/vmlinux
-+ echo '--- clang ---'
 --- clang ---
++ echo '--- clang ---'
 + which clang
 /opt/ddk/clang/clang-r487747c/bin/clang
 + clang --version
@@ -95,16 +98,16 @@ drwxr-xr-x  3 root root      4096 Jan  1  2026 usr
 Android (10087095, +pgo, +bolt, +lto, -mlgo, based on r487747c) clang version 17.0.2 (https://android.googlesource.com/toolchain/llvm-project d9f89f4d16663d5012e5c09495f3b30ece3d2362)
 Target: x86_64-unknown-linux-gnu
 Thread model: posix
+--- gcc ---
 + echo '--- gcc ---'
 + which gcc
---- gcc ---
 /usr/bin/gcc
 + gcc --version
 + head -2
 gcc (Ubuntu 14.2.0-19ubuntu2) 14.2.0
 Copyright (C) 2024 Free Software Foundation, Inc.
-+ echo '--- set the target release ---'
 --- set the target release ---
++ echo '--- set the target release ---'
 + sed -i -E 's/^#define UTS_RELEASE .*$/#define UTS_RELEASE "6.1.157-android14-11"/' /opt/ddk/kdir/android14-6.1/include/generated/utsrelease.h
 + echo 6.1.157-android14-11
 + cat /opt/ddk/kdir/android14-6.1/include/generated/utsrelease.h
@@ -112,14 +115,14 @@ Copyright (C) 2024 Free Software Foundation, Inc.
 + cat /opt/ddk/kdir/android14-6.1/include/config/kernel.release
 6.1.157-android14-11
 + echo '--- build ---'
-+ make clean
 --- build ---
++ make clean
 -- KDIR: /opt/ddk/kdir/android14-6.1
 -- MDIR: /work/ksu/kernel
 -- OUTPUT DIR: /work/ksu/kernel
 make -C /opt/ddk/kdir/android14-6.1 M=/work/ksu/kernel src=/work/ksu/kernel clean
--- KernelSU fallback version: 32525
 /work/ksu/kernel/Kbuild:127: "KSU_GIT_VERSION not defined! It is better to make KernelSU a git repository!"
+-- KernelSU fallback version: 32525
 -- KSU_NEW_DCACHE_FLUSH: 1
 -- KernelSU Manager signature size: 0x033b
 -- KernelSU Manager signature hash: c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6
@@ -132,6 +135,7 @@ make: *** [Makefile:19: clean] Error 1
 + CONFIG_KSU_SAMSUNG_KDP=y
 + CONFIG_KSU_SAMSUNG_RKP=y
 + CONFIG_KSU_SAMSUNG_DEFEX=y
++ CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y
 + CC=clang
 + make -j4
 -- KDIR: /opt/ddk/kdir/android14-6.1
@@ -139,8 +143,8 @@ make: *** [Makefile:19: clean] Error 1
 -- OUTPUT DIR: /work/ksu/kernel
 clang tools/check_symbol.c -o check_symbol
 make -C /opt/ddk/kdir/android14-6.1 M=/work/ksu/kernel src=/work/ksu/kernel modules compile_commands.json -j4
-make[1]: Entering directory '/opt/ddk/kdir/android14-6.1'
 make[1]: warning: -j4 forced in submake: resetting jobserver mode.
+make[1]: Entering directory '/opt/ddk/kdir/android14-6.1'
 /work/ksu/kernel/Kbuild:127: "KSU_GIT_VERSION not defined! It is better to make KernelSU a git repository!"
 -- KernelSU fallback version: 32525
 -- KSU_NEW_DCACHE_FLUSH: 1
@@ -184,8 +188,8 @@ make[1]: warning: -j4 forced in submake: resetting jobserver mode.
   CC [M]  /work/ksu/kernel/feature/selinux_hide.o
   LD [M]  /work/ksu/kernel/kernelsu.o
   GEN     /work/ksu/kernel/compile_commands.json
--- KernelSU fallback version: 32525
 /work/ksu/kernel/Kbuild:127: "KSU_GIT_VERSION not defined! It is better to make KernelSU a git repository!"
+-- KernelSU fallback version: 32525
 -- KSU_NEW_DCACHE_FLUSH: 1
 -- KernelSU Manager signature size: 0x033b
 -- KernelSU Manager signature hash: c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6
@@ -196,48 +200,48 @@ make[1]: warning: -j4 forced in submake: resetting jobserver mode.
 make[1]: Leaving directory '/opt/ddk/kdir/android14-6.1'
 ./check_symbol /work/ksu/kernel/kernelsu.ko /opt/ddk/kdir/android14-6.1/vmlinux
 + ls -la
-total 11644
-drwxr-xr-x 16 1001 1001    4096 Oct 18 23:21 .
-drwxr-xr-x 14 1001 1001    4096 Oct 18 23:20 ..
--rw-r--r--  1 root root     185 Oct 18 23:21 .Module.symvers.cmd
--rw-r--r--  1 1001 1001   16673 Oct 18 23:20 .clang-format
--rw-r--r--  1 1001 1001     346 Oct 18 23:20 .clangd.example
--rw-r--r--  1 root root     209 Oct 18 23:21 .compile_commands.json.cmd
--rw-r--r--  1 1001 1001     237 Oct 18 23:20 .gitignore
--rw-r--r--  1 root root     316 Oct 18 23:21 .kernelsu.ko.cmd
--rw-r--r--  1 root root     871 Oct 18 23:21 .kernelsu.mod.cmd
--rw-r--r--  1 root root   53579 Oct 18 23:21 .kernelsu.mod.o.cmd
--rw-r--r--  1 root root     154 Oct 18 23:21 .kernelsu.o.cmd
--rw-r--r--  1 root root     115 Oct 18 23:21 .modules.order.cmd
-drwxr-xr-x  2 1001 1001    4096 Oct 18 23:20 .vscode
--rw-r--r--  1 1001 1001    5588 Oct 18 23:20 Kbuild
--rw-r--r--  1 1001 1001    1000 Oct 18 23:20 Kconfig
--rw-r--r--  1 1001 1001   18092 Oct 18 23:20 LICENSE
--rw-r--r--  1 1001 1001     854 Oct 18 23:20 Makefile
--rw-r--r--  1 root root       0 Oct 18 23:21 Module.symvers
--rwxr-xr-x  1 1001 1001    1073 Oct 18 23:20 build-all.sh
--rwxr-xr-x  1 root root    9952 Oct 18 23:21 check_symbol
-drwxr-xr-x  2 1001 1001    4096 Oct 18 23:21 compat
--rw-r--r--  1 root root  112993 Oct 18 23:21 compile_commands.json
-drwxr-xr-x  2 1001 1001    4096 Oct 18 23:21 core
-drwxr-xr-x  2 1001 1001    4096 Oct 18 23:21 feature
-drwxr-xr-x  4 1001 1001    4096 Oct 18 23:21 hook
-drwxr-xr-x  2 1001 1001    4096 Oct 18 23:20 include
-drwxr-xr-x  2 1001 1001    4096 Oct 18 23:21 infra
--rw-r--r--  1 root root 5775080 Oct 18 23:21 kernelsu.ko
--rw-r--r--  1 root root    1346 Oct 18 23:21 kernelsu.mod
--rw-r--r--  1 root root     707 Oct 18 23:21 kernelsu.mod.c
--rw-r--r--  1 root root  127592 Oct 18 23:21 kernelsu.mod.o
--rw-r--r--  1 root root 5654392 Oct 18 23:21 kernelsu.o
-drwxr-xr-x  2 1001 1001    4096 Oct 18 23:21 manager
--rw-r--r--  1 root root      29 Oct 18 23:21 modules.order
-drwxr-xr-x  2 1001 1001    4096 Oct 18 23:21 policy
-drwxr-xr-x  2 1001 1001    4096 Oct 18 23:21 runtime
-drwxr-xr-x  2 1001 1001    4096 Oct 18 23:21 selinux
--rwxr-xr-x  1 1001 1001    3013 Oct 18 23:20 setup.sh
-drwxr-xr-x  2 1001 1001    4096 Oct 18 23:21 sulog
-drwxr-xr-x  2 1001 1001    4096 Oct 18 23:21 supercall
-drwxr-xr-x  2 1001 1001    4096 Oct 18 23:20 tools
+total 11620
+drwxr-xr-x 16 1001 1001    4096 Oct 18 23:23 .
+drwxr-xr-x 14 1001 1001    4096 Oct 18 23:22 ..
+-rw-r--r--  1 root root     185 Oct 18 23:23 .Module.symvers.cmd
+-rw-r--r--  1 1001 1001   16673 Oct 18 23:22 .clang-format
+-rw-r--r--  1 1001 1001     346 Oct 18 23:22 .clangd.example
+-rw-r--r--  1 root root     209 Oct 18 23:23 .compile_commands.json.cmd
+-rw-r--r--  1 1001 1001     237 Oct 18 23:22 .gitignore
+-rw-r--r--  1 root root     316 Oct 18 23:23 .kernelsu.ko.cmd
+-rw-r--r--  1 root root     871 Oct 18 23:23 .kernelsu.mod.cmd
+-rw-r--r--  1 root root   53579 Oct 18 23:23 .kernelsu.mod.o.cmd
+-rw-r--r--  1 root root     154 Oct 18 23:23 .kernelsu.o.cmd
+-rw-r--r--  1 root root     115 Oct 18 23:23 .modules.order.cmd
+drwxr-xr-x  2 1001 1001    4096 Oct 18 23:22 .vscode
+-rw-r--r--  1 1001 1001    5588 Oct 18 23:22 Kbuild
+-rw-r--r--  1 1001 1001    1000 Oct 18 23:22 Kconfig
+-rw-r--r--  1 1001 1001   18092 Oct 18 23:22 LICENSE
+-rw-r--r--  1 1001 1001     854 Oct 18 23:22 Makefile
+-rw-r--r--  1 root root       0 Oct 18 23:23 Module.symvers
+-rwxr-xr-x  1 1001 1001    1073 Oct 18 23:22 build-all.sh
+-rwxr-xr-x  1 root root    9952 Oct 18 23:23 check_symbol
+drwxr-xr-x  2 1001 1001    4096 Oct 18 23:23 compat
+-rw-r--r--  1 root root  114325 Oct 18 23:23 compile_commands.json
+drwxr-xr-x  2 1001 1001    4096 Oct 18 23:23 core
+drwxr-xr-x  2 1001 1001    4096 Oct 18 23:23 feature
+drwxr-xr-x  4 1001 1001    4096 Oct 18 23:23 hook
+drwxr-xr-x  2 1001 1001    4096 Oct 18 23:22 include
+drwxr-xr-x  2 1001 1001    4096 Oct 18 23:23 infra
+-rw-r--r--  1 root root 5761808 Oct 18 23:23 kernelsu.ko
+-rw-r--r--  1 root root    1346 Oct 18 23:23 kernelsu.mod
+-rw-r--r--  1 root root     707 Oct 18 23:23 kernelsu.mod.c
+-rw-r--r--  1 root root  127592 Oct 18 23:23 kernelsu.mod.o
+-rw-r--r--  1 root root 5641152 Oct 18 23:23 kernelsu.o
+drwxr-xr-x  2 1001 1001    4096 Oct 18 23:23 manager
+-rw-r--r--  1 root root      29 Oct 18 23:23 modules.order
+drwxr-xr-x  2 1001 1001    4096 Oct 18 23:23 policy
+drwxr-xr-x  2 1001 1001    4096 Oct 18 23:23 runtime
+drwxr-xr-x  2 1001 1001    4096 Oct 18 23:23 selinux
+-rwxr-xr-x  1 1001 1001    3013 Oct 18 23:22 setup.sh
+drwxr-xr-x  2 1001 1001    4096 Oct 18 23:23 sulog
+drwxr-xr-x  2 1001 1001    4096 Oct 18 23:23 supercall
+drwxr-xr-x  2 1001 1001    4096 Oct 18 23:22 tools
 + modinfo ./kernelsu.ko
 filename:       /work/ksu/kernel/./kernelsu.ko
 license:        GPL
