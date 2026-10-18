@@ -1,12 +1,11 @@
 === target Module.symvers ===
-Traceback (most recent call last):
-  File "/home/runner/work/Root-My-Galaxy-Payloads/Root-My-Galaxy-Payloads/kernelsu/tools/extract_target_symvers.py", line 8, in <module>
-    from elftools.elf.elffile import ELFFile
-ModuleNotFoundError: No module named 'elftools'
-wc: fw/ap/Module.symvers: No such file or directory
+wrote 15456 exact target CRCs to fw/ap/Module.symvers
+15456 fw/ap/Module.symvers
 
 === manual relocation audit ===
-Traceback (most recent call last):
-  File "/home/runner/work/Root-My-Galaxy-Payloads/Root-My-Galaxy-Payloads/kernelsu/tools/audit_module_against_target.py", line 8, in <module>
-    from elftools.elf.elffile import ELFFile
-ModuleNotFoundError: No module named 'elftools'
+undefined symbols: 202
+module version entries: 0
+missing from target symbol table: 0
+symbols resolved from kallsyms rather than target exports: 47
+undefined symbols intentionally without module CRC: 202
+target CRC mismatches: 0

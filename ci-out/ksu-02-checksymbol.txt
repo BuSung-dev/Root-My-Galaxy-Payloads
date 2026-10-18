@@ -1,3 +1,2 @@
 === check_symbol against the S731NKSS7BZF1 vmlinux ===
-Error: Cannot open file /home/runner/work/Root-My-Galaxy-Payloads/Root-My-Galaxy-Payloads/fw/ap/vmlinux.elf
-check_symbol rc=1
+check_symbol rc=0
