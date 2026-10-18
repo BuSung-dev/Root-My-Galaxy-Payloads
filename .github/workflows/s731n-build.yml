@@ -8,6 +8,7 @@ on:
     paths:
       - ".github/workflows/s731n-build.yml"
       - "src/targets/essi-S731NKSS7BZF1/**"
+      - "tools/generate_p0_fingerprint.pl"
       - "Makefile"
       - "src/**"
 
@@ -57,15 +58,16 @@ jobs:
           set -euxo pipefail
           export ANDROID_NDK_HOME=/opt/android-ndk-r29
           make TARGET=essi-S731NKSS7BZF1 ANDROID_NDK_HOME="$ANDROID_NDK_HOME" release
-          ls -la build/
+          ls -la build/essi-S731NKSS7BZF1/
 
       - name: Verify payload size
         run: |
           set -euxo pipefail
-          SIZE=$(stat -c %s build/cve-2026-43499-app.so)
+          SIZE=$(stat -c %s build/essi-S731NKSS7BZF1/cve-2026-43499-app.release.so)
           echo "payload size: $SIZE"
           test "$SIZE" -le 104128
-          sha256sum build/cve-2026-43499-app.so | tee ci-out/app-so.txt
+          sha256sum build/essi-S731NKSS7BZF1/cve-2026-43499-app.release.so \
+            | tee ci-out/app-so.txt
 
       - name: Commit build artifacts
         run: |
@@ -73,7 +75,8 @@ jobs:
           git config user.name "arena-agent"
           git config user.email "agent@arena.ai"
           mkdir -p artifacts/essi-S731NKSS7BZF1
-          cp build/cve-2026-43499-app.so artifacts/essi-S731NKSS7BZF1/
+          cp build/essi-S731NKSS7BZF1/cve-2026-43499-app.release.so \
+            artifacts/essi-S731NKSS7BZF1/cve-2026-43499-app.so
           git add -A artifacts/essi-S731NKSS7BZF1 src/targets/essi-S731NKSS7BZF1 ci-out
           git commit -q -m "build: S731NKSS7BZF1 release payload and P0 fingerprint" || echo "nothing to commit"
           for i in 1 2 3; do
