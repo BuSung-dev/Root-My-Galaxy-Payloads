@@ -1,10 +1,18 @@
 #ifndef ROOT_MY_GALAXY_TARGET_H
 #define ROOT_MY_GALAXY_TARGET_H
 
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/utsname.h>
+
 #define TARGET_MODEL "SM-A536E"
-#define TARGET_BUILD "A536EXXSNGZG3"
+#define TARGET_BUILD "A536EXXSNGZG3/A536EXXSOGZH2"
 #define TARGET_KERNEL_RELEASE \
     "5.10.237-android12-9-31999025-abA536EXXSNGZG3"
+#define TARGET_KERNEL_RELEASE_OGZH2 \
+    "5.10.237-android12-9-31999025-abA536EXXSOGZH2"
 
 #define PAGE_SIZE 4096
 #define MAX_PHYSICAL_SLIDE 0x3f00000ULL
@@ -50,10 +58,36 @@
 #define INIT_TASK_BASE 0xffffff8001e0dd00ULL
 #define SELINUX_STATE_ALIAS 0xffffff80021ddb68ULL
 #define ASHMEM_MISC_FOPS_ALIAS 0xffffff8001ffbc20ULL
-#define ASHMEM_FOPS_IMAGE 0xffffffc009b06f18ULL
+#define ASHMEM_FOPS_IMAGE_GZG3 0xffffffc009b06f18ULL
+#define ASHMEM_FOPS_IMAGE_OGZH2 0xffffffc009b05f98ULL
 #define SYSTEM_UNBOUND_WQ_ALIAS 0xffffff8001df9e10ULL
 #define PWQ_CACHE_ALIAS 0xffffff800207fca8ULL
 #define CALL_USERMODEHELPER_EXEC_WORK_IMAGE 0xffffffc0080f6be4ULL
+
+static inline uint64_t ashmem_fops_image(void) {
+  static int target_logged;
+  struct utsname name;
+  uint64_t image;
+  const char *build;
+
+  if (uname(&name))
+    abort();
+  if (!strcmp(name.release, TARGET_KERNEL_RELEASE))
+    image = ASHMEM_FOPS_IMAGE_GZG3;
+  else if (!strcmp(name.release, TARGET_KERNEL_RELEASE_OGZH2))
+    image = ASHMEM_FOPS_IMAGE_OGZH2;
+  else
+    abort();
+  build = image == ASHMEM_FOPS_IMAGE_OGZH2 ? "OGZH2" : "GZG3";
+  if (!target_logged) {
+    fprintf(stderr, "A536_TARGET build=%s release=%s ashmem_fops=%#llx\n",
+            build, name.release, (unsigned long long)image);
+    target_logged = 1;
+  }
+  return image;
+}
+
+#define ASHMEM_FOPS_IMAGE ashmem_fops_image()
 
 #define SELINUX_LIVE_QWORD 0x0000000000010000ULL
 #define CFG_PAGE_OFF 0x10
