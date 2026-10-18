@@ -3,15 +3,61 @@ on:
   push:
     branches: [arena/b8ef920e-root-my-galaxy-payloads]
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: arena/b8ef920e-root-my-galaxy-payloads
       - name: probe
         run: |
-          set -x
-          curl -sS -o /dev/null -w "fuss:%{http_code}\n" https://fuss.samsungmnox.com/samsung/fuse
-          curl -sS -o /dev/null -w "samfuss:%{http_code}\n" https://samfuss.samsung.com/samsung/fuse
-          curl -sS -o /dev/null -w "ndk:%{http_code}\n" https://dl.google.com/android/repository/android-ndk-r29-linux.zip
-          curl -sS -o /dev/null -w "ghcr:%{http_code}\n" https://ghcr.io/v2/
-          echo "runner: $(uname -a)"
+          {
+            echo "runner: $(uname -a)"
+            echo "--- dns ---"
+            getent hosts fuss.samsungmnox.com samfuss.samsung.com || true
+            echo "--- http ---"
+            for u in \
+              "https://fuss.samsungmnox.com/samsung/fuse" \
+              "https://samfuss.samsung.com/samsung/fuse" \
+              "https://dl.google.com/android/repository/android-ndk-r29-linux.zip" \
+              "https://dl.google.com/android/repository/repository2-3.xml" \
+              "https://ghcr.io/v2/" \
+              "https://crates.io" \
+              "https://static.crates.io" ; do
+              code=$(curl -sS -m 30 -o /dev/null -w "%{http_code}" "$u" 2>&1 || echo "ERR")
+              echo "$u -> $code"
+            done
+            echo "--- tools ---"
+            command -v cargo rustc python3 lz4 unzip llvm-nm aarch64-linux-gnu-gcc || true
+            cargo --version 2>&1 || true
+            python3 --version
+            echo "--- disk ---"
+            df -h / | tail -2
+          } > ci-out/probe.txt 2>&1 || true
+          mkdir -p ci-out
+          {
+            echo "runner: $(uname -a)"
+            getent hosts fuss.samsungmnox.com samfuss.samsung.com || true
+            for u in \
+              "https://fuss.samsungmnox.com/samsung/fuse" \
+              "https://samfuss.samsung.com/samsung/fuse" \
+              "https://dl.google.com/android/repository/android-ndk-r29-linux.zip" \
+              "https://ghcr.io/v2/" \
+              "https://crates.io" ; do
+              code=$(curl -sS -m 30 -o /dev/null -w "%{http_code}" "$u" 2>&1 || echo "ERR")
+              echo "$u -> $code"
+            done
+            command -v cargo rustc python3 lz4 unzip llvm-nm || true
+            cargo --version 2>&1 || true
+            df -h / | tail -2
+          } > ci-out/probe.txt 2>&1
+      - name: commit
+        run: |
+          git config user.name "arena-agent"
+          git config user.email "agent@arena.ai"
+          git add ci-out || true
+          git commit -q -m "ci: probe results" || true
+          git push origin HEAD:arena/b8ef920e-root-my-galaxy-payloads
