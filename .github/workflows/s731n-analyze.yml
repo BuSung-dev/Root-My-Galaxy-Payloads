@@ -1,0 +1,100 @@
+name: s731n-analyze
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/b8ef920e-root-my-galaxy-payloads
+
+permissions:
+  contents: write
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Restore kernel image
+        uses: actions/cache/restore@v4
+        with:
+          path: fw/ap/kernel
+          key: s731n-kernel-v1
+
+      - name: Check kernel availability
+        run: |
+          set -euxo pipefail
+          ls -la fw/ap/kernel
+          sha256sum fw/ap/kernel
+
+      - name: Install python tooling
+        run: |
+          set -euxo pipefail
+          pip install --quiet pyelftools lz4 zstandard peewee
+          # minilzo has no wheel; vmlinux-to-elf only needs it for LZO images.
+          pip install --quiet --no-deps vmlinux-to-elf
+          python3 -c "import elftools, lz4.frame, zstandard, peewee; print('deps ok')"
+
+      - name: Recover vmlinux ELF
+        run: |
+          set -euxo pipefail
+          cd fw
+          # vmlinux-to-elf recovers the kallsyms symbol table from the raw
+          # ARM64 Image and emits an analyzable ELF.
+          python3 -m vmlinux_to_elf.scripts.vmlinux_to_elf ap/kernel ap/vmlinux.elf \
+            || vmlinux-to-elf ap/kernel ap/vmlinux.elf
+          ls -la ap/vmlinux.elf
+          python3 - <<'PY'
+          from elftools.elf.elffile import ELFFile
+          with open("ap/vmlinux.elf", "rb") as f:
+              elf = ELFFile(f)
+              print("elfclass:", elf.elfclass, "machine:", elf["e_machine"])
+              syms = [s for s in elf.get_section_by_name(".symtab").iter_symbols() if s.name]
+              print("symbols:", len(syms))
+          PY
+
+      - name: Extract raw BTF blob
+        run: |
+          set -euxo pipefail
+          python3 ../ci/extract_btf.py ap/kernel ap/vmlinux.btf
+          ls -la ap/vmlinux.btf
+
+      - name: Derive target offsets
+        run: |
+          set -euxo pipefail
+          cd fw
+          python3 ../ci/derive_offsets.py ap/vmlinux.elf ap/vmlinux.btf \
+            --json ../ci-out/offsets.json | tee ../ci-out/offsets.txt
+
+      - name: Dump BTF and symbol reference data
+        run: |
+          set -euxo pipefail
+          cd fw
+          # Full symbol listing for later verification.
+          python3 - <<'PY' > ../ci-out/symbols.txt
+          from elftools.elf.elffile import ELFFile
+          with open("ap/vmlinux.elf", "rb") as f:
+              elf = ELFFile(f)
+              syms = elf.get_section_by_name(".symtab")
+              rows = []
+              for s in syms.iter_symbols():
+                  if not s.name:
+                      continue
+                  rows.append((s["st_value"], s.name, s["st_info"]["type"]))
+              for value, name, typ in sorted(rows):
+                  print(f"{value:016x} {typ:8s} {name}")
+          PY
+          wc -l ../ci-out/symbols.txt
+
+      - name: Commit analysis results
+        run: |
+          set -euxo pipefail
+          git config user.name "arena-agent"
+          git config user.email "agent@arena.ai"
+          mkdir -p ci-out
+          git add -A ci-out
+          git commit -q -m "ci: s731n symbol and offset analysis" || echo "nothing to commit"
+          git push origin HEAD:arena/b8ef920e-root-my-galaxy-payloads
