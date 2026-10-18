@@ -1,16 +1,25 @@
-runner: Linux runnervm8k3b6 6.17.0-1022-azure #22-Ubuntu SMP Mon Jul 27 17:24:03 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+http://fota-cloud-dn.ospserver.net/firmware -> 403
+https://fota-cloud-dn.ospserver.net/firmware -> 403
 https://fuss.samsungmnox.com/samsung/fuse -> curl: (6) Could not resolve host: fuss.samsungmnox.com
 000ERR
 https://samfuss.samsung.com/samsung/fuse -> curl: (6) Could not resolve host: samfuss.samsung.com
 000ERR
-https://dl.google.com/android/repository/android-ndk-r29-linux.zip -> 200
-https://ghcr.io/v2/ -> 401
-https://crates.io -> 403
-/home/runner/.cargo/bin/cargo
-/home/runner/.cargo/bin/rustc
-/usr/bin/python3
-/usr/bin/lz4
-/usr/bin/unzip
-cargo 1.99.0 (5f94df478 2026-08-27)
-Filesystem      Size  Used Avail Use% Mounted on
-/dev/root       145G   59G   86G  41% /
+https://samfrew.com -> 403
+https://api.github.com -> 200
+--- dns names ---
+fuss.samsungmnox.com: NODNS
+samfuss.samsung.com: NODNS
+fota-cloud-dn.ospserver.net: 184.31.10.11    eip-terr-na.secak-fota-dn.samsungdm.com.akahost.net fota-cloud-dn.ospserver.net fota-cloud-dn.ospserver.net.akamaized.net secak-fota-dn.samsungdm.com.eip.akadns.net
+samsungmobile.net: 64.190.63.222   samsungmobile.net
+--- ospserver probe ---
+<HTML><HEAD>
+<TITLE>Access Denied</TITLE>
+</HEAD><BODY>
+<H1>Access Denied</H1>
+ 
+You don't have permission to access "http&#58;&#47;&#47;fota&#45;cloud&#45;dn&#46;ospserver&#46;net&#47;firmware&#47;KOO&#47;SM&#45;S731N&#47;version&#46;xml" on this server.<P>
+Reference&#32;&#35;18&#46;efb7db17&#46;1792361132&#46;1e4f5935
+<P>https&#58;&#47;&#47;errors&#46;edgesuite&#46;net&#47;18&#46;efb7db17&#46;1792361132&#46;1e4f5935</P>
+</BODY>
+</HTML>
+
