@@ -1,20 +1,24 @@
 LIBCLANG_PATH=/usr/lib/llvm-16/lib
     Updating git repository `https://github.com/5ec1cff/android_bootimg`
     Updating crates.io index
-    Updating git repository `https://github.com/Kernel-SU/adb_client`
-error: failed to get `adb_client` as a dependency of package `ksud v0.1.0 (/home/runner/work/Root-My-Galaxy-Payloads/Root-My-Galaxy-Payloads/ksu/userspace/ksud)`
+    Updating git repository `https://github.com/5ec1cff/adb_client`
+    Updating git repository `https://github.com/Baka-SU/java-properties.git`
+    Updating git repository `https://github.com/5ec1cff/resetprop-rs`
+    Updating git repository `https://github.com/kstep/kernlog.rs`
+    Updating git repository `https://github.com/Kernel-SU/rustix.git`
+error: failed to get `rustix` as a dependency of package `ksuinit v2.0.0 (/home/runner/work/Root-My-Galaxy-Payloads/Root-My-Galaxy-Payloads/ksu/userspace/ksuinit)`
 
 Caused by:
-  failed to load source for dependency `adb_client`
+  failed to load source for dependency `rustix`
 
 Caused by:
-  unable to update https://github.com/Kernel-SU/adb_client#d97a9664
+  unable to update https://github.com/Kernel-SU/rustix.git?rev=4a53fbc#4a53fbc7
 
 Caused by:
-  failed to clone into: /home/runner/.cargo/git/db/adb_client-41f2ebb5414a86d5
+  failed to clone into: /home/runner/.cargo/git/db/rustix-a3b7835dc5d311ce
 
 Caused by:
-  revision d97a966435bebaa55017834869dec08150826aa7 not found
+  revision 4a53fbc7cb7a07cabe87125cc21dbc27db316259 not found
 
 Caused by:
   failed to authenticate when downloading repository
