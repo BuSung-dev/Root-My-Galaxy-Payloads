@@ -1,0 +1,17 @@
+name: net-probe
+on:
+  push:
+    branches: [arena/b8ef920e-root-my-galaxy-payloads]
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: probe
+        run: |
+          set -x
+          curl -sS -o /dev/null -w "fuss:%{http_code}\n" https://fuss.samsungmnox.com/samsung/fuse
+          curl -sS -o /dev/null -w "samfuss:%{http_code}\n" https://samfuss.samsung.com/samsung/fuse
+          curl -sS -o /dev/null -w "ndk:%{http_code}\n" https://dl.google.com/android/repository/android-ndk-r29-linux.zip
+          curl -sS -o /dev/null -w "ghcr:%{http_code}\n" https://ghcr.io/v2/
+          echo "runner: $(uname -a)"
