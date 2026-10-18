@@ -1,25 +1,17 @@
-http://fota-cloud-dn.ospserver.net/firmware -> 403
-https://fota-cloud-dn.ospserver.net/firmware -> 403
-https://fuss.samsungmnox.com/samsung/fuse -> curl: (6) Could not resolve host: fuss.samsungmnox.com
-000ERR
-https://samfuss.samsung.com/samsung/fuse -> curl: (6) Could not resolve host: samfuss.samsung.com
-000ERR
-https://samfrew.com -> 403
-https://api.github.com -> 200
---- dns names ---
-fuss.samsungmnox.com: NODNS
-samfuss.samsung.com: NODNS
-fota-cloud-dn.ospserver.net: 184.31.10.11    eip-terr-na.secak-fota-dn.samsungdm.com.akahost.net fota-cloud-dn.ospserver.net fota-cloud-dn.ospserver.net.akamaized.net secak-fota-dn.samsungdm.com.eip.akadns.net
-samsungmobile.net: 64.190.63.222   samsungmobile.net
---- ospserver probe ---
-<HTML><HEAD>
-<TITLE>Access Denied</TITLE>
-</HEAD><BODY>
-<H1>Access Denied</H1>
- 
-You don't have permission to access "http&#58;&#47;&#47;fota&#45;cloud&#45;dn&#46;ospserver&#46;net&#47;firmware&#47;KOO&#47;SM&#45;S731N&#47;version&#46;xml" on this server.<P>
-Reference&#32;&#35;18&#46;efb7db17&#46;1792361132&#46;1e4f5935
-<P>https&#58;&#47;&#47;errors&#46;edgesuite&#46;net&#47;18&#46;efb7db17&#46;1792361132&#46;1e4f5935</P>
-</BODY>
-</HTML>
-
+--- crates ---
+https://static.crates.io/crates/serde/serde-1.0.200.crate -> 200
+https://index.crates.io/config.json -> 200
+https://github.com/topjohnwu/samloader-rs/releases/latest -> 200
+--- neofuss ---
+157.185.179.240 neofussvr.sslcs.cdngc.net
+history endpoint -> 405
+--- apt ---
+bpftool:
+  Installed: (none)
+  Candidate: (none)
+  Version table:
+--- pip ---
+Saved /tmp/x/lz4-4.4.5-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
+Successfully downloaded lz4
+--- cargo target ---
+x86_64-unknown-linux-gnu
