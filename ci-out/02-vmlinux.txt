@@ -42,7 +42,7 @@
 [+] Reconstructing ELF with guessed base address (ffffffc008000000)
 [+] Successfully wrote the new ELF kernel to ap/vmlinux.elf
 rc=0
--rw-r--r-- 1 runner runner 44366383 Oct 18 23:31 ap/vmlinux.elf
+-rw-r--r-- 1 runner runner 44366383 Oct 18 23:37 ap/vmlinux.elf
 elfclass: 64 machine: EM_AARCH64 endian: True
 symtab present: True
 symbols: 115670
