@@ -16,23 +16,23 @@ jobs:
         run: |
           mkdir -p ci-out
           {
-            for u in \
-              "http://fota-cloud-dn.ospserver.net/firmware" \
-              "https://fota-cloud-dn.ospserver.net/firmware" \
-              "https://fuss.samsungmnox.com/samsung/fuse" \
-              "https://samfuss.samsung.com/samsung/fuse" \
-              "https://samfrew.com" \
-              "https://api.github.com" ; do
-              code=$(curl -sS -m 25 -o /dev/null -w "%{http_code}" "$u" 2>&1 || echo ERR)
+            echo "--- crates ---"
+            for u in "https://static.crates.io/crates/serde/serde-1.0.200.crate" \
+                     "https://index.crates.io/config.json" \
+                     "https://github.com/topjohnwu/samloader-rs/releases/latest" ; do
+              code=$(curl -sSL -m 30 -o /dev/null -w "%{http_code}" "$u" 2>&1 || echo ERR)
               echo "$u -> $code"
             done
-            echo "--- dns names ---"
-            for h in fuss.samsungmnox.com samfuss.samsung.com fota-cloud-dn.ospserver.net samsungmobile.net; do
-              echo "$h: $(getent hosts $h || echo NODNS)"
-            done
-            echo "--- ospserver probe ---"
-            curl -sS -m 25 "http://fota-cloud-dn.ospserver.net/firmware/KOO/SM-S731N/version.xml" 2>&1 | head -c 1200
-            echo
+            echo "--- neofuss ---"
+            getent hosts neofussvr.sslcs.cdngc.net || echo NODNS
+            code=$(curl -sS -m 30 -o /dev/null -w "%{http_code}" "https://neofussvr.sslcs.cdngc.net/SmartHistory.do" 2>&1 || echo ERR)
+            echo "history endpoint -> $code"
+            echo "--- apt ---"
+            apt-cache policy bpftool 2>&1 | head -5
+            echo "--- pip ---"
+            pip download --no-deps -d /tmp/x lz4 2>&1 | tail -2
+            echo "--- cargo target ---"
+            rustup target list --installed 2>&1 | head -5
           } > ci-out/probe.txt 2>&1
       - name: commit
         run: |
