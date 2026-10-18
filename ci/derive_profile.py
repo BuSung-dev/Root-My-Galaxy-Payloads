@@ -228,6 +228,55 @@ def main() -> int:
     except KeyError as exc:
         print(f"sk_buff not in BTF: {exc}")
 
+    # ------------------------------------------------------- nested members
+    def nested_member_offset(struct_name, member, depth=0):
+        """Byte offset of a member nested inside unions of a struct."""
+        if depth > 6:
+            return None
+        tid = btf.find(struct_name, 4)  # BTF_KIND_STRUCT
+        if tid is None:
+            return None
+        for m_name, m_type, bit_off in btf.members[tid]:
+            if m_name == member:
+                if bit_off % 8:
+                    raise ValueError("member is not byte aligned")
+                return bit_off // 8
+        for m_name, m_type, bit_off in btf.members[tid]:
+            if btf.kind[m_type] in (4, 5):  # struct or union
+                sub = btf.type_name(m_type)
+                found = nested_member_offset(sub, member, depth + 1)
+                if found is not None:
+                    return (bit_off // 8) + found
+        return None
+
+    for member in ("compound_head", "slab_cache", "page_type"):
+        try:
+            off = nested_member_offset("page", member)
+        except ValueError:
+            off = None
+        if off is None:
+            print(f"page.{member}: NOT FOUND in BTF")
+        else:
+            print(f"page.{member} = 0x{off:x}")
+            out[f"PAGE_{member.upper()}_OFF"] = off
+
+    for member in (
+        "tree_entry",
+        "pi_tree_entry",
+        "task",
+        "lock",
+        "wake_state",
+        "prio",
+        "deadline",
+        "ww_ctx",
+    ):
+        try:
+            off = btf.struct_member_offset("rt_mutex_waiter", member)
+            out[f"RT_MUTEX_WAITER_{member.upper()}"] = off
+            print(f"rt_mutex_waiter.{member} = 0x{off:x}")
+        except (KeyError, ValueError):
+            print(f"rt_mutex_waiter.{member}: NOT FOUND in BTF")
+
     # --------------------------------------------------- stack layout hashes
     layout = {}
     for name in STACK_LAYOUT_FUNCTIONS:
