@@ -331,6 +331,21 @@
         "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-e3q-S9280ZCS6DZF2-kdp",
         "size": 4879856
       }
+    },
+    {
+      "payloadId": "b6q-F741NKSS4DZE1",
+      "displayName": "Galaxy Z Flip6 Korea | Kernel 6.1.145 (F741NKSS4DZE1)",
+      "models": ["SM-F741N"],
+      "kernelVersions": ["6.1.145"],
+      "requiresFreshP0Session": true,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/b6q-F741NKSS4DZE1/cve-2026-43499-app.so",
+        "size": 104128
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-b6q-F741NKSS4DZE1-kdp",
+        "size": 5107192
+      }
     }
   ]
 }
