@@ -331,6 +331,21 @@
         "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-e3q-S9280ZCS6DZF2-kdp",
         "size": 4879856
       }
+    },
+    {
+      "payloadId": "e3q-S928BXXU6EZIF",
+      "displayName": "Galaxy S24 Ultra (International) | Kernel 6.1.162 (S928BXXU6EZIF)",
+      "models": ["SM-S928B"],
+      "kernelVersions": ["6.1.162"],
+      "requiresFreshP0Session": true,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/e3q-S928BXXU6EZIF/cve-2026-43499-app.so",
+        "size": 104128
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-e3q-S928BXXU6EZIF-kdp",
+        "size": 5107192
+      }
     }
   ]
 }
