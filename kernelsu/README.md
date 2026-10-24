@@ -37,6 +37,8 @@ between KMIs.
 | `ksud-dm1q-S911U1UES6DYI3-kdp` | Same exact DYI3 build | `android13-5.15.153` | Device-tested late-load binary embedding the exact DYI3 no-patch-text module |
 | `android12-5.10_kernelsu-A536EXXSNGZG3-kdp.ko` | `SM-A536E`, `A536EXXSNGZG3` | `android12-5.10` | Device-tested exact A53 module with Samsung KDP/RKP/DEFEX support and live text/table patching disabled |
 | `ksud-A536EXXSNGZG3-kdp` | Same exact A53 build | `android12-5.10` | Device-tested late-load binary embedding the exact A53 module |
+| `android13-5.15_kernelsu-a17x-A176U1UES5AZD2-ksu331.ko` | `SM-A176U1`, `A176U1UES5AZD2` | `android13-5.15` | Exact A17 module rebuilt from KernelSU v3.3.1 (kernel version 32680, UAPI 5) so it pairs with the v3.3.1 Manager; Samsung KDP/RKP/DEFEX rebased onto that tag with live text patching disabled for RKP; audited (224 imports, 0 missing, 0 CRC mismatches, empty `__versions`), loaded through the QEMU harness and on hardware |
+| `ksud-a17x-A176U1UES5AZD2-ksu331` | Same exact A17 build | `android13-5.15` | Late-load binary embedding that module, with `late-load --ephemeral` |
 
 The standalone `.ko` files are retained for auditing. Root My Galaxy downloads
 the corresponding `ksud-*` file because `ksud late-load` loads its embedded
@@ -325,3 +327,92 @@ Copy the stripped KO to
 `userspace/ksud/bin/aarch64/android12-5.10_kernelsu.ko`, force `ksud` to
 recompile after the asset changes, and publish the KO and late-load binary as
 one versioned pair.
+
+## Rebuild the A17 A176U1UES5AZD2 artifact
+
+The device reports `5.15.180-android13-3-32407857`, which has no matching OSRC
+release. Build against the released 5.15.189 tree with the phone's own
+`config.gz`; the exported ABI matches (`module_layout` is `0x0222dd63` on both
+sides and the target CRCs verify). Only the two generated release files have to
+carry the target string, because a later kbuild run regenerates them.
+
+Start from a **full** clone of the KernelSU tag: the Kbuild derives the kernel
+version from git history (`30000 + rev-list --count HEAD`), and v3.3.1 has 2680
+commits, so the version is the 32680 the Manager expects. A shallow clone
+reports 30001 and the Manager then refuses to run full-featured.
+
+```sh
+git clone --branch v3.3.1 https://github.com/tiann/KernelSU.git
+cd KernelSU
+git apply /path/to/kernelsu/patches/KernelSU-v3.3.1-samsung-kdp-rkp-defex-a17x.patch
+patch -p0 < /path/to/kernelsu/patches/KernelSU-v3.2.5-dm1q-android13-5.15-build-fix.patch
+```
+
+The rebase patch carries the KDP credential handling, the DEFEX credential
+synchronization, the patch-text guard, the KDP/DEFEX wiring in `core/init.c`,
+the Kbuild object and ccflag entries, the `ksud` daemon split
+(`stage_daemon_from` / `finish_install`) and `late-load --ephemeral`. Upstream
+v3.3.1 already calls `samsung_setresuid_hook_init()` and
+`samsung_sucompat_hook_init()` at the same place, so only the definitions had
+to be inserted there; the ccflag passthrough in `Kbuild` is what makes that
+`#ifdef` true.
+
+Then the module build:
+
+```sh
+cd out
+sed -i 's/5.15.189/5.15.180-android13-3-32407857/' \
+  include/generated/utsrelease.h include/config/kernel.release
+make -C out M="$PWD/KernelSU/kernel" src="$PWD/KernelSU/kernel" \
+  ARCH=arm64 LLVM=1 LLVM_IAS=1 KBUILD_MODPOST_WARN=1 modules \
+  CONFIG_KSU=m \
+  CONFIG_KSU_SAMSUNG_KDP=y \
+  CONFIG_KSU_SAMSUNG_RKP=y \
+  CONFIG_KSU_SAMSUNG_DEFEX=y \
+  CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y
+llvm-strip -d KernelSU/kernel/kernelsu.ko
+```
+
+Audit it against the exact target before publishing:
+
+```sh
+python3 kernelsu/tools/audit_module_against_target.py \
+  KernelSU/kernel/kernelsu.ko /path/to/vmlinux.elf /path/to/a17.symvers \
+  --manual-relocation
+```
+
+and build `ksud` with the NDK at API 33, because v3.3.1 uses
+`__system_property_read_callback`, which the API-21 toolchain does not export:
+
+```sh
+export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=.../aarch64-linux-android33-clang
+export CC_aarch64_linux_android=.../aarch64-linux-android33-clang
+cp KernelSU/kernel/kernelsu.ko \
+   KernelSU/userspace/ksud/bin/aarch64/android13-5.15_kernelsu.ko
+touch KernelSU/userspace/ksud/src/assets.rs      # rust-embed must re-expand
+cargo build --release --target aarch64-linux-android -p ksud
+```
+
+Before publishing, the module was also loaded through KernelSU's own
+manual-relocation loader against the phone's exact kernel image, which prints
+`welcome to KernelSU version 32680`, the KDP and DEFEX paths,
+`patch_text disabled for this Samsung target`, the kretprobe/sucompat fallback,
+`backup sepolicy success`, `has_kernelsu() = true` and
+`kernelsu 241664 0 - Live` (the v3.2.5 build of the same profile reports
+221184).
+
+One more detail in that patch, because it is easy to trip over: upstream's
+Kbuild falls back to `-DKSU_VERSION=16` when the tree is not a git checkout (a
+placeholder, not a real version). The patch replaces it with a pinned
+`KSU_VERSION ?= 32680` plus an info line, because a build from a tarball or a
+vendor DDK would otherwise report version 16 and the Manager would refuse to
+run full-featured. Keep that pin equal to the tag's git-derived version
+(`30000 + rev-list --count HEAD`); it is dormant whenever git history is
+available, which is why the shipped module is byte-identical either way.
+
+Upstream `main` is 24 commits past the v3.3.1 tag and already declares
+`KERNEL_SU_UAPI_VERSION = 6`. The next Manager release will therefore want a
+uapi-6 module; rebuild from that tag when it lands instead of mixing this
+module with a newer Manager.
+ Loading it on the phone, and the Manager result, are documented in
+[`../docs/SM-A176U1-A176U1UES5AZD2.md`](../docs/SM-A176U1-A176U1UES5AZD2.md).

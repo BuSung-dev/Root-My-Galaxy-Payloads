@@ -25,9 +25,12 @@ It intentionally does not contain Android application source code.
 | `dm3q-S9180ZHS8FZF5` | Galaxy S23 Ultra `SM-S9180` | `5.15.189` | Test in progress |
 | `q4q-F9360ZCSAIZF1` | Galaxy Z Fold4 `SM-F9360` | `5.10.236` | Device-tested |
 | `dm2q-S916BXXSAFZG1` | Galaxy S23+ `SM-S916B` | `5.15.189` | Experimental: hardware root from ADB shell; not in app feed |
+| `a17x-A176U1UES5AZD2` | Galaxy A17 5G `SM-A176U1` | `5.15.180` | Experimental: hardware root from ADB shell; not in app feed |
 | `dm3q-S918BXXSAFZF5` | Galaxy S23 Ultra `SM-S918B` | `5.15.189` | Confirmed working: full chain through the app (Shizuku mode) incl. KernelSU late-load and granted `su` |
 
 The S916B FZG1 profile is shell-only today. Its exact tracefs route works from `adb shell`, but direct app-domain execution is not supported. Root My Galaxy would need to delegate the native runner through an authorized shell bridge such as Shizuku. See [`artifacts/dm2q-S916BXXSAFZG1/README.md`](artifacts/dm2q-S916BXXSAFZG1/README.md).
+
+The A17 A176U1UES5AZD2 profile is also shell-only today. Its tracefs/MCAST route completed the full chain to `uid=0` from `adb shell`; direct app-domain execution is not supported. See [`artifacts/a17x-A176U1UES5AZD2/README.md`](artifacts/a17x-A176U1UES5AZD2/README.md) and [`docs/SM-A176U1-A176U1UES5AZD2.md`](docs/SM-A176U1-A176U1UES5AZD2.md).
 
 The S918B FZF5 profile is hardware-verified through the app's Shizuku mode (exploit, KernelSU late-load, granted `su` under enforcing). Its physical-P0 fallback also engages in unprivileged app-domain execution, but rooting without Shizuku is not yet hardware-confirmed. See [`docs/SM-S918B-S918BXXSAFZF5.md`](docs/SM-S918B-S918BXXSAFZF5.md).
 
@@ -95,6 +98,7 @@ The SM-A366W AYG1 device validation is in
 The SM-F9360 AIZF1 (5.10, locked-BL, no-LTO clang-12 module) validation is in
 [`docs/SM-F9360-F9360ZCSAIZF1.md`](docs/SM-F9360-F9360ZCSAIZF1.md).
 The experimental SM-S916B FZG1 shell port and its exact hardware evidence are in [`docs/SM-S916B-S916BXXSAFZG1.md`](docs/SM-S916B-S916BXXSAFZG1.md).
+The experimental SM-A176U1 A176U1UES5AZD2 shell port and its exact hardware evidence are in [`docs/SM-A176U1-A176U1UES5AZD2.md`](docs/SM-A176U1-A176U1UES5AZD2.md).
 The SM-A536E GZG3 device validation is in
 [`docs/SM-A536E-A536EXXSNGZG3.md`](docs/SM-A536E-A536EXXSNGZG3.md).
 The SM-S9280 China (CHC) DZF2 port and validation record is in
