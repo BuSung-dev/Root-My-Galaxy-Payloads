@@ -35,6 +35,8 @@ between KMIs.
 | `ksud-gts9-X710XXS6EZF1-kdp` | Same exact X710 build | `android13-5.15` | Device-tested late-load binary embedding the exact X710 no-patch-text module; KernelSU Manager reports `Working <LKM> [Jailbreak mode]` |
 | `android13-5.15.153_kernelsu-dm1q-S911U1UES6DYI3-kdp.ko` | `SM-S911U1`, `S911U1UES6DYI3` | `android13-5.15.153` | Exact DYI3 module with target `vermagic`, audited for manual relocation; no-patch-text build (RKP) with kretprobe fallback hooks |
 | `ksud-dm1q-S911U1UES6DYI3-kdp` | Same exact DYI3 build | `android13-5.15.153` | Device-tested late-load binary embedding the exact DYI3 no-patch-text module |
+| `android13-5.15_kernelsu-q5q-F946U1UES6EYI1.ko` | `SM-F946U1`, `F946U1UES6EYI1` | `android13-5.15` | Exact EYI1 module, no-patch-text Samsung path, 200 imports, zero missing and zero CRC mismatches |
+| `ksud-q5q-F946U1UES6EYI1-kdp` | Same exact EYI1 build | `android13-5.15` | Device-tested late-load binary embedding the exact EYI1 module; Manager reports `Working <LKM> [Jailbreak mode]` |
 | `android12-5.10_kernelsu-A536EXXSNGZG3-kdp.ko` | `SM-A536E`, `A536EXXSNGZG3` | `android12-5.10` | Device-tested exact A53 module with Samsung KDP/RKP/DEFEX support and live text/table patching disabled |
 | `ksud-A536EXXSNGZG3-kdp` | Same exact A53 build | `android12-5.10` | Device-tested late-load binary embedding the exact A53 module |
 

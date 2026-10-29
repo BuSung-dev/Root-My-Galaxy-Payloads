@@ -331,6 +331,25 @@
         "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-e3q-S9280ZCS6DZF2-kdp",
         "size": 4879856
       }
+    },
+    {
+      "payloadId": "q5q-F946U1UES6EYI1",
+      "displayName": "Galaxy Z Fold5 SM-F946U1 | Kernel 5.15.153 (F946U1UES6EYI1)",
+      "models": [
+        "SM-F946U1"
+      ],
+      "kernelVersions": [
+        "5.15.153"
+      ],
+      "requiresShizuku": true,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/q5q-F946U1UES6EYI1/cve-2026-43499-app.so",
+        "size": 104128
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-q5q-F946U1UES6EYI1-kdp",
+        "size": 4873672
+      }
     }
   ]
 }

@@ -417,6 +417,12 @@ struct ksu_get_info_cmd {
   uint32_t uapi_version;
 };
 
+struct ksu_get_manager_appid_cmd {
+  uint32_t appid;
+};
+
+#define KSU_IOCTL_GET_MANAGER_APPID _IOC(_IOC_READ, 'K', 10, 0)
+
 static int verify_kernelsu_control(void) {
   int fd = -1;
   syscall(SYS_reboot, 0xDEADBEEF, 0xCAFEBABE, 0, &fd);
@@ -439,10 +445,36 @@ static int verify_kernelsu_control(void) {
     return 14;
   }
 
+  struct ksu_get_manager_appid_cmd manager;
+  uint32_t manager_uid = 0;
+  for (int attempt = 0; attempt < 5; ++attempt) {
+    memset(&manager, 0xff, sizeof(manager));
+    ret = ioctl(fd, KSU_IOCTL_GET_MANAGER_APPID, &manager);
+    saved_errno = errno;
+    if (ret == 0 && manager.appid != UINT32_MAX) {
+      struct stat package_stat;
+      if (stat("/data/data/me.weishu.kernelsu", &package_stat) == 0) {
+        manager_uid = (uint32_t)package_stat.st_uid % 100000U;
+      }
+      break;
+    }
+    sleep(1);
+  }
+  if (ret != 0 || manager.appid == UINT32_MAX ||
+      (manager_uid != 0 && manager.appid != manager_uid)) {
+    dprintf(STDERR_FILENO,
+            "late-load: KernelSU manager unavailable ret=%d errno=%d "
+            "appid=%u expected_uid=%u\n",
+            ret, saved_errno, manager.appid, manager_uid);
+    close(fd);
+    return 15;
+  }
+
   dprintf(STDOUT_FILENO,
           "KernelSU control verified version=%u flags=0x%x "
-          "uapi=%u features=0x%x\n",
-          info.version, info.flags, info.uapi_version, info.features);
+          "uapi=%u features=0x%x manager_appid=%u\n",
+          info.version, info.flags, info.uapi_version, info.features,
+          manager.appid);
   return 0;
 }
 
