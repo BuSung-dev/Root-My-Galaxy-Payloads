@@ -15,6 +15,9 @@ This Shizuku-required profile is hardware-validated on a Galaxy S21 FE 5G
 ## Hardware results
 
 - The tracefs/COW GhostLock route completed on independent clean boots.
+- The app payload now selects that same validated route itself: controlled
+  reclaim, the readiness-pause COW overlay, a 16 GiB PTE region, one attempt,
+  and a 900-second timeout.
 - The app/Shizuku payload contract completed with exit status 0.
 - The exact KernelSU module passed the manual-relocation audit with no missing
   symbols, no module version entries, and no CRC mismatches.
@@ -40,7 +43,7 @@ uid=0(root) gid=0(root) groups=0(root) context=u:r:kernel:s0
 
 | Artifact | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `artifacts/r9q-G990BXXSLIZH2/cve-2026-43499-app.so` | 132288 | `bea1dbcf12de52dc902a29e79fe2f929e8e6e078a24123507ad92ff28eebfc0e` |
+| `artifacts/r9q-G990BXXSLIZH2/cve-2026-43499-app.so` | 133056 | `5f83c81e55edb3f4daa50b65f61c63343f388fabf581365ea111ce8248457c35` |
 | `artifacts/r9q-G990BXXSLIZH2/cve-2026-43499-root` | 26960 | `fd193ddecbc5db5d13e72281cf54ce3ae054e1b3d8728c1dfc64ff1fc80d0bb8` |
 | `kernelsu/android16-5.4_kernelsu-r9q-G990BXXSLIZH2-kdp.ko` | 264456 | `927753d65ff813087ee84271c56f1e2b720a276cadebcb435c737b0767194823` |
 | `kernelsu/ksud-r9q-G990BXXSLIZH2-kdp` | 4844920 | `bafc40f0166418ec7564578d9f181083b33db6ae9815095a3cf67eba7ba551e9` |
@@ -83,8 +86,10 @@ through `kdp_assign_pgd`, and synchronizes DEFEX with `CRED_FLAGS_PROOT`.
 The exact exploit source is retained under
 `src/targets/r9q-G990BXXSLIZH2/`. Its target-specific `port/` source set is
 selected only for this profile because the Samsung 5.4 stack overlay depends
-on exact compiler geometry. With NDK r27b, `make TARGET=r9q-G990BXXSLIZH2`
-reproduces the published app payload and helper hashes byte-for-byte.
+on exact compiler geometry. The app payload ignores the generic app retry and
+timeout values so it cannot silently leave the phone-validated one-attempt
+route. With NDK r27b, `make TARGET=r9q-G990BXXSLIZH2` reproduces the published
+app payload and helper hashes byte-for-byte.
 
 The exact config and target symbol versions are retained as:
 

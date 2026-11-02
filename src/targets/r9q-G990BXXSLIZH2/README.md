@@ -7,7 +7,9 @@ Samsung's 5.4 kernel requires target-specific compiler stack geometry for the
 legacy `rt_mutex_waiter` overlay. The proven route uses a pselect result-copy
 COW fault and `overlay_asm.S`; newer shared-engine changes must not silently
 alter those frames. For that reason the Makefile selects the frozen `port/`
-source set only for this target.
+source set only for this target. The app payload also fixes the runtime to the
+phone-validated controlled reclaim and readiness-pause route, with one
+900-second attempt per boot.
 
 Build with NDK r27b:
 
@@ -20,7 +22,7 @@ The target automatically uses API 30 for the exploit and API 35 for the
 generic Root My Galaxy helper. A clean build reproduces:
 
 ```text
-bea1dbcf12de52dc902a29e79fe2f929e8e6e078a24123507ad92ff28eebfc0e  cve-2026-43499-app.so
+5f83c81e55edb3f4daa50b65f61c63343f388fabf581365ea111ce8248457c35  cve-2026-43499-app.so
 fd193ddecbc5db5d13e72281cf54ce3ae054e1b3d8728c1dfc64ff1fc80d0bb8  cve-2026-43499-root
 ```
 

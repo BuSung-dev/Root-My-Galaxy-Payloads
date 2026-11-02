@@ -9,7 +9,7 @@
       "requiresShizuku": true,
       "exploit": {
         "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/r9q-G990BXXSLIZH2/cve-2026-43499-app.so",
-        "size": 132288
+        "size": 133056
       },
       "kernelsu": {
         "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-r9q-G990BXXSLIZH2-kdp",
