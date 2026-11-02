@@ -25,9 +25,12 @@ It intentionally does not contain Android application source code.
 | `dm3q-S9180ZHS8FZF5` | Galaxy S23 Ultra `SM-S9180` | `5.15.189` | Test in progress |
 | `q4q-F9360ZCSAIZF1` | Galaxy Z Fold4 `SM-F9360` | `5.10.236` | Device-tested |
 | `dm2q-S916BXXSAFZG1` | Galaxy S23+ `SM-S916B` | `5.15.189` | Experimental: hardware root from ADB shell; not in app feed |
+| `dm2q-S9160ZCS8FZI1` | Galaxy S23+ China `SM-S9160` | `5.15.189` | Device-tested: app install in Shizuku mode plus `adb shell` root; KernelSU via the existing S916B `ksud`; standalone not supported; in app feed |
 | `dm3q-S918BXXSAFZF5` | Galaxy S23 Ultra `SM-S918B` | `5.15.189` | Confirmed working: full chain through the app (Shizuku mode) incl. KernelSU late-load and granted `su` |
 
 The S916B FZG1 profile is shell-only today. Its exact tracefs route works from `adb shell`, but direct app-domain execution is not supported. Root My Galaxy would need to delegate the native runner through an authorized shell bridge such as Shizuku. See [`artifacts/dm2q-S916BXXSAFZG1/README.md`](artifacts/dm2q-S916BXXSAFZG1/README.md).
+
+The S9160 ZCS8FZI1 China profile is registered in the support feed and was installed end-to-end through Root My Galaxy on 2026-11-02 (Shizuku mode; KernelSU late-load via the existing S916B `ksud`). Standalone mode does not root: tracefs is denied to the app UID and the physical-P0 fallback does not complete, so a shell bridge such as Shizuku is required. The app's fixed 120 s attempt budget is still marginal: the verified run needed two attempts (the first was killed at 120 s, the second prepared in 51 s). See [`docs/SM-S9160-S9160ZCS8FZI1.md`](docs/SM-S9160-S9160ZCS8FZI1.md).
 
 The S918B FZF5 profile is hardware-verified through the app's Shizuku mode (exploit, KernelSU late-load, granted `su` under enforcing). Its physical-P0 fallback also engages in unprivileged app-domain execution, but rooting without Shizuku is not yet hardware-confirmed. See [`docs/SM-S918B-S918BXXSAFZF5.md`](docs/SM-S918B-S918BXXSAFZF5.md).
 
@@ -60,6 +63,7 @@ make TARGET=a53x-A536EXXSNGZG3 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=dm3q-S9180ZHS8FZF5 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=q4q-F9360ZCSAIZF1 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=dm2q-S916BXXSAFZG1 ANDROID_NDK_HOME=/path/to/android-ndk
+make TARGET=dm2q-S9160ZCS8FZI1 ANDROID_NDK_HOME=/path/to/android-ndk
 ```
 
 Outputs:
@@ -97,6 +101,7 @@ The SM-F9360 AIZF1 (5.10, locked-BL, no-LTO clang-12 module) validation is in
 The experimental SM-S916B FZG1 shell port and its exact hardware evidence are in [`docs/SM-S916B-S916BXXSAFZG1.md`](docs/SM-S916B-S916BXXSAFZG1.md).
 The SM-A536E GZG3 device validation is in
 [`docs/SM-A536E-A536EXXSNGZG3.md`](docs/SM-A536E-A536EXXSNGZG3.md).
+The SM-S9160 China `S9160ZCS8FZI1` port and hardware validation record is in [`docs/SM-S9160-S9160ZCS8FZI1.md`](docs/SM-S9160-S9160ZCS8FZI1.md).
 The SM-S9280 China (CHC) DZF2 port and validation record is in
 [`docs/SM-S9280-S9280ZCS6DZF2.md`](docs/SM-S9280-S9280ZCS6DZF2.md).
 

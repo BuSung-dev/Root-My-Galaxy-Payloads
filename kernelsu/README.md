@@ -44,6 +44,8 @@ the corresponding `ksud-*` file because `ksud late-load` loads its embedded
 
 The S916B FZG1 pair is built from Samsung's released `SM-S916B_16_Opensource` tree with the live FZG1 config and Android clang `r450784e`. Its zero-length `__versions` section and retained symbol tables are intended for KernelSU's kallsyms-aware manual loader. Audit against the exact recovered FZG1 `vmlinux.elf` found all 200 undefined names. Plain `insmod` is not supported. The target patch [`KernelSU-v3.2.5-dm2q-fzg1.patch`](patches/KernelSU-v3.2.5-dm2q-fzg1.patch) selects the exact FZG1 `enum ucount_type` ABI and hard-stops RKP syscall-table writes; the build also sets `CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y`. Use the root helper's guarded `--late-load` operation so the loader's security-domain and stdio transition can complete safely. Module initialization is not yet confirmed on S916B hardware.
 
+Reuse: the same S916B loader was hardware-tested on `SM-S9160` `S9160ZCS8FZI1` on 2026-11-02. `ksud late-load`, with the app's argv, loaded the module embedded in `ksud-dm2q-S916BXXSAFZG1-kdp` and `/proc/modules` reported `kernelsu ... Live`. The module has a zero-length `__versions` section, so `check_modinfo` compares only the `vermagic` flags part and accepts the `33413713`/S916B release token on the `3251900`/S9160 kernel. Keep the module and the ksud in sync: a rebuild without `__versions` would fail the full-string comparison.
+
 The generic 6.1 files remain build-verified only. The E3Q pair is
 device-tested and tied to the full S928U DZF2 release string; it must not be replaced
 with the generic 6.1 pair. The S928B pair is tied to the full S928B DZF2 release,
