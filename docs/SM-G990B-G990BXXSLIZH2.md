@@ -18,6 +18,11 @@ This Shizuku-required profile is hardware-validated on a Galaxy S21 FE 5G
 - The app payload now selects that same validated route itself: controlled
   reclaim, the readiness-pause COW overlay, a 16 GiB PTE region, one attempt,
   and a 900-second timeout.
+- The current app artifact completed a clean-boot ADB hardware retest: pipe
+  takeover succeeded on attempt 1/3, the uid-0 daemon came up in
+  `u:r:kernel:s0`, SELinux became permissive, and the kernel globals were
+  restored before exit. The phone remained stable and returned to enforcing
+  mode after the cleanup reboot.
 - The app/Shizuku payload contract completed with exit status 0.
 - Pipe takeover gets up to three attempts after a successful FOPS swap. If all
   miss, a detached keeper retains the fake FOPS backing page until reboot so
