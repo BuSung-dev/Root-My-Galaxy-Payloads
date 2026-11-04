@@ -19,6 +19,9 @@ This Shizuku-required profile is hardware-validated on a Galaxy S21 FE 5G
   reclaim, the readiness-pause COW overlay, a 16 GiB PTE region, one attempt,
   and a 900-second timeout.
 - The app/Shizuku payload contract completed with exit status 0.
+- Pipe takeover gets up to three attempts after a successful FOPS swap. If all
+  miss, a detached keeper retains the fake FOPS backing page until reboot so
+  an unrelated later file close cannot follow a freed function table.
 - The exact KernelSU module passed the manual-relocation audit with no missing
   symbols, no module version entries, and no CRC mismatches.
 - The generic Root My Galaxy helper staged the final `ksud`, invoked
@@ -43,7 +46,7 @@ uid=0(root) gid=0(root) groups=0(root) context=u:r:kernel:s0
 
 | Artifact | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `artifacts/r9q-G990BXXSLIZH2/cve-2026-43499-app.so` | 133056 | `5f83c81e55edb3f4daa50b65f61c63343f388fabf581365ea111ce8248457c35` |
+| `artifacts/r9q-G990BXXSLIZH2/cve-2026-43499-app.so` | 133880 | `212b0df41da78fbf7ce6dabcf80535055bef01ec5e7271a0838d08dbe0fc12a0` |
 | `artifacts/r9q-G990BXXSLIZH2/cve-2026-43499-root` | 26960 | `fd193ddecbc5db5d13e72281cf54ce3ae054e1b3d8728c1dfc64ff1fc80d0bb8` |
 | `kernelsu/android16-5.4_kernelsu-r9q-G990BXXSLIZH2-kdp.ko` | 264456 | `927753d65ff813087ee84271c56f1e2b720a276cadebcb435c737b0767194823` |
 | `kernelsu/ksud-r9q-G990BXXSLIZH2-kdp` | 4844920 | `bafc40f0166418ec7564578d9f181083b33db6ae9815095a3cf67eba7ba551e9` |

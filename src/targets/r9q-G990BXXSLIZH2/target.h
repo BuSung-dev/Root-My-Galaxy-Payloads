@@ -287,10 +287,14 @@
 #define PIPE_CPU_PARTIAL 6
 /* Stay under the per-user pipe-page budget while biasing capacity toward
  * post-release allocations: six slabs consume existing kmalloc-1k partials,
- * then eighteen reclaim slabs search split/merged order-3 blocks. */
+ * then 24 reclaim slabs search split/merged order-3 blocks. */
 #define PIPE_DRAIN_SLABS 6
 #define PIPE_RECLAIM_SLABS 24
+#if defined(APP_PAYLOAD) && APP_PAYLOAD
+#define PIPE_MAX_ATTEMPTS 3
+#else
 #define PIPE_MAX_ATTEMPTS 1
+#endif
 /* This vendor 5.4 predates PIPE_BUF_FLAG_CAN_MERGE. Anonymous pipe
  * buffers use flags=0 and mergeability comes from ops->can_merge. */
 #define PIPE_BUF_FLAG_CAN_MERGE 0x00

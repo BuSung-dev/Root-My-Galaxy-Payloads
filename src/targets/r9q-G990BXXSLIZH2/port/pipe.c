@@ -871,6 +871,18 @@ int install_pipe_physrw(int fd) {
           found, pipebuf_addr, pipebuf_pipe_idx, pipe_scan_vmemmap,
           pipe_scan_ops, pipe_scan_len);
   if (!found) {
+    pr_info("phys step pipe scan q0=%016llx q1=%016llx q2=%016llx "
+            "q3=%016llx first_page=%016llx first_ops=%016llx "
+            "first_len=%u first_flags=%u\n",
+            (unsigned long long)pipe_scan_q0,
+            (unsigned long long)pipe_scan_q1,
+            (unsigned long long)pipe_scan_q2,
+            (unsigned long long)pipe_scan_q3,
+            (unsigned long long)pipe_scan_first_page,
+            (unsigned long long)pipe_scan_first_ops,
+            pipe_scan_first_len, pipe_scan_first_flags);
+  }
+  if (!found) {
     return 0;
   }
   if (!pipe_cache_gate_ok) {
