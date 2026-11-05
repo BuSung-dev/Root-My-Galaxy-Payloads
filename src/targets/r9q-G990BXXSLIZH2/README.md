@@ -10,8 +10,10 @@ alter those frames. For that reason the Makefile selects the frozen `port/`
 source set only for this target. The app payload also fixes the runtime to the
 phone-validated controlled reclaim and readiness-pause route, with one
 900-second attempt per boot. After the FOPS swap, the app gets three chances
-to take over the pipe page. A failed takeover keeps the fake FOPS page alive
-until reboot instead of releasing a stale kernel function table.
+to take over the pipe page. The captured AF_UNIX probe is drained before it
+is closed so its order-3 page is synchronously released for pipe reclaim. A
+failed takeover keeps the fake FOPS page alive until reboot instead of
+releasing a stale kernel function table.
 
 Build with NDK r27b:
 
@@ -24,7 +26,7 @@ The target automatically uses API 30 for the exploit and API 35 for the
 generic Root My Galaxy helper. A clean build reproduces:
 
 ```text
-212b0df41da78fbf7ce6dabcf80535055bef01ec5e7271a0838d08dbe0fc12a0  cve-2026-43499-app.so
+c1d75b431cadcdebe5d6a46720bb08a4ddf2a10939b24d31af7fecb2d39bc5fb  cve-2026-43499-app.so
 fd193ddecbc5db5d13e72281cf54ce3ae054e1b3d8728c1dfc64ff1fc80d0bb8  cve-2026-43499-root
 ```
 

