@@ -18,12 +18,12 @@ This Shizuku-required profile is hardware-validated on a Galaxy S21 FE 5G
 - The app payload now selects that same validated route itself: controlled
   reclaim, the readiness-pause COW overlay, a 16 GiB PTE region, one attempt,
   and a 900-second timeout.
-- The current app artifact completed a clean-boot ADB hardware retest: the
-  captured order-3 probe drained synchronously, pipe takeover succeeded on
-  attempt 1/3, and the uid-0 daemon came up in
-  `u:r:kernel:s0`, SELinux became permissive, and the kernel globals were
-  restored before exit. The phone remained stable and returned to enforcing
-  mode after the cleanup reboot.
+- The current app artifact completed three consecutive independent clean-boot
+  ADB hardware retests. Releasing the old drain arrays before the target made
+  pipe takeover succeed on attempt 1/3 in all three runs (pipe indices 239,
+  238, and 151). Each run brought up the uid-0 daemon in `u:r:kernel:s0`, made
+  SELinux permissive, restored the kernel globals, and remained stable. The
+  final cleanup reboot returned the phone to enforcing mode.
 - The app/Shizuku payload contract completed with exit status 0.
 - Pipe takeover gets up to three attempts after a successful FOPS swap. If all
   miss, a detached keeper retains the fake FOPS backing page until reboot so
@@ -52,7 +52,7 @@ uid=0(root) gid=0(root) groups=0(root) context=u:r:kernel:s0
 
 | Artifact | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `artifacts/r9q-G990BXXSLIZH2/cve-2026-43499-app.so` | 134008 | `c1d75b431cadcdebe5d6a46720bb08a4ddf2a10939b24d31af7fecb2d39bc5fb` |
+| `artifacts/r9q-G990BXXSLIZH2/cve-2026-43499-app.so` | 134072 | `f0a2b39c3d3a0e05beccd839f3e2af2417ca7f60e849b4e5e6bee898688b437b` |
 | `artifacts/r9q-G990BXXSLIZH2/cve-2026-43499-root` | 26960 | `fd193ddecbc5db5d13e72281cf54ce3ae054e1b3d8728c1dfc64ff1fc80d0bb8` |
 | `kernelsu/android16-5.4_kernelsu-r9q-G990BXXSLIZH2-kdp.ko` | 264456 | `927753d65ff813087ee84271c56f1e2b720a276cadebcb435c737b0767194823` |
 | `kernelsu/ksud-r9q-G990BXXSLIZH2-kdp` | 4844920 | `bafc40f0166418ec7564578d9f181083b33db6ae9815095a3cf67eba7ba551e9` |

