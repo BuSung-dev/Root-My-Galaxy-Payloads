@@ -2,6 +2,21 @@
   "schemaVersion": 3,
   "payloads": [
     {
+      "payloadId": "r9q-G990BXXSLIZH2",
+      "displayName": "Galaxy S21 FE 5G (SM-G990B) | Kernel 5.4.289",
+      "models": ["SM-G990B"],
+      "kernelVersions": ["5.4.289"],
+      "requiresShizuku": true,
+      "exploit": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/artifacts/r9q-G990BXXSLIZH2/cve-2026-43499-app.so",
+        "size": 134072
+      },
+      "kernelsu": {
+        "url": "https://raw.githubusercontent.com/BuSung-dev/Root-My-Galaxy-Payloads/main/kernelsu/ksud-r9q-G990BXXSLIZH2-kdp",
+        "size": 4844920
+      }
+    },
+    {
       "payloadId": "galaxy-s25-series-2026-06-07",
       "displayName": "Galaxy S25 series | Kernel 6.6.98",
       "models": [

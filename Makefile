@@ -21,18 +21,31 @@ endif
 ifeq ($(TARGET),a53x-A536EXXSNGZG3)
 API := 31
 endif
+ifeq ($(TARGET),r9q-G990BXXSLIZH2)
+API := 30
+endif
+
+ROOT_HELPER_API := $(API)
+ifeq ($(TARGET),r9q-G990BXXSLIZH2)
+ROOT_HELPER_API := 35
+endif
 
 TARGET_HEADER := src/targets/$(TARGET)/target.h
 TARGET_INCLUDE := targets/$(TARGET)/target.h
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
 TARGET_CC := $(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android$(API)-clang
+ROOT_HELPER_CC := $(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android$(ROOT_HELPER_API)-clang
 else
 TARGET_CC := $(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android$(API)-clang
+ROOT_HELPER_CC := $(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android$(ROOT_HELPER_API)-clang
 endif
 
 ifeq ($(wildcard $(TARGET_CC)),)
 $(error set ANDROID_NDK_HOME to an Android NDK containing $(TARGET_CC))
+endif
+ifeq ($(wildcard $(ROOT_HELPER_CC)),)
+$(error set ANDROID_NDK_HOME to an Android NDK containing $(ROOT_HELPER_CC))
 endif
 
 PRELOAD := $(OUTDIR)/cve-2026-43499
@@ -74,6 +87,23 @@ APP_RELEASE_OPT := -O2
 APP_RELEASE_LINK_FLAGS := -Wl,--gc-sections -Wl,--icf=all -s
 endif
 
+# The hardware-proven Samsung 5.4 port depends on exact compiler stack
+# geometry and a target-specific pselect/COW overlay. Keep its frozen source
+# set isolated so newer shared-engine changes cannot silently invalidate it.
+ifeq ($(TARGET),r9q-G990BXXSLIZH2)
+R9Q_PORT := src/targets/r9q-G990BXXSLIZH2/port
+PRELOAD_SRCS := \
+  $(R9Q_PORT)/main.c \
+  $(R9Q_PORT)/util.c \
+  $(R9Q_PORT)/slide.c \
+  $(R9Q_PORT)/fops.c \
+  $(R9Q_PORT)/pipe.c \
+  $(R9Q_PORT)/root.c \
+  $(R9Q_PORT)/preload.c \
+  $(R9Q_PORT)/overlay_asm.S
+APP_PRELOAD_SRCS := $(PRELOAD_SRCS)
+endif
+
 COMMON_CFLAGS := \
   -O2 -g0 -Wall -Wextra \
   -Wno-unused-parameter -Wno-sign-compare \
@@ -98,7 +128,7 @@ $(PRELOAD): $(PRELOAD_SRCS) $(TARGET_HEADER) src/offset.h src/common.h src/kerne
 	  -shared -pthread -o $@
 
 $(ROOT_HELPER): src/su_daemon.c | $(OUTDIR)
-	$(TARGET_CC) -fPIE -pie -O2 -g0 -Wall -Wextra $< -ldl -o $@
+	$(ROOT_HELPER_CC) -fPIE -pie -O2 -g0 -Wall -Wextra $< -ldl -o $@
 
 $(APP_PRELOAD): $(APP_PRELOAD_SRCS) $(TARGET_HEADER) src/offset.h src/common.h src/kernelsnitch/*.h | $(OUTDIR)
 	$(TARGET_CC) -DAPP_PAYLOAD=1 $(APP_TARGET_CFLAGS) -fPIC $(COMMON_CFLAGS) $(APP_PRELOAD_SRCS) \

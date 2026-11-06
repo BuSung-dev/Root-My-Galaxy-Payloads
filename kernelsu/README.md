@@ -26,6 +26,8 @@ between KMIs.
 | `ksud-e1s-S921BXXSFDZE1-kdp` | Same exact E1S build | `android14-6.1` | Device-tested late-load binary embedding the E1S no-patch-text module |
 | `android14-6.1_kernelsu-samsung-kdp.ko` | `SM-S721N` `S721NKSSCDZF3`; `SM-S921B` `S921BXXSFDZF2` | `android14-6.1` | Standalone Samsung KDP/RKP/DEFEX module with target `vermagic` |
 | `ksud-samsung-android14-6.1-kdp` | Same verified 6.1 targets | `android14-6.1` | Late-load binary embedding the 6.1 module |
+| `android16-5.4_kernelsu-r9q-G990BXXSLIZH2-kdp.ko` | `SM-G990B`, `G990BXXSLIZH2` | `android16-5.4` | Exact hardware-proven 5.4 hookless module with CFI-safe KDP/DEFEX calls |
+| `ksud-r9q-G990BXXSLIZH2-kdp` | Same exact G990B build | `android16-5.4` | Hardware-proven late-load binary embedding the exact module and direct `/dev/ksu` `su` fallback |
 | `android12-5.10_kernelsu-samsung-kdp.ko` | `SM-A155N` `A155NKSS6BYH1` | `android12-5.10` | Standalone Samsung KDP/RKP/DEFEX module built against the exact A15 kernel |
 | `ksud-samsung-android12-5.10-kdp` | `SM-A155N` `A155NKSS6BYH1` | `android12-5.10` | Late-load binary embedding the 5.10 module |
 | `android12-5.10_kernelsu-F9360ZCSAIZF1-c12-nolto.ko` | `SM-F9360` `F9360ZCSAIZF1` | `android12-5.10` | Exact Z Fold4 module for auditing; no-LTO clang-12 (stock THIN-LTO function-sections layout panics on load for this kernel), 201-symbol manual relocation, loaded via `init_module` outside `ksud`; device-tested 2026-08-12 and 2026-09-01. A matching `ksud-F9360ZCSAIZF1-kdp` embedding this module is pending |
@@ -43,6 +45,13 @@ the corresponding `ksud-*` file because `ksud late-load` loads its embedded
 `<kmi>_kernelsu.ko` asset.
 
 The S916B FZG1 pair is built from Samsung's released `SM-S916B_16_Opensource` tree with the live FZG1 config and Android clang `r450784e`. Its zero-length `__versions` section and retained symbol tables are intended for KernelSU's kallsyms-aware manual loader. Audit against the exact recovered FZG1 `vmlinux.elf` found all 200 undefined names. Plain `insmod` is not supported. The target patch [`KernelSU-v3.2.5-dm2q-fzg1.patch`](patches/KernelSU-v3.2.5-dm2q-fzg1.patch) selects the exact FZG1 `enum ucount_type` ABI and hard-stops RKP syscall-table writes; the build also sets `CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y`. Use the root helper's guarded `--late-load` operation so the loader's security-domain and stdio transition can complete safely. Module initialization is not yet confirmed on S916B hardware.
+
+The exact G990B LIZH2 5.4 pair is device-tested end to end through the normal
+Root My Galaxy helper contract: automatic sole-KMI selection, manual
+relocation, module load, `/dev/ksu` control verification, and hookless
+`su -c id`. Samsung 5.4 lacks CFI jump-table aliases for the resolved KDP and
+DEFEX helpers, so this pair uses narrow `__nocfi` wrappers around exact-source
+prototypes. See [`../docs/SM-G990B-G990BXXSLIZH2.md`](../docs/SM-G990B-G990BXXSLIZH2.md).
 
 The generic 6.1 files remain build-verified only. The E3Q pair is
 device-tested and tied to the full S928U DZF2 release string; it must not be replaced

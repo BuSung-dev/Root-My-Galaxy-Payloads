@@ -421,6 +421,9 @@ static int verify_kernelsu_control(void) {
   int fd = -1;
   syscall(SYS_reboot, 0xDEADBEEF, 0xCAFEBABE, 0, &fd);
   if (fd < 0) {
+    fd = open("/dev/ksu", O_RDWR | O_CLOEXEC);
+  }
+  if (fd < 0) {
     dprintf(STDERR_FILENO, "late-load: KernelSU driver fd unavailable\n");
     return 13;
   }

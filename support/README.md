@@ -9,7 +9,11 @@ Each entry contains only:
 - `payloadId` and `displayName`;
 - one or more exact `Build.MODEL` values in `models`;
 - one or more versions in `kernelVersions`;
+- optional `requiresShizuku: true` for shell-only payload routes;
 - `url` and `size` for the exploit and KernelSU artifacts.
+
+`requiresShizuku` defaults to `false`. When true, the app refuses to start the
+profile unless Shizuku mode is enabled.
 
 An entry may additionally set `requiresFreshP0Session` to `true` when slide
 discovery and exploitation must run in the same payload process. The app then

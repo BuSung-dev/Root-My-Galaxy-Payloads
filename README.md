@@ -15,6 +15,7 @@ It intentionally does not contain Android application source code.
 
 | Payload | Compatible models | Kernel version | Status |
 | --- | --- | --- | --- |
+| `r9q-G990BXXSLIZH2` | Galaxy S21 FE 5G `SM-G990B` | `5.4.289` | Device-tested Shizuku exploit, KernelSU late-load, and hookless `su` |
 | `galaxy-s25-series-2026-06-07` | Galaxy S25, S25+, S25 Edge, and S25 Ultra regional models | `6.6.98` | Device-tested |
 | `e3q-S928USQS6DZF2` | Galaxy S24 Ultra `SM-S928U1` | `6.1.145` | Device-tested |
 | `e3q-S9280ZCS6DZF2` | Galaxy S24 Ultra China `SM-S9280` | `6.1.145` | Device-tested |
@@ -48,6 +49,7 @@ schema version 3. `targets-v2.json` is retained for released 0.2.3 clients.
 ## Build
 
 ```sh
+make TARGET=r9q-G990BXXSLIZH2 ANDROID_NDK_HOME=/path/to/android-ndk-r27b
 make TARGET=pa3q-S938NKSUACZF1 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=e3q-S928USQS6DZF2 ANDROID_NDK_HOME=/path/to/android-ndk
 make TARGET=e2s-S926BXXUEDZDR ANDROID_NDK_HOME=/path/to/android-ndk
@@ -77,7 +79,9 @@ make TARGET=essi-S721NKSSCDZF3 ANDROID_NDK_HOME=/path/to/android-ndk release
 ```
 
 The complete firmware-to-profile procedure is recorded in
-[`docs/PORTING.md`](docs/PORTING.md). Samsung-specific KernelSU changes and
+[`docs/PORTING.md`](docs/PORTING.md). The SM-G990B LIZH2 validation is in
+[`docs/SM-G990B-G990BXXSLIZH2.md`](docs/SM-G990B-G990BXXSLIZH2.md).
+Samsung-specific KernelSU changes and
 versioned artifacts are documented in [`kernelsu/README.md`](kernelsu/README.md).
 The exact S921B DZF2 analysis is recorded separately in
 [`docs/SM-S921B-S921BXXSFDZF2.md`](docs/SM-S921B-S921BXXSFDZF2.md), and the
