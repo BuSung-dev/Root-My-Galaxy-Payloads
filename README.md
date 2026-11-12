@@ -26,6 +26,7 @@ It intentionally does not contain Android application source code.
 | `q4q-F9360ZCSAIZF1` | Galaxy Z Fold4 `SM-F9360` | `5.10.236` | Device-tested |
 | `dm2q-S916BXXSAFZG1` | Galaxy S23+ `SM-S916B` | `5.15.189` | Experimental: hardware root from ADB shell; not in app feed |
 | `dm3q-S918BXXSAFZF5` | Galaxy S23 Ultra `SM-S918B` | `5.15.189` | Confirmed working: full chain through the app (Shizuku mode) incl. KernelSU late-load and granted `su` |
+| `gts9u-X916BXXS6EZI2` | Galaxy Tab S9 Ultra 5G `SM-X916B` | `5.15.189` | Device-tested: root from `adb shell` (attempt 1/8 across three sessions) plus KernelSU late-load via the logcat bind-mount DEFEX bypass; Manager reports `Working <LKM> [Jailbreak mode]`. Shell-only, not in the app feed. See [`docs/SM-X916B-X916BXXS6EZI2.md`](docs/SM-X916B-X916BXXS6EZI2.md) |
 
 The S916B FZG1 profile is shell-only today. Its exact tracefs route works from `adb shell`, but direct app-domain execution is not supported. Root My Galaxy would need to delegate the native runner through an authorized shell bridge such as Shizuku. See [`artifacts/dm2q-S916BXXSAFZG1/README.md`](artifacts/dm2q-S916BXXSAFZG1/README.md).
 
