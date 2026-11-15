@@ -479,10 +479,14 @@ static int run_kernelsu_late_load(struct su_request *request, int conn) {
     }
     if (loader == 0) {
       /* Let the downloaded target-specific ksud select its embedded module
-       * from the running kernel.  Ephemeral mode avoids replacing an existing
-       * /data/adb/ksud while the app only needs the module for this boot. */
-      execl(LOGCAT_PATH, "logcat", "late-load", "--ephemeral",
-            "--package-name", "me.weishu.kernelsu", (char *)NULL);
+       * from the running kernel. The staged loader is bind-mounted over
+       * logcat. The ksud builds shipped with this repo do not implement
+       * --ephemeral; passing it aborts the late-load. --allow-shell is the
+       * form used by the hardware-verified S911B port
+       * (https://github.com/BuSung-dev/Root-My-Galaxy-Payloads/pull/231) and
+       * is required for su from the shell UID. */
+      execl(LOGCAT_PATH, "logcat", "late-load", "--package-name",
+            "me.weishu.kernelsu", "--allow-shell", (char *)NULL);
       dprintf(STDERR_FILENO, "late-load: exec: %s\n", strerror(errno));
       _exit(12);
     }
